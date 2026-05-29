@@ -1,6 +1,7 @@
 import json
 
 
+# added for testing purposes, simulates a simple auth service
 def handler(event, context):
     http_method = event.get("httpMethod", "GET")
     path        = event.get("path", "")
