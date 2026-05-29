@@ -20,6 +20,7 @@ locals {
     "tenant",
     "auth",
     "websocket",
+    "test-pipeline",
   ]
 }
 
