@@ -1,7 +1,7 @@
 # =============================================================================
 # CI — TERRAFORM PLAN
 # Runs on every Pull Request targeting main branch
-# Posts terraform plan output as PR comment
+# Posts terraform plan output as PR comment allow developers to review changes before merging
 # =============================================================================
 
 name: Terraform Plan
