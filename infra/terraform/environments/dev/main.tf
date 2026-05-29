@@ -111,5 +111,5 @@ module "observability" {
   environment = var.environment
   owner       = var.owner
 
-  log_retention_days = 14  # 14 days for dev
+  log_retention_days = 14 # 14 days for dev
 }
