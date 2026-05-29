@@ -3,7 +3,6 @@
 # Runs on every Pull Request targeting main branch
 # Posts terraform plan output as PR comment
 # =============================================================================
-
 name: Terraform Plan
 
 on:
@@ -24,20 +23,17 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: write   # needed to post PR comment
+      pull-requests: write
 
     steps:
-      # 1. Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # 3. Configure AWS credentials from GitHub Secrets
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -45,72 +41,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ap-south-1
 
-      # 4. Format check — fails if any .tf file is not formatted
       - name: Terraform Format Check
-        id: fmt
         run: terraform fmt -check -recursive
         working-directory: ${{ env.WORKING_DIR }}
-        continue-on-error: true
 
-      # 5. Initialise backend
       - name: Terraform Init
-        id: init
         run: terraform init -reconfigure
         working-directory: ${{ env.WORKING_DIR }}
         env:
           TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      # 6. Validate — checks syntax and internal consistency
       - name: Terraform Validate
-        id: validate
         run: terraform validate
         working-directory: ${{ env.WORKING_DIR }}
 
-      # 7. Plan — generates execution plan
+      # Plan with full output visible in Actions logs
       - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -no-color
         working-directory: ${{ env.WORKING_DIR }}
-        continue-on-error: true
         env:
-          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          TF_VAR_api_key:        ${{ secrets.TF_VAR_API_KEY }}
-          TF_VAR_prefix:         "cb-ml"
-          TF_VAR_environment:    "dev"
-          TF_VAR_owner:          "cb-ml-team"
+          TF_VAR_aws_access_key:  ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key:  ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_api_key:         ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_prefix:          "cb-ml"
+          TF_VAR_environment:     "dev"
+          TF_VAR_owner:           "cb-ml-team"
           TF_VAR_allowed_origins: "*"
-
-      # 8. Post plan output as PR comment
-      - name: Post Plan to PR
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const output = `#### Terraform Format 🖌 \`${{ steps.fmt.outcome }}\`
-            #### Terraform Init ⚙️ \`${{ steps.init.outcome }}\`
-            #### Terraform Validate 🤖 \`${{ steps.validate.outcome }}\`
-            #### Terraform Plan 📖 \`${{ steps.plan.outcome }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-      # 9. Fail job if plan failed
-      - name: Check Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
