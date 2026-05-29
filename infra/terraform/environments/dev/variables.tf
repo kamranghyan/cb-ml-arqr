@@ -4,7 +4,7 @@
 
 variable "aws_region" {
   type    = string
-  default = "ap-aouth-1"
+  default = "ap-south-1"
 }
 
 variable "aws_access_key" {
