@@ -14,11 +14,11 @@ locals {
 
   # Lambda functions with their source path and handler
   lambdas = {
-    menu          = { source = "${var.lambdas_src_path}/menu",          handler = "index.handler" }
-    order         = { source = "${var.lambdas_src_path}/order",         handler = "index.handler" }
-    tenant        = { source = "${var.lambdas_src_path}/tenant",        handler = "index.handler" }
-    auth          = { source = "${var.lambdas_src_path}/auth",          handler = "index.handler" }
-    websocket     = { source = "${var.lambdas_src_path}/websocket",     handler = "index.handler" }
+    menu_service          = { source = "${var.lambdas_src_path}/menu-service",          handler = "index.handler" }
+    order_service         = { source = "${var.lambdas_src_path}/order-service",         handler = "index.handler" }
+    tenant_service        = { source = "${var.lambdas_src_path}/tenant-service",        handler = "index.handler" }
+    auth_service          = { source = "${var.lambdas_src_path}/auth-service",          handler = "index.handler" }
+    websocket_service     = { source = "${var.lambdas_src_path}/websocket-service",     handler = "index.handler" }
   }
 }
 
@@ -138,7 +138,7 @@ resource "aws_api_gateway_integration" "menu" {
   http_method             = aws_api_gateway_method.menu.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.this["menu"].invoke_arn
+  uri                     = aws_lambda_function.this["menu_service"].invoke_arn
 }
 
 # -----------------------------------------------------------------------------
@@ -163,7 +163,7 @@ resource "aws_api_gateway_integration" "orders" {
   http_method             = aws_api_gateway_method.orders.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.this["order"].invoke_arn
+  uri                     = aws_lambda_function.this["order_service"].invoke_arn
 }
 
 # -----------------------------------------------------------------------------
@@ -188,7 +188,7 @@ resource "aws_api_gateway_integration" "tenants" {
   http_method             = aws_api_gateway_method.tenants.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.this["tenant"].invoke_arn
+  uri                     = aws_lambda_function.this["tenant_service"].invoke_arn
 }
 
 # -----------------------------------------------------------------------------
@@ -213,7 +213,7 @@ resource "aws_api_gateway_integration" "auth" {
   http_method             = aws_api_gateway_method.auth.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.this["auth"].invoke_arn
+  uri                     = aws_lambda_function.this["auth_service"].invoke_arn
 }
 
 # =============================================================================
@@ -230,6 +230,10 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_integration.orders,
       aws_api_gateway_integration.tenants,
       aws_api_gateway_integration.auth,
+      aws_api_gateway_integration_response.menu_options,
+      aws_api_gateway_integration_response.orders_options,
+      aws_api_gateway_integration_response.tenants_options,
+      aws_api_gateway_integration_response.auth_options,
     ]))
   }
 
@@ -242,6 +246,10 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_method.orders,
     aws_api_gateway_method.tenants,
     aws_api_gateway_method.auth,
+    aws_api_gateway_integration_response.menu_options,
+    aws_api_gateway_integration_response.orders_options,
+    aws_api_gateway_integration_response.tenants_options,
+    aws_api_gateway_integration_response.auth_options,
   ]
 }
 
@@ -260,7 +268,7 @@ resource "aws_api_gateway_stage" "main" {
 resource "aws_lambda_permission" "menu" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.this["menu"].function_name
+  function_name = aws_lambda_function.this["menu_service"].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }
@@ -268,7 +276,7 @@ resource "aws_lambda_permission" "menu" {
 resource "aws_lambda_permission" "orders" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.this["order"].function_name
+  function_name = aws_lambda_function.this["order_service"].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }
@@ -276,7 +284,7 @@ resource "aws_lambda_permission" "orders" {
 resource "aws_lambda_permission" "tenants" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.this["tenant"].function_name
+  function_name = aws_lambda_function.this["tenant_service"].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }
@@ -284,7 +292,199 @@ resource "aws_lambda_permission" "tenants" {
 resource "aws_lambda_permission" "auth" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.this["auth"].function_name
+  function_name = aws_lambda_function.this["auth_service"].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
+}
+
+# =============================================================================
+# CORS — OPTIONS method for each resource
+# =============================================================================
+
+# --- /menu OPTIONS ---
+resource "aws_api_gateway_method" "menu_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.menu.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "menu_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.menu.id
+  http_method = aws_api_gateway_method.menu_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "menu_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.menu.id
+  http_method = aws_api_gateway_method.menu_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "menu_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.menu.id
+  http_method = aws_api_gateway_method.menu_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.menu_options, aws_api_gateway_method_response.menu_options]
+}
+
+# --- /orders OPTIONS ---
+resource "aws_api_gateway_method" "orders_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.orders.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "orders_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.orders.id
+  http_method = aws_api_gateway_method.orders_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "orders_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.orders.id
+  http_method = aws_api_gateway_method.orders_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "orders_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.orders.id
+  http_method = aws_api_gateway_method.orders_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.orders_options, aws_api_gateway_method_response.orders_options]
+}
+
+# --- /tenants OPTIONS ---
+resource "aws_api_gateway_method" "tenants_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.tenants.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "tenants_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.tenants.id
+  http_method = aws_api_gateway_method.tenants_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "tenants_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.tenants.id
+  http_method = aws_api_gateway_method.tenants_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "tenants_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.tenants.id
+  http_method = aws_api_gateway_method.tenants_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.tenants_options, aws_api_gateway_method_response.tenants_options]
+}
+
+# --- /auth OPTIONS ---
+resource "aws_api_gateway_method" "auth_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.auth.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "auth_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.auth.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "auth_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.auth.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "auth_options" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.auth.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.auth_options, aws_api_gateway_method_response.auth_options]
 }

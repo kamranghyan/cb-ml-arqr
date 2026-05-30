@@ -5,6 +5,7 @@
 # =============================================================================
 
 locals {
+  
   name_prefix = "${var.prefix}-${var.environment}"
 
   common_tags = {
@@ -17,6 +18,8 @@ locals {
   # Use custom domain if provided, otherwise use CloudFront default URL
   has_domain = var.domain_name != "" && var.acm_cert_arn != ""
 }
+
+data "aws_caller_identity" "current" {}
 
 # =============================================================================
 # WAF — WebACL
@@ -146,6 +149,11 @@ resource "aws_cloudfront_distribution" "main" {
     domain_name              = var.menu_assets_bucket_regional_domain
     origin_id                = "menu-assets-s3"
     origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+
+    # ADD THIS
+    s3_origin_config {
+      origin_access_identity = ""
+    }
   }
 
   # -------------------------------------------------------------------------
@@ -155,6 +163,11 @@ resource "aws_cloudfront_distribution" "main" {
     domain_name              = var.ar_models_bucket_regional_domain
     origin_id                = "ar-models-s3"
     origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+
+    # ADD THIS
+    s3_origin_config {
+      origin_access_identity = ""
+    }
   }
 
   # -------------------------------------------------------------------------
@@ -245,55 +258,44 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 
 resource "aws_s3_bucket_policy" "menu_assets" {
   bucket = var.menu_assets_bucket_name
-  policy = data.aws_iam_policy_document.menu_assets_cf.json
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontOAC"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "arn:aws:s3:::${var.menu_assets_bucket_name}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.main.id}"
+        }
+      }
+    }]
+  })
 }
 
-data "aws_iam_policy_document" "menu_assets_cf" {
-  statement {
-    sid    = "AllowCloudFrontOAC"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
-
-    actions   = ["s3:GetObject"]
-    resources = ["arn:aws:s3:::${var.menu_assets_bucket_name}/*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.main.arn]
-    }
-  }
-}
 
 resource "aws_s3_bucket_policy" "ar_models" {
   bucket = var.ar_models_bucket_name
-  policy = data.aws_iam_policy_document.ar_models_cf.json
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontOAC"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "arn:aws:s3:::${var.ar_models_bucket_name}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.main.id}"
+        }
+      }
+    }]
+  })
 }
 
-data "aws_iam_policy_document" "ar_models_cf" {
-  statement {
-    sid    = "AllowCloudFrontOAC"
-    effect = "Allow"
 
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
-
-    actions   = ["s3:GetObject"]
-    resources = ["arn:aws:s3:::${var.ar_models_bucket_name}/*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.main.arn]
-    }
-  }
-}
 
 # =============================================================================
 # ROUTE53 — Only created when domain is provided (future use)
