@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CB-ML API Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      padding: 24px;
+      color: #1a1a1a;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+
+    .api-url-bar {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #444;
+    }
+
+    .api-url-bar span {
+      font-weight: 600;
+      color: #0066cc;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e0e0e0;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .endpoint {
+      font-size: 11px;
+      color: #888;
+      font-family: monospace;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #0066cc;
+      color: #fff;
+      transition: background 0.2s;
+    }
+
+    .btn:hover   { background: #0052a3; }
+    .btn:active  { background: #003d7a; }
+    .btn.loading { background: #aaa; cursor: not-allowed; }
+
+    .card-body {
+      padding: 14px 16px;
+    }
+
+    .response-box {
+      background: #f7f8fa;
+      border: 1px solid #e8e8e8;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      min-height: 80px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      color: #333;
+    }
+
+    .status {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+
+    .status.ok      { background: #e6f4ea; color: #1e7e34; }
+    .status.error   { background: #fde8e8; color: #c0392b; }
+    .status.pending { background: #fff3cd; color: #856404; }
+  </style>
+</head>
+<body>
+
+  <h1>🍽️ CB-ML API Test Page - Deployment Testing </h1>
+  <p class="subtitle">Click each button to test the Lambda endpoints</p>
+
+  <div class="api-url-bar">
+    API Base URL: <span id="api-base-display">Loading...</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- Menu Service -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Menu Service</div>
+          <div class="endpoint">GET /menu</div>
+        </div>
+        <button class="btn" onclick="callApi('menu', '/menu', 'GET', this)">Test</button>
+      </div>
+      <div class="card-body">
+        <div id="status-menu" class="status pending">Waiting</div>
+        <div id="response-menu" class="response-box">Click Test to call the API...</div>
+      </div>
+    </div>
+
+    <!-- Order Service -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Order Service</div>
+          <div class="endpoint">GET /orders</div>
+        </div>
+        <button class="btn" onclick="callApi('orders', '/orders', 'GET', this)">Test</button>
+      </div>
+      <div class="card-body">
+        <div id="status-orders" class="status pending">Waiting</div>
+        <div id="response-orders" class="response-box">Click Test to call the API...</div>
+      </div>
+    </div>
+
+    <!-- Tenant Service -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Tenant Service</div>
+          <div class="endpoint">GET /tenants</div>
+        </div>
+        <button class="btn" onclick="callApi('tenants', '/tenants', 'GET', this)">Test</button>
+      </div>
+      <div class="card-body">
+        <div id="status-tenants" class="status pending">Waiting</div>
+        <div id="response-tenants" class="response-box">Click Test to call the API...</div>
+      </div>
+    </div>
+
+    <!-- Auth Service -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Auth Service</div>
+          <div class="endpoint">POST /auth/login</div>
+        </div>
+        <button class="btn" onclick="callApi('auth', '/auth/login', 'POST', this)">Test</button>
+      </div>
+      <div class="card-body">
+        <div id="status-auth" class="status pending">Waiting</div>
+        <div id="response-auth" class="response-box">Click Test to call the API...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // =========================================================================
+    // REPLACE THIS with your terraform output: api_gateway_url
+    // Example: https://abc123.execute-api.ap-south-1.amazonaws.com/dev
+    // =========================================================================
+    const API_BASE = "https://if77udoyze.execute-api.ap-south-1.amazonaws.com/dev";
+
+    document.getElementById("api-base-display").textContent = API_BASE;
+
+    async function callApi(id, path, method, btn) {
+      const statusEl   = document.getElementById(`status-${id}`);
+      const responseEl = document.getElementById(`response-${id}`);
+
+      // Loading state
+      btn.textContent    = "Loading...";
+      btn.classList.add("loading");
+      btn.disabled       = true;
+      statusEl.textContent      = "Calling...";
+      statusEl.className        = "status pending";
+      responseEl.textContent    = "Waiting for response...";
+
+      try {
+        const options = {
+          method,
+          headers: { "Content-Type": "application/json" },
+        };
+
+        // Add mock body for POST requests
+        if (method === "POST") {
+          options.body = JSON.stringify({ email: "test@example.com", password: "Test@1234" });
+        }
+
+        const res  = await fetch(`${API_BASE}${path}`, options);
+        const data = await res.json();
+
+        statusEl.textContent = `${res.status} ${res.ok ? "OK" : "Error"}`;
+        statusEl.className   = `status ${res.ok ? "ok" : "error"}`;
+        responseEl.textContent = JSON.stringify(data, null, 2);
+
+      } catch (err) {
+        statusEl.textContent   = "Network Error";
+        statusEl.className     = "status error";
+        responseEl.textContent = err.message;
+      } finally {
+        btn.textContent  = "Test";
+        btn.classList.remove("loading");
+        btn.disabled     = false;
+      }
+    }
+  </script>
+
+</body>
+</html>

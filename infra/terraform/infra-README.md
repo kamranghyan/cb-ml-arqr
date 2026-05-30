@@ -378,3 +378,119 @@ aws sts get-caller-identity  # verify correct account
 ```bash
 terraform fmt -recursive     # run locally before pushing
 ```
+
+# Step 11 — Compute Module (Lambda + API Gateway)
+
+## What This Creates
+
+| Resource | Name |
+|---|---|
+| Lambda | cb-ml-dev-menu-service |
+| Lambda | cb-ml-dev-order-service |
+| Lambda | cb-ml-dev-tenant-service |
+| Lambda | cb-ml-dev-auth-service |
+| Lambda | cb-ml-dev-websocket-connect |
+| Lambda | cb-ml-dev-websocket-disconnect |
+| API Gateway | cb-ml-dev-api |
+| IAM Role | cb-ml-dev-lambda-exec-role |
+
+---
+
+## Changes to Existing Dev Files
+
+**`environments/dev/main.tf`** — append:
+```hcl
+module "compute" {
+  source           = "../../modules/compute"
+  prefix           = var.prefix
+  environment      = var.environment
+  owner            = var.owner
+  aws_region       = var.aws_region
+  lambdas_src_path = "${path.root}/../../../../src/lambdas"
+}
+```
+
+**`environments/dev/outputs.tf`** — append:
+```hcl
+output "api_gateway_url" {
+  value = module.compute.api_gateway_url
+}
+
+output "lambda_function_names" {
+  value = module.compute.lambda_function_names
+}
+```
+
+---
+
+## Deploy
+
+```bash
+cd infra/terraform/environments/dev
+
+terraform init -reconfigure
+terraform plan     # ~20 new resources
+terraform apply
+
+# Copy this URL for frontend
+terraform output api_gateway_url
+```
+
+---
+
+## Testing Checklist
+
+```bash
+# 1. Test menu endpoint
+curl $(terraform output -raw api_gateway_url)/menu
+# Expected: {"restaurantId": "r001", "items": [...]}
+
+# 2. Test orders endpoint
+curl $(terraform output -raw api_gateway_url)/orders
+# Expected: {"orders": [...]}
+
+# 3. Test tenants endpoint
+curl $(terraform output -raw api_gateway_url)/tenants
+# Expected: {"tenants": [...]}
+
+# 4. Test auth endpoint
+curl -X POST $(terraform output -raw api_gateway_url)/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test@1234"}'
+# Expected: {"accessToken": "mock-access-token-abc123", ...}
+
+# 5. Check Lambda logs
+aws logs tail /aws/lambda/cb-ml-dev-menu-service \
+  --region ap-south-1 \
+  --follow
+```
+
+---
+
+## Frontend Setup
+
+**1. Open `src/frontend/index.html`**
+
+**2. Replace the API_BASE value:**
+```javascript
+const API_BASE = "REPLACE_WITH_api_gateway_url_output";
+// becomes:
+const API_BASE = "https://abc123.execute-api.ap-south-1.amazonaws.com/dev";
+```
+
+**3. Open in browser — click each Test button**
+
+---
+
+## Upload Frontend to S3 (public access)
+
+```bash
+# Enable public access on frontend bucket
+aws s3 cp src/frontend/index.html \
+  s3://cb-ml-dev-menu-assets/index.html \
+  --content-type "text/html" \
+  --region ap-south-1
+
+# Access via CloudFront URL (from Step 8 output)
+echo "Open: $(cd infra/terraform/environments/dev && terraform output -raw cloudfront_url)/index.html"
+```
