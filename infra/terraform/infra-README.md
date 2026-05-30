@@ -55,7 +55,7 @@ your-project-root/
 Before running anything ensure you have:
 
 - AWS CLI installed: `aws --version`
-- Terraform >= 1.6.0: `terraform version`
+- Terraform >= 1.10.0: `terraform version`
 - AWS credentials configured
 - GitHub repository created
 

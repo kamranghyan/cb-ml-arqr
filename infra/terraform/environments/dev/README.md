@@ -24,7 +24,7 @@
 
 - Step 1 bootstrap applied — S3 state bucket and DynamoDB lock table exist
 - AWS credentials ready (Access Key + Secret Key)
-- Terraform >= 1.6.0 installed
+- Terraform >= 1.10.0 installed
 
 ---
 
