@@ -1,0 +1,171 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  TF_VERSION:  "1.6.0"
+  WORKING_DIR: "infra/terraform/environments/dev"
+
+jobs:
+  # ===========================================================================
+  # JOB 1 — Detect which paths changed
+  # All other jobs depend on this to decide whether to run
+  # ===========================================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra:    ${{ steps.filter.outputs.infra }}
+      lambdas:  ${{ steps.filter.outputs.lambdas }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'infra/terraform/**'
+            lambdas:
+              - 'src/lambdas/**'
+            frontend:
+              - 'src/frontend/**'
+
+  # ===========================================================================
+  # JOB 2 — Terraform Apply
+  # Only runs when infra/terraform/** files changed
+  # ===========================================================================
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
+
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Terraform Init
+        run: terraform init -reconfigure
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_aws_access_key:  ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key:  ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_api_key:         ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_prefix:          "cb-ml"
+          TF_VAR_environment:     "dev"
+          TF_VAR_owner:           "cb-ml-team"
+          TF_VAR_allowed_origins: "*"
+
+  # ===========================================================================
+  # JOB 3 — Deploy Lambdas
+  # Only runs when src/lambdas/** files changed
+  # Does NOT depend on terraform-apply — runs independently
+  # ===========================================================================
+  deploy-lambdas:
+    name: Deploy Lambdas
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lambdas == 'true'
+
+    strategy:
+      matrix:
+        lambda:
+          - menu-service
+          - order-service
+          - tenant-service
+          - auth-service
+          - websocket-connect
+          - websocket-disconnect
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Zip Lambda — ${{ matrix.lambda }}
+        run: |
+          cd src/lambdas/${{ matrix.lambda }}
+          zip -r ${{ matrix.lambda }}.zip .
+          echo "✅ Zipped ${{ matrix.lambda }}"
+
+      - name: Deploy Lambda — ${{ matrix.lambda }}
+        run: |
+          aws lambda update-function-code \
+            --function-name cb-ml-dev-${{ matrix.lambda }} \
+            --zip-file fileb://src/lambdas/${{ matrix.lambda }}/${{ matrix.lambda }}.zip \
+            --region ap-south-1
+          echo "✅ Deployed cb-ml-dev-${{ matrix.lambda }}"
+
+  # ===========================================================================
+  # JOB 4 — Deploy Frontend
+  # Only runs when src/frontend/** files changed
+  # Does NOT depend on terraform-apply — runs independently
+  # ===========================================================================
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Upload index.html to S3
+        run: |
+          aws s3 cp src/frontend/index.html \
+            s3://cb-ml-dev-menu-assets/index.html \
+            --content-type "text/html" \
+            --region ap-south-1
+          echo "✅ Uploaded index.html"
+
+      - name: Invalidate CloudFront Cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/index.html"
+          echo "✅ CloudFront cache invalidated"
