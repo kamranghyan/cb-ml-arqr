@@ -10,9 +10,6 @@ env:
   WORKING_DIR: "infra/terraform/environments/dev"
 
 jobs:
-  # ===========================================================================
-  # JOB 1 — Detect which paths changed
-  # ===========================================================================
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
@@ -24,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # ← fix: fetch full history for diff
 
       - name: Check changed paths
         uses: dorny/paths-filter@v3
@@ -32,15 +31,12 @@ jobs:
           filters: |
             infra:
               - 'infra/terraform/**'
+              - '.github/workflows/**'
             lambdas:
               - 'src/lambdas/**'
             frontend:
               - 'src/frontend/**'
 
-  # ===========================================================================
-  # JOB 2 — Terraform Plan
-  # Only runs when infra/terraform/** changed
-  # ===========================================================================
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
@@ -119,10 +115,6 @@ jobs:
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-  # ===========================================================================
-  # JOB 3 — Validate Lambda Python syntax
-  # Only runs when src/lambdas/** changed
-  # ===========================================================================
   validate-lambdas:
     name: Validate Lambda Code
     runs-on: ubuntu-latest
@@ -145,10 +137,6 @@ jobs:
             python -m py_compile "$file" && echo "  ✅ OK" || { echo "  ❌ FAILED"; exit 1; }
           done
 
-  # ===========================================================================
-  # JOB 4 — Validate Frontend
-  # Only runs when src/frontend/** changed
-  # ===========================================================================
   validate-frontend:
     name: Validate Frontend
     runs-on: ubuntu-latest
