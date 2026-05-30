@@ -1,0 +1,176 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  TF_VERSION:  "1.10.0"
+  WORKING_DIR: "infra/terraform/environments/dev"
+
+jobs:
+  # ===========================================================================
+  # JOB 1 — Detect which paths changed
+  # ===========================================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra:    ${{ steps.filter.outputs.infra }}
+      lambdas:  ${{ steps.filter.outputs.lambdas }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'infra/terraform/**'
+            lambdas:
+              - 'src/lambdas/**'
+            frontend:
+              - 'src/frontend/**'
+
+  # ===========================================================================
+  # JOB 2 — Terraform Plan
+  # Only runs when infra/terraform/** changed
+  # ===========================================================================
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Init
+        run: terraform init -reconfigure
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -lock=false
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+        env:
+          TF_VAR_aws_access_key:  ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key:  ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_api_key:         ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_prefix:          "cb-ml"
+          TF_VAR_environment:     "dev"
+          TF_VAR_owner:           "cb-ml-team"
+          TF_VAR_allowed_origins: "*"
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            <details><summary>Show Plan</summary>
+
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            </details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Check Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # ===========================================================================
+  # JOB 3 — Validate Lambda Python syntax
+  # Only runs when src/lambdas/** changed
+  # ===========================================================================
+  validate-lambdas:
+    name: Validate Lambda Code
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lambdas == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Python syntax
+        run: |
+          find src/lambdas -name "*.py" | while read file; do
+            echo "Checking $file"
+            python -m py_compile "$file" && echo "  ✅ OK" || { echo "  ❌ FAILED"; exit 1; }
+          done
+
+  # ===========================================================================
+  # JOB 4 — Validate Frontend
+  # Only runs when src/frontend/** changed
+  # ===========================================================================
+  validate-frontend:
+    name: Validate Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check index.html exists
+        run: |
+          if [ ! -f src/frontend/index.html ]; then
+            echo "❌ src/frontend/index.html not found"
+            exit 1
+          fi
+          echo "✅ index.html found"
+
+      - name: Check API_BASE is not placeholder
+        run: |
+          if grep -q "REPLACE_WITH_api_gateway_url_output" src/frontend/index.html; then
+            echo "❌ API_BASE is still a placeholder"
+            exit 1
+          fi
+          echo "✅ API_BASE is set"
