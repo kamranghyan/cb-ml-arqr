@@ -10,10 +10,6 @@ env:
   WORKING_DIR: "infra/terraform/environments/dev"
 
 jobs:
-  # ===========================================================================
-  # JOB 1 — Detect which paths changed
-  # All other jobs depend on this to decide whether to run
-  # ===========================================================================
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
@@ -25,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # ← fix: fetch full history for diff
 
       - name: Check changed paths
         uses: dorny/paths-filter@v3
@@ -33,15 +31,12 @@ jobs:
           filters: |
             infra:
               - 'infra/terraform/**'
+              - '.github/workflows/**'
             lambdas:
               - 'src/lambdas/**'
             frontend:
               - 'src/frontend/**'
 
-  # ===========================================================================
-  # JOB 2 — Terraform Apply
-  # Only runs when infra/terraform/** files changed
-  # ===========================================================================
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
@@ -87,11 +82,6 @@ jobs:
           TF_VAR_owner:           "cb-ml-team"
           TF_VAR_allowed_origins: "*"
 
-  # ===========================================================================
-  # JOB 3 — Deploy Lambdas
-  # Only runs when src/lambdas/** files changed
-  # Does NOT depend on terraform-apply — runs independently
-  # ===========================================================================
   deploy-lambdas:
     name: Deploy Lambdas
     runs-on: ubuntu-latest
@@ -133,11 +123,6 @@ jobs:
             --region ap-south-1
           echo "✅ Deployed cb-ml-dev-${{ matrix.lambda }}"
 
-  # ===========================================================================
-  # JOB 4 — Deploy Frontend
-  # Only runs when src/frontend/** files changed
-  # Does NOT depend on terraform-apply — runs independently
-  # ===========================================================================
   deploy-frontend:
     name: Deploy Frontend
     runs-on: ubuntu-latest
@@ -165,6 +150,14 @@ jobs:
 
       - name: Invalidate CloudFront Cache
         run: |
+          # ← fix: check secret is set before running
+          if [ -z "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
+            echo "❌ CLOUDFRONT_DISTRIBUTION_ID secret is not set"
+            echo "Go to: GitHub → Settings → Secrets → Actions → New secret"
+            echo "Name: CLOUDFRONT_DISTRIBUTION_ID"
+            echo "Value: run 'terraform output cloudfront_distribution_id'"
+            exit 1
+          fi
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/index.html"
