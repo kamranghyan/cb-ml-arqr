@@ -113,3 +113,15 @@ module "observability" {
 
   log_retention_days = 14 # 14 days for dev
 }
+
+# Step 11 — COMPUTE MODULE
+module "compute" {
+  source      = "../../modules/compute"
+  prefix      = var.prefix
+  environment = var.environment
+  owner       = var.owner
+  aws_region  = var.aws_region
+
+  # Absolute path to src/lambdas — adjust to your project root
+  lambdas_src_path = "${path.root}/../../../../src/lambdas"
+}

@@ -83,3 +83,14 @@ output "log_group_names" {
   description = "CloudWatch log group names per Lambda"
   value       = module.observability.log_group_names
 }
+
+# --- Compute -----
+
+output "api_gateway_url" {
+  description = "API base URL — paste into frontend index.html"
+  value       = module.compute.api_gateway_url
+}
+
+output "lambda_function_names" {
+  value = module.compute.lambda_function_names
+}
