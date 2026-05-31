@@ -4,19 +4,21 @@
 
 locals {
   buckets = {
+    # Asset buckets
     menu_assets       = "${var.prefix}-${var.environment}-menu-assets"
     ar_models         = "${var.prefix}-${var.environment}-ar-models"
     analytics_archive = "${var.prefix}-${var.environment}-analytics-archive"
     logs              = "${var.prefix}-${var.environment}-logs"
+
+    # UI buckets — one per interface
+    guest_ui          = "${var.prefix}-${var.environment}-guest-ui"
+    kds_ui            = "${var.prefix}-${var.environment}-kds-ui"
+    admin_ui          = "${var.prefix}-${var.environment}-admin-ui"
   }
 
-  # Versioning only on asset buckets (not logs or archive)
   versioned_buckets = ["menu_assets", "ar_models"]
 }
 
-# -----------------------------------------------------------------------------
-# Buckets
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket" "this" {
   for_each      = local.buckets
   bucket        = each.value
@@ -25,9 +27,6 @@ resource "aws_s3_bucket" "this" {
   tags = merge(local.common_tags, { BucketType = each.key })
 }
 
-# -----------------------------------------------------------------------------
-# Block all public access on every bucket
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket_public_access_block" "this" {
   for_each = local.buckets
   bucket   = aws_s3_bucket.this[each.key].id
@@ -38,9 +37,6 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
-# -----------------------------------------------------------------------------
-# SSE-S3 encryption on every bucket
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   for_each = local.buckets
   bucket   = aws_s3_bucket.this[each.key].id
@@ -52,9 +48,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# Versioning — asset buckets only (menu-assets, ar-models)
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket_versioning" "this" {
   for_each = toset(local.versioned_buckets)
   bucket   = aws_s3_bucket.this[each.key].id
@@ -64,32 +57,26 @@ resource "aws_s3_bucket_versioning" "this" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# Lifecycle — logs bucket: expire objects after 90 days
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   bucket = aws_s3_bucket.this["logs"].id
 
   rule {
     id     = "expire-logs"
     status = "Enabled"
-
+    filter {}
     expiration {
       days = 90
     }
   }
 }
 
-# -----------------------------------------------------------------------------
-# Lifecycle — analytics archive: move to Glacier after 30 days
-# -----------------------------------------------------------------------------
 resource "aws_s3_bucket_lifecycle_configuration" "analytics" {
   bucket = aws_s3_bucket.this["analytics_archive"].id
 
   rule {
     id     = "archive-to-glacier"
     status = "Enabled"
-
+    filter {}
     transition {
       days          = 30
       storage_class = "GLACIER"

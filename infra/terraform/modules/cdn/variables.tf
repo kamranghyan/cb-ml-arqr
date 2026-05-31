@@ -3,66 +3,77 @@
 # =============================================================================
 
 variable "prefix" {
-  description = "Project prefix e.g. cb-ml"
-  type        = string
+  type = string
 }
 
 variable "environment" {
-  description = "Deployment environment: dev | staging | prod"
-  type        = string
-
-  validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "environment must be dev, staging, or prod."
-  }
+  type = string
 }
 
 variable "owner" {
-  description = "Team owner tag"
-  type        = string
-  default     = "cb-ml-team"
+  type    = string
+  default = "devops-team"
 }
 
-# --- S3 Origins --------------------------------------------------------------
+# --- Asset bucket inputs ------------------------------------------------------
 
 variable "menu_assets_bucket_name" {
-  description = "S3 bucket name for menu assets — from data module output"
-  type        = string
+  type = string
 }
 
 variable "menu_assets_bucket_regional_domain" {
-  description = "Regional domain name of menu assets bucket e.g. bucket.s3.us-east-1.amazonaws.com"
-  type        = string
+  type = string
 }
 
 variable "ar_models_bucket_name" {
-  description = "S3 bucket name for AR models — from data module output"
-  type        = string
+  type = string
 }
 
 variable "ar_models_bucket_regional_domain" {
-  description = "Regional domain name of AR models bucket"
-  type        = string
+  type = string
 }
 
-# --- Domain (optional — leave empty for MVP) ---------------------------------
+# --- UI bucket inputs ---------------------------------------------------------
+
+variable "guest_ui_bucket_name" {
+  type = string
+}
+
+variable "guest_ui_bucket_regional_domain" {
+  type = string
+}
+
+variable "kds_ui_bucket_name" {
+  type = string
+}
+
+variable "kds_ui_bucket_regional_domain" {
+  type = string
+}
+
+variable "admin_ui_bucket_name" {
+  type = string
+}
+
+variable "admin_ui_bucket_regional_domain" {
+  type = string
+}
+
+# --- Domain (optional) --------------------------------------------------------
 
 variable "domain_name" {
-  description = "Custom domain e.g. menu.yourapp.com — leave empty for MVP"
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "acm_cert_arn" {
-  description = "ACM certificate ARN (must be in us-east-1) — leave empty for MVP"
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "route53_zone_id" {
-  description = "Route53 hosted zone ID — leave empty for MVP"
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 terraform {
