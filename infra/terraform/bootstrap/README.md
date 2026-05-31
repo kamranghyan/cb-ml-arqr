@@ -5,7 +5,7 @@
 Before running anything, ensure you have:
 
 - [ ] AWS CLI installed: `aws --version`
-- [ ] Terraform installed (>= 1.6.0): `terraform version`
+- [ ] Terraform installed (>= 1.10.0): `terraform version`
 - [ ] AWS credentials configured for the **management account** with admin access
 - [ ] Correct account active: `aws sts get-caller-identity`
 

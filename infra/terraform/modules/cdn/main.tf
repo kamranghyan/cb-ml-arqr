@@ -1,11 +1,12 @@
 # =============================================================================
 # CDN MODULE — CloudFront + WAF
-# MVP: uses default CloudFront URL (no custom domain)
-# Domain-ready: fill in domain_name + acm_cert_arn + route53_zone_id variables
+# Single distribution with path-based routing to 3 UI buckets
+# /guest/* → guest-ui S3
+# /kds/*   → kds-ui S3
+# /admin/* → admin-ui S3
 # =============================================================================
 
 locals {
-  
   name_prefix = "${var.prefix}-${var.environment}"
 
   common_tags = {
@@ -15,43 +16,37 @@ locals {
     Owner       = var.owner
   }
 
-  # Use custom domain if provided, otherwise use CloudFront default URL
   has_domain = var.domain_name != "" && var.acm_cert_arn != ""
 }
 
 data "aws_caller_identity" "current" {}
 
 # =============================================================================
-# WAF — WebACL
-# Note: WAF for CloudFront must be created in us-east-1 (global)
+# WAF
 # =============================================================================
 
 resource "aws_wafv2_web_acl" "main" {
   provider    = aws.us_east_1
   name        = "${local.name_prefix}-waf"
-  description = "WAF for ${local.name_prefix} CloudFront distribution"
-  scope       = "CLOUDFRONT" # must be CLOUDFRONT for use with CloudFront
+  description = "WAF for ${local.name_prefix}"
+  scope       = "CLOUDFRONT"
 
-  default_action {
-    allow {} # allow by default; rules below block specific threats
+  default_action { 
+    allow {} 
   }
 
-  # Rule 1 — AWS Managed: Core rule set (OWASP Top 10)
   rule {
     name     = "AWSManagedRulesCommonRuleSet"
     priority = 1
-
-    override_action {
-      none {} # use rule's default action (block)
+    override_action { 
+      none {} 
     }
-
     statement {
       managed_rule_group_statement {
         name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
       }
     }
-
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "${local.name_prefix}-common-rules"
@@ -59,22 +54,18 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # Rule 2 — AWS Managed: Known bad inputs (SQLi, XSS)
   rule {
     name     = "AWSManagedRulesKnownBadInputsRuleSet"
     priority = 2
-
-    override_action {
-      none {}
+    override_action { 
+      none {} 
     }
-
     statement {
       managed_rule_group_statement {
         name        = "AWSManagedRulesKnownBadInputsRuleSet"
         vendor_name = "AWS"
       }
     }
-
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "${local.name_prefix}-bad-inputs"
@@ -82,22 +73,18 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # Rule 3 — Rate limiting: max 1000 requests per 5 min per IP
   rule {
     name     = "RateLimitPerIP"
     priority = 3
-
-    action {
-      block {}
+    action { 
+      block {} 
     }
-
     statement {
       rate_based_statement {
         limit              = 1000
         aggregate_key_type = "IP"
       }
     }
-
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "${local.name_prefix}-rate-limit"
@@ -115,117 +102,23 @@ resource "aws_wafv2_web_acl" "main" {
 }
 
 # =============================================================================
-# CLOUDFRONT — Origin Access Control (OAC)
-# Allows CloudFront to access S3 privately (no public S3 bucket needed)
+# OAC — shared across all S3 origins
 # =============================================================================
 
 resource "aws_cloudfront_origin_access_control" "main" {
   name                              = "${local.name_prefix}-oac"
-  description                       = "OAC for ${local.name_prefix} S3 origins"
+  description                       = "OAC for ${local.name_prefix}"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
 # =============================================================================
-# CLOUDFRONT — Distribution
-# =============================================================================
-
-resource "aws_cloudfront_distribution" "main" {
-  enabled             = true
-  is_ipv6_enabled     = true
-  comment             = "${local.name_prefix} distribution"
-  default_root_object = "index.html"
-  price_class         = "PriceClass_100" # US + Europe only — cheapest for MVP
-  web_acl_id          = aws_wafv2_web_acl.main.arn
-
-  # Custom domain — only configured when domain_name + acm_cert_arn provided
-  aliases = local.has_domain ? [var.domain_name] : []
-
-  # -------------------------------------------------------------------------
-  # Origin 1 — Menu Assets S3 bucket
-  # -------------------------------------------------------------------------
-  origin {
-    domain_name              = var.menu_assets_bucket_regional_domain
-    origin_id                = "menu-assets-s3"
-    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
-
-    # ADD THIS
-    s3_origin_config {
-      origin_access_identity = ""
-    }
-  }
-
-  # -------------------------------------------------------------------------
-  # Origin 2 — AR Models S3 bucket
-  # -------------------------------------------------------------------------
-  origin {
-    domain_name              = var.ar_models_bucket_regional_domain
-    origin_id                = "ar-models-s3"
-    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
-
-    # ADD THIS
-    s3_origin_config {
-      origin_access_identity = ""
-    }
-  }
-
-  # -------------------------------------------------------------------------
-  # Default cache behaviour — serves menu assets
-  # -------------------------------------------------------------------------
-  default_cache_behavior {
-    target_origin_id       = "menu-assets-s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-
-    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6" # AWS Managed: CachingOptimized
-
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
-  }
-
-  # -------------------------------------------------------------------------
-  # Cache behaviour — AR models (longer TTL — models rarely change)
-  # -------------------------------------------------------------------------
-  ordered_cache_behavior {
-    path_pattern           = "/ar-models/*"
-    target_origin_id       = "ar-models-s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-
-    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
-  }
-
-  # -------------------------------------------------------------------------
-  # SSL Certificate — default CloudFront cert for MVP, custom when domain added
-  # -------------------------------------------------------------------------
-  viewer_certificate {
-    cloudfront_default_certificate = local.has_domain ? false : true
-    acm_certificate_arn            = local.has_domain ? var.acm_cert_arn : null
-    ssl_support_method             = local.has_domain ? "sni-only" : null
-    minimum_protocol_version       = local.has_domain ? "TLSv1.2_2021" : "TLSv1"
-  }
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "none" # no geo-blocking for MVP
-    }
-  }
-
-  tags = local.common_tags
-}
-
-# =============================================================================
-# CLOUDFRONT — Security Response Headers Policy
-# Adds security headers to every response
+# Security Headers Policy
 # =============================================================================
 
 resource "aws_cloudfront_response_headers_policy" "security" {
-  name    = "${local.name_prefix}-security-headers"
-  comment = "Security headers for ${local.name_prefix}"
+  name = "${local.name_prefix}-security-headers"
 
   security_headers_config {
     content_type_options {
@@ -253,52 +146,178 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 }
 
 # =============================================================================
-# S3 BUCKET POLICY — Allow CloudFront OAC to read from buckets
+# CLOUDFRONT DISTRIBUTION
 # =============================================================================
 
-resource "aws_s3_bucket_policy" "menu_assets" {
-  bucket = var.menu_assets_bucket_name
+resource "aws_cloudfront_distribution" "main" {
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "${local.name_prefix}"
+  default_root_object = "index.html"
+  price_class         = "PriceClass_100"
+  web_acl_id          = aws_wafv2_web_acl.main.arn
+  aliases             = local.has_domain ? [var.domain_name] : []
+
+  # --- Origins ---------------------------------------------------------------
+
+  # Asset origins
+  origin {
+    domain_name              = var.menu_assets_bucket_regional_domain
+    origin_id                = "menu-assets-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    s3_origin_config { origin_access_identity = "" }
+  }
+
+  origin {
+    domain_name              = var.ar_models_bucket_regional_domain
+    origin_id                = "ar-models-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    s3_origin_config { origin_access_identity = "" }
+  }
+
+  # UI origins
+  origin {
+    domain_name              = var.guest_ui_bucket_regional_domain
+    origin_id                = "guest-ui-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    s3_origin_config { origin_access_identity = "" }
+  }
+
+  origin {
+    domain_name              = var.kds_ui_bucket_regional_domain
+    origin_id                = "kds-ui-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    s3_origin_config { origin_access_identity = "" }
+  }
+
+  origin {
+    domain_name              = var.admin_ui_bucket_regional_domain
+    origin_id                = "admin-ui-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    s3_origin_config { origin_access_identity = "" }
+  }
+
+  # --- Default behaviour (menu assets) ---------------------------------------
+  default_cache_behavior {
+    target_origin_id       = "menu-assets-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+  }
+
+  # --- Path behaviours -------------------------------------------------------
+
+  # AR models
+  ordered_cache_behavior {
+    path_pattern           = "/ar-models/*"
+    target_origin_id       = "ar-models-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+
+  # Guest UI — /guest/*
+  ordered_cache_behavior {
+    path_pattern           = "/guest/*"
+    target_origin_id       = "guest-ui-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+  }
+
+  # KDS UI — /kds/*
+  ordered_cache_behavior {
+    path_pattern           = "/kds/*"
+    target_origin_id       = "kds-ui-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+  }
+
+  # Admin UI — /admin/*
+  ordered_cache_behavior {
+    path_pattern           = "/admin/*"
+    target_origin_id       = "admin-ui-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = local.has_domain ? false : true
+    acm_certificate_arn            = local.has_domain ? var.acm_cert_arn : null
+    ssl_support_method             = local.has_domain ? "sni-only" : null
+    minimum_protocol_version       = local.has_domain ? "TLSv1.2_2021" : "TLSv1"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  tags = local.common_tags
+}
+
+# =============================================================================
+# S3 BUCKET POLICIES — Allow CloudFront OAC only
+# =============================================================================
+
+locals {
+  cf_arn = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.main.id}"
+
+  ui_buckets = {
+    menu_assets = var.menu_assets_bucket_name
+    ar_models   = var.ar_models_bucket_name
+    guest_ui    = var.guest_ui_bucket_name
+    kds_ui      = var.kds_ui_bucket_name
+    admin_ui    = var.admin_ui_bucket_name
+  }
+}
+
+resource "aws_s3_bucket_policy" "this" {
+  for_each = local.ui_buckets
+  bucket   = each.value
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid       = "AllowCloudFrontOAC"
-      Effect    = "Allow"
-      Principal = { Service = "cloudfront.amazonaws.com" }
-      Action    = "s3:GetObject"
-      Resource  = "arn:aws:s3:::${var.menu_assets_bucket_name}/*"
+      Sid    = "AllowCloudFrontOAC"
+      Effect = "Allow"
+      Principal = {
+        Service = "cloudfront.amazonaws.com"
+      }
+      Action   = "s3:GetObject"
+      Resource = "arn:aws:s3:::${each.value}/*"
       Condition = {
         StringEquals = {
-          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.main.id}"
+          "AWS:SourceArn" = local.cf_arn
         }
       }
     }]
   })
 }
 
-
-resource "aws_s3_bucket_policy" "ar_models" {
-  bucket = var.ar_models_bucket_name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "AllowCloudFrontOAC"
-      Effect    = "Allow"
-      Principal = { Service = "cloudfront.amazonaws.com" }
-      Action    = "s3:GetObject"
-      Resource  = "arn:aws:s3:::${var.ar_models_bucket_name}/*"
-      Condition = {
-        StringEquals = {
-          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.main.id}"
-        }
-      }
-    }]
-  })
-}
-
-
-
 # =============================================================================
-# ROUTE53 — Only created when domain is provided (future use)
+# ROUTE53 — only when domain provided
 # =============================================================================
 
 resource "aws_route53_record" "main" {
