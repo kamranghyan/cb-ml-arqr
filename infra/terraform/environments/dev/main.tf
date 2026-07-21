@@ -18,10 +18,12 @@ terraform {
   } 
 }
 
-provider "aws" { 
-  region     = var.aws_region 
-  access_key = var.aws_access_key 
-  secret_key = var.aws_secret_key 
+# The aliased provider for edge services (Virginia)
+provider "aws" {
+  alias      = "us_east_1"   # <-- MUST match the alias string exactly
+  region     = "us-east-1"
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
 }
 
 # ... the rest of your modules (data, secrets, etc.) can remain exactly as they were
@@ -36,7 +38,10 @@ module "data" {
   environment = var.environment
   owner       = var.owner
 
-  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -122,7 +127,10 @@ module "observability" {
   owner              = var.owner
   log_retention_days = 14
 
-  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 }
 
 # -----------------------------------------------------------------------------
