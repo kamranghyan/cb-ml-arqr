@@ -142,7 +142,7 @@ module "compute" {
   environment      = var.environment
   owner            = var.owner
   aws_region       = var.aws_region
-  lambdas_src_path = "${path.cwd}/../../../../../src/lambdas"
+  lambdas_src_path = "modules_relative"
 
   providers = {
     aws           = aws
