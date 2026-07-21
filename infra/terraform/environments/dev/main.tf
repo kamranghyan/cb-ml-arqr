@@ -143,9 +143,9 @@ module "compute" {
   owner            = var.owner
   aws_region       = var.aws_region
   
-  # Relative path to src/lambdas from environments/dev/ folder
+  # Passes the clean root dataset variable map downward safely
   lambdas_src_path = "${path.cwd}/../../../../../src/lambdas"
-  lambdas          = var.lambdas # Passes the map down to the module
+  lambdas          = var.lambdas 
 
   providers = {
     aws           = aws

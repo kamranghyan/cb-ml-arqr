@@ -84,3 +84,15 @@ variable "route53_zone_id" {
   type    = string
   default = ""
 }
+
+variable "lambdas" {
+  description = "Root map tracking all Lambda function assets"
+  type        = map(any)
+  default     = {
+    menu_service      = { source = "menu-service", handler = "index.handler" }
+    order_service     = { source = "order-service", handler = "index.handler" }
+    tenant_service    = { source = "tenant-service", handler = "index.handler" }
+    auth_service      = { source = "auth-service", handler = "index.handler" }
+    websocket_service = { source = "websocket-service", handler = "index.handler" }
+  }
+}
