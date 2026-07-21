@@ -41,30 +41,39 @@ module "data" {
 # Step 6 — SECRETS MODULE
 # -----------------------------------------------------------------------------
 module "secrets" {
-  source      = "../../modules/secrets"
-  prefix      = var.prefix
-  environment = var.environment
-  owner       = var.owner
-
+  source               = "../../modules/secrets"
+  prefix               = var.prefix
+  environment          = var.environment
+  owner                = var.owner
   api_key              = var.api_key
   cognito_user_pool_id = module.auth.user_pool_id
   cognito_client_id    = module.auth.admin_client_id
   menu_assets_bucket   = module.data.bucket_menu_assets
   allowed_origins      = var.allowed_origins
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 }
+
 
 # -----------------------------------------------------------------------------
 # Step 7 — AUTH MODULE
 # -----------------------------------------------------------------------------
 module "auth" {
-  source      = "../../modules/auth"
-  prefix      = var.prefix
-  environment = var.environment
-  owner       = var.owner
-
+  source                 = "../../modules/auth"
+  prefix                 = var.prefix
+  environment            = var.environment
+  owner                  = var.owner
   menu_assets_bucket_arn = module.data.bucket_menu_assets_arn
   callback_urls          = var.callback_urls
   logout_urls            = var.logout_urls
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -121,8 +130,10 @@ module "compute" {
   environment      = var.environment
   owner            = var.owner
   aws_region       = var.aws_region
-  
-  # CORRECTED: Point directly back to your root directory's src/lambdas folder
-  lambdas_src_path = "${path.root}/../../../../src/lambdas" 
-}
+  lambdas_src_path = "${path.root}/../../../../src/lambdas"
 
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+}
