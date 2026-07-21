@@ -83,7 +83,7 @@ jobs:
           TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-              - name: Terraform Apply
+      - name: Terraform Apply
         run: terraform apply -auto-approve
         working-directory: ${{ env.WORKING_DIR }}
         env:
