@@ -142,7 +142,10 @@ module "compute" {
   environment      = var.environment
   owner            = var.owner
   aws_region       = var.aws_region
-  lambdas_src_path = "modules_relative"
+  
+  # Relative path to src/lambdas from environments/dev/ folder
+  lambdas_src_path = "${path.cwd}/../../../../../src/lambdas"
+  lambdas          = var.lambdas # Passes the map down to the module
 
   providers = {
     aws           = aws
