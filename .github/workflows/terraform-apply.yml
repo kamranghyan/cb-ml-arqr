@@ -115,8 +115,7 @@ jobs:
           - order-service
           - tenant-service
           - auth-service
-          - websocket-connect
-          - websocket-disconnect
+          - websocket_service
 
     steps:
       - name: Checkout
