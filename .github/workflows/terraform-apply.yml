@@ -78,7 +78,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init -reconfigure
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: infra/terraform/environment/dev
         env:
           TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
