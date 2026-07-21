@@ -111,8 +111,8 @@ jobs:
     strategy:
       matrix:
         lambda:
-          - menu-service
-          - order-service
+          - menu_svc
+          - order_svc
           - tenant-service
           - auth-service
           - websocket-connect
