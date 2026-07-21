@@ -1,0 +1,76 @@
+version = 0.1
+
+# ─────────────────────────────────────────────────────────────
+# Default profile — used by plain `sam deploy`
+# Region pinned to ap-south-1 (Mumbai) to match the rest of MenuLay.
+# ─────────────────────────────────────────────────────────────
+[default.global.parameters]
+stack_name = "ws-project"
+region     = "ap-south-1"
+
+[default.build.parameters]
+cached   = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project"
+disable_rollback    = true
+parameter_overrides = "Stage=\"dev\""
+image_repositories  = []
+
+# ─────────────────────────────────────────────────────────────
+# `sam deploy --config-env dev`   (used by `make deploy-dev`)
+# ─────────────────────────────────────────────────────────────
+[dev.global.parameters]
+stack_name = "ws-project-dev"
+region     = "ap-south-1"
+
+[dev.build.parameters]
+cached   = true
+parallel = true
+
+[dev.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-dev"
+disable_rollback    = true
+parameter_overrides = "Stage=\"dev\""
+image_repositories  = []
+
+# ─────────────────────────────────────────────────────────────
+# `sam deploy --config-env staging`
+# ─────────────────────────────────────────────────────────────
+[staging.global.parameters]
+stack_name = "ws-project-staging"
+region     = "ap-south-1"
+
+[staging.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-staging"
+parameter_overrides = "Stage=\"staging\""
+image_repositories  = []
+
+# ─────────────────────────────────────────────────────────────
+# `sam deploy --config-env prod`   (used by `make deploy-prod`)
+# ─────────────────────────────────────────────────────────────
+[prod.global.parameters]
+stack_name = "ws-project-prod"
+region     = "ap-south-1"
+
+[prod.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-prod"
+parameter_overrides = "Stage=\"prod\""
+image_repositories  = []

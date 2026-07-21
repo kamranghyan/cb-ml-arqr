@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: MenuLay — ar_svc Lambda (FastAPI + Mangum, shared Lambda Layer)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  MenuTable:
+    Type: String
+    Default: MenuTable-dev
+  AssetBucketName:
+    Type: String
+    Default: menu-assets-dev-833090513377
+  CognitoRegion:
+    Type: String
+    Default: ap-south-1
+  CognitoUserPoolId:
+    Type: String
+    Default: ap-south-1_SCyQ50etN
+  CognitoClientId:
+    Type: String
+    Default: 7903hkujl9qeq67toemi5qrhes
+    NoEcho: true
+  CfDomain:
+    Type: String
+    Default: d2rw2kah485lhg.cloudfront.net
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+
+Globals:
+  Function:
+    Runtime:       python3.13
+    Architectures: [arm64]
+    MemorySize:    512
+    Timeout:       30
+    Environment:
+      Variables:
+        ENVIRONMENT:          !Ref Environment
+        LOG_LEVEL:            !Ref LogLevel
+        TABLE_MENU:           !Ref MenuTable
+        MENU_TABLE:           !Ref MenuTable
+        ASSET_BUCKET_NAME:    !Ref AssetBucketName
+        CF_DOMAIN:            !Ref CfDomain
+        COGNITO_REGION:       !Ref CognitoRegion
+        COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+        COGNITO_CLIENT_ID:    !Ref CognitoClientId
+  Api:
+    Cors:
+      AllowMethods: "'GET,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization,X-Tenant-Id'"
+      AllowOrigin:  "'*'"
+
+Resources:
+
+  # ── Shared Lambda Layer ─────────────────────────────────────────────────────
+  # Common code (auth, exceptions, logging, aws clients) shared by all
+  # MenuLay services. Source: ../../layers/shared_layer
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "menulay-shared-${Environment}"
+      Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
+      ContentUri: ../layers/shared_layer
+      CompatibleRuntimes:
+        - python3.13
+      CompatibleArchitectures:
+        - arm64
+      RetentionPolicy: Delete
+
+  ArAssetsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name:      !Sub "ar-svc-api-${Environment}"
+      StageName: !Ref Environment
+
+  ArAssetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "ar-svc-${Environment}"
+      Description:  AR asset metadata — presigned URLs, update, delete (FastAPI + Mangum)
+      CodeUri:      ./
+      Handler:      handler.lambda_handler
+      Layers:
+        - !Ref SharedLayer
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource:
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/${MenuTable}"
+            - Effect: Allow
+              Action: [s3:GetObject]
+              Resource: !Sub "arn:aws:s3:::${AssetBucketName}/*"
+            - Effect: Allow
+              Action: [cloudfront:CreateInvalidation, cloudfront:ListDistributions]
+              Resource: "*"
+
+      Events:
+        Health:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ArAssetsApi
+            Path:      /health
+            Method:    GET
+        ArProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ArAssetsApi
+            Path:      /ar/{proxy+}
+            Method:    ANY
+
+  ArAssetsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:    !Sub "/aws/lambda/ar-svc-${Environment}"
+      RetentionInDays: 30
+
+Outputs:
+  ApiEndpoint:
+    Description: AR Assets API endpoint
+    Value: !Sub "https://${ArAssetsApi}.execute-api.ap-south-1.amazonaws.com/${Environment}"
+  FunctionArn:
+    Value: !GetAtt ArAssetsFunction.Arn
+  SharedLayerArn:
+    Description: Shared layer ARN (reuse in other MenuLay services)
+    Value: !Ref SharedLayer
