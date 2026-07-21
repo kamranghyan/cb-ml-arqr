@@ -13,13 +13,14 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "cb-ml-arqr-terraform-state-833090513377"
-    key          = "dev/main/terraform.tfstate"
-    region       = "ap-south-1"
-    encrypt      = true
-    use_lockfile = true
+    bucket         = "cb-ml-arqr-terraform-state-833090513377"
+    key            = "dev/main/terraform.tfstate"
+    region         = "ap-south-1"
+    encrypt        = true
+    # REMOVE OR COMMENT OUT THIS LINE:
+    # use_lockfile = true 
   }
-}
+
 
 provider "aws" {
   region     = var.aws_region
