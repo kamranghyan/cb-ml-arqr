@@ -5,6 +5,16 @@
 # /kds/*   → kds-ui S3
 # /admin/* → admin-ui S3
 # =============================================================================
+terraform {
+  required_version = ">= 1.10.0"
+  required_providers {
+    aws = {
+      source                = "hashicorp/aws"
+      version               = "~> 5.0"
+      configuration_aliases = [ aws.us_east_1 ] # <-- Keep this ONLY in the modules directory!
+    }
+  }
+}
 
 locals {
   name_prefix = "${var.prefix}-${var.environment}"

@@ -7,8 +7,6 @@ terraform {
     aws = { 
       source            = "hashicorp/aws" 
       version           = "~> 5.0" 
-      # ADD THIS: Declares that this configuration uses a regional alias
-      configuration_aliases = [ aws.us_east_1 ] 
     } 
   } 
 
@@ -37,6 +35,8 @@ module "data" {
   prefix      = var.prefix
   environment = var.environment
   owner       = var.owner
+
+  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 }
 
 # -----------------------------------------------------------------------------
@@ -121,6 +121,8 @@ module "observability" {
   environment        = var.environment
   owner              = var.owner
   log_retention_days = 14
+
+  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 }
 
 # -----------------------------------------------------------------------------
