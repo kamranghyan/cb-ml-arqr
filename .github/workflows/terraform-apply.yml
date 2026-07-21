@@ -98,7 +98,7 @@ jobs:
           TF_VAR_prefix: "cb-ml"
           TF_VAR_environment: "dev"
           TF_VAR_owner: "cb-ml-team"
-          TF_VAR_allowed_origins: "*"
+          TF_VAR_allowed_origins: '*'
 
   # ===========================================================================
   # JOB 3 — Deploy Lambdas
