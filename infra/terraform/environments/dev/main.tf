@@ -128,5 +128,8 @@ module "compute" {
   environment      = var.environment
   owner            = var.owner
   aws_region       = var.aws_region
-  lambdas_src_path = "${path.root}/../../../../src/lambdas"
+  
+  # CORRECTED: Point directly back to your root directory's src/lambdas folder
+  lambdas_src_path = "${path.root}/../../../../src/lambdas" 
 }
+
