@@ -40,11 +40,10 @@ data "archive_file" "lambda" {
   for_each    = var.lambdas
   type        = "zip"
   
-  # FIX: Jump exactly two levels back from the compute module folder straight into src/lambdas/
-  source_dir  = "${path.module}/../../../src/lambdas/${each.value.source}"
-  output_path = "${path.module}/../../tmp/${each.key}.zip"
+  # FIX: Uses path.cwd to lock in the absolute disk path on the GitHub Actions runner
+  source_dir  = "${path.cwd}/../../../../../src/lambdas/${replace(each.key, "_", "-")}"
+  output_path = "${path.cwd}/../../../../tmp/${each.key}.zip"
 }
-
 
 # =============================================================================
 # IAM — Lambda Execution Role (shared across all Lambdas)
