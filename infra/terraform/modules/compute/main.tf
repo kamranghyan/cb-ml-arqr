@@ -37,11 +37,14 @@ locals {
 # =============================================================================
 
 data "archive_file" "lambda" {
-  for_each    = local.lambdas
+  for_each    = var.lambdas
   type        = "zip"
-  source_dir  = each.value.source
-  output_path = "${path.module}/zips/${each.key}.zip"
+  
+  # FIX: Jump exactly two levels back from the compute module folder straight into src/lambdas/
+  source_dir  = "${path.module}/../../../src/lambdas/${each.value.source}"
+  output_path = "${path.module}/../../tmp/${each.key}.zip"
 }
+
 
 # =============================================================================
 # IAM — Lambda Execution Role (shared across all Lambdas)
