@@ -2,21 +2,23 @@
 # DEV ENVIRONMENT 
 # ============================================================================= 
 terraform { 
-  required_version = ">= 1.6.0" 
+  required_version = ">= 1.10.0" # UPGRADED: Matches your pipeline engine
   required_providers { 
     aws = { 
-      source  = "hashicorp/aws" 
-      version = "~> 5.0" 
+      source            = "hashicorp/aws" 
+      version           = "~> 5.0" 
+      # ADD THIS: Declares that this configuration uses a regional alias
+      configuration_aliases = [ aws.us_east_1 ] 
     } 
   } 
-  
+
   backend "s3" { 
     bucket  = "cb-ml-arqr-terraform-state-833090513377" 
     key     = "dev/main/terraform.tfstate" 
     region  = "ap-south-1" 
     encrypt = true 
-  } # <-- Make sure this closing brace for backend "s3" exists!
-} # <-- Make sure this closing brace for terraform exists!
+  } 
+}
 
 provider "aws" { 
   region     = var.aws_region 
