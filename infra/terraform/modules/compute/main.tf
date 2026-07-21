@@ -40,9 +40,9 @@ data "archive_file" "lambda" {
   for_each    = var.lambdas
   type        = "zip"
   
-  # FIX: Uses path.cwd to lock in the absolute disk path on the GitHub Actions runner
-  source_dir  = "${path.cwd}/../../../../../src/lambdas/${replace(each.key, "_", "-")}"
-  output_path = "${path.cwd}/../../../../tmp/${each.key}.zip"
+  # FIX: Change from 5 jumps to 4 jumps to land perfectly in your true code folder
+  source_dir  = "${path.cwd}/../../../../src/lambdas/${replace(each.key, "_", "-")}"
+  output_path = "${path.cwd}/../../../tmp/${each.key}.zip"
 }
 
 # =============================================================================
