@@ -1,39 +1,31 @@
-# =============================================================================
-# DEV ENVIRONMENT
-# =============================================================================
+# ============================================================================= 
+# DEV ENVIRONMENT 
+# ============================================================================= 
+terraform { 
+  required_version = ">= 1.6.0" 
+  required_providers { 
+    aws = { 
+      source  = "hashicorp/aws" 
+      version = "~> 5.0" 
+    } 
+  } 
+  
+  backend "s3" { 
+    bucket  = "cb-ml-arqr-terraform-state-833090513377" 
+    key     = "dev/main/terraform.tfstate" 
+    region  = "ap-south-1" 
+    encrypt = true 
+  } # <-- Make sure this closing brace for backend "s3" exists!
+} # <-- Make sure this closing brace for terraform exists!
 
-terraform {
-  required_version = ">= 1.6.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-
-  backend "s3" {
-    bucket         = "cb-ml-arqr-terraform-state-833090513377"
-    key            = "dev/main/terraform.tfstate"
-    region         = "ap-south-1"
-    encrypt        = true
-    # REMOVE OR COMMENT OUT THIS LINE:
-    # use_lockfile = true 
-  }
-
-
-provider "aws" {
-  region     = var.aws_region
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
+provider "aws" { 
+  region     = var.aws_region 
+  access_key = var.aws_access_key 
+  secret_key = var.aws_secret_key 
 }
 
-provider "aws" {
-  alias      = "us_east_1"
-  region     = "us-east-1"
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
-}
+# ... the rest of your modules (data, secrets, etc.) can remain exactly as they were
+
 
 # -----------------------------------------------------------------------------
 # Step 5 — DATA MODULE
