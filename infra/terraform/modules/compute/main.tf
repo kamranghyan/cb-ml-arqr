@@ -40,8 +40,8 @@ data "archive_file" "lambda" {
   for_each    = var.lambdas
   type        = "zip"
   
-  # FIX: Change from 5 jumps to 4 jumps to land perfectly in your true code folder
-  source_dir  = "${path.cwd}/../../../../src/lambdas/${replace(each.key, "_", "-")}"
+  # FIX: Reads the source value straight from your variables map
+  source_dir  = "${path.cwd}/../../../../src/lambdas/${each.value.source}"
   output_path = "${path.cwd}/../../../tmp/${each.key}.zip"
 }
 

@@ -85,14 +85,17 @@ variable "route53_zone_id" {
   default = ""
 }
 
+
 variable "lambdas" {
-  description = "Root map tracking all Lambda function assets"
-  type        = map(any)
+  type        = map(any) # <-- FIXED: Cleaned up the typing structure here
   default     = {
-    menu_service      = { source = "menu-service", handler = "index.handler" }
+    # CHANGE the folder target below to match whatever your actual folder name is:
+    menu_service      = { source = "menu_lambda", handler = "index.handler" }
     order_service     = { source = "order-service", handler = "index.handler" }
     tenant_service    = { source = "tenant-service", handler = "index.handler" }
     auth_service      = { source = "auth-service", handler = "index.handler" }
     websocket_service = { source = "websocket-service", handler = "index.handler" }
   }
 }
+
+
