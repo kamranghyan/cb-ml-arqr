@@ -89,33 +89,25 @@ Resources:
       TableName: !Ref OrderTable
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: orderId
+        - AttributeName: PK
           AttributeType: S
-        - AttributeName: createdAt
+        - AttributeName: SK
           AttributeType: S
         - AttributeName: restaurantId
           AttributeType: S
-        - AttributeName: status
+        - AttributeName: placedAt
           AttributeType: S
       KeySchema:
-        - AttributeName: orderId
+        - AttributeName: PK
           KeyType: HASH
-        - AttributeName: createdAt
+        - AttributeName: SK
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        - IndexName: byRestaurantId
+        - IndexName: GSI-1-restaurant-orders
           KeySchema:
             - AttributeName: restaurantId
               KeyType: HASH
-            - AttributeName: createdAt
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-        - IndexName: byStatus
-          KeySchema:
-            - AttributeName: status
-              KeyType: HASH
-            - AttributeName: createdAt
+            - AttributeName: placedAt
               KeyType: RANGE
           Projection:
             ProjectionType: ALL

@@ -22,7 +22,7 @@ parameter_overrides = [
   "StepArn=arn:aws:states:ap-south-1:833090513377:stateMachine:order-state-machine-dev",
   "NotificationsQueueUrl=https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
   "LogLevel=INFO",
-  "SkipMenuValidation=false",
+  "SkipMenuValidation=true",
 ]
 s3_prefix = "orders-fastapi-dev"
 disable_rollback = true

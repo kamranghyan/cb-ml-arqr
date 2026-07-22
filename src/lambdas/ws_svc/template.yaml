@@ -140,6 +140,15 @@ Resources:
               - Effect: Allow
                 Action: lambda:InvokeFunction
                 Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ws-message-lambda-${Stage}
+        # The notifications queue lives in the notifications-lambda stack, so the
+        # ARN is built by convention rather than with !GetAtt.
+        - PolicyName: SendOrderNotifications
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:notifications-queue-${Stage}
 
   OrderStateMachine:
     Type: AWS::StepFunctions::StateMachine
@@ -148,22 +157,33 @@ Resources:
       StateMachineName: !Sub order-state-machine-${Stage}
       RoleArn: !GetAtt StepFunctionsRole.Arn
       Definition:
-        Comment: Order processing workflow
-        StartAt: WaitForWebSocket
+        Comment: >-
+          Order lifecycle. Currently publishes the RECEIVED notification and
+          completes. The kitchen/ready/delivered stages are not wired yet: they
+          need order_svc to expose a non-HTTP entry point (its handler is
+          Mangum-only today) and a callback mechanism for kitchen acceptance,
+          since Wait + Choice cannot observe state changed outside the execution.
+        StartAt: NotifyReceived
         States:
-          WaitForWebSocket:
+          NotifyReceived:
             Type: Task
-            Resource: arn:aws:states:::lambda:invoke.waitForTaskToken
+            Resource: arn:aws:states:::sqs:sendMessage
             Parameters:
-              FunctionName: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ws-message-lambda-${Stage}
-              Payload:
-                taskToken.$: $$.Task.Token
-                input.$: $
-            TimeoutSeconds: 300
-            Next: ProcessOrder
-          ProcessOrder:
-            Type: Pass
-            End: true
+              QueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/notifications-queue-${Stage}"
+              MessageBody:
+                orderId.$: "$.orderId"
+                tenantId.$: "$.tenantId"
+                status: RECEIVED
+                message: Your order has been received.
+            # No ResultPath: CloudFormation rejects null values, and the next
+            # state is terminal so the SQS result is not needed downstream.
+            Retry:
+              - ErrorEquals: [States.ALL]
+                MaxAttempts: 2
+                IntervalSeconds: 2
+            Next: OrderSuccess
+          OrderSuccess:
+            Type: Succeed
 
   # ════════════════════════════════════════
   # LAMBDA 1 — ws-connect
