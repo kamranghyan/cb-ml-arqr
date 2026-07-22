@@ -40,7 +40,7 @@ Resources:
   OrderTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub OrderTable-${Stage}
+      TableName: !Sub ws-order-subscriptions-${Stage}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: connectionId

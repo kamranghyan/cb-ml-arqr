@@ -18,7 +18,7 @@ region              = "ap-south-1"
 confirm_changeset   = true
 resolve_s3          = true
 s3_prefix           = "ws-project"
-disable_rollback    = true
+disable_rollback    = false
 parameter_overrides = "Stage=\"dev\""
 image_repositories  = []
 
@@ -39,7 +39,7 @@ region              = "ap-south-1"
 confirm_changeset   = true
 resolve_s3          = true
 s3_prefix           = "ws-project-dev"
-disable_rollback    = true
+disable_rollback    = false
 parameter_overrides = "Stage=\"dev\""
 image_repositories  = []
 

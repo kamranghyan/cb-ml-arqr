@@ -1,0 +1,36 @@
+# More information about the configuration file can be found here:
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+version = 0.1
+
+[default.global.parameters]
+stack_name = "notifications-lambda"
+region = "ap-south-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "notifications-lambda-dev"
+disable_rollback = false
+parameter_overrides = "Stage=\"dev\" SnsTopicArn=\"arn:aws:sns:ap-south-1:833090513377:orders-notifications-dev\" WsEndpoint=\"https://opoa6rn0zf.execute-api.ap-south-1.amazonaws.com/dev\" WsApiId=\"opoa6rn0zf\" WsConnectionsTableName=\"ConnectionTable-dev\" OrderTableName=\"OrderTable-dev\" PinpointAppId=\"\" PinpointFromNumber=\"\""
+image_repositories = []
+stack_name = "notifications-lambda-dev"
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
