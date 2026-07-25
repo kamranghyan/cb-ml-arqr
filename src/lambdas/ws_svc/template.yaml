@@ -101,6 +101,7 @@ Resources:
                   - dynamodb:DeleteItem
                   - dynamodb:UpdateItem
                   - dynamodb:Query
+                  - dynamodb:Scan
                 Resource:
                   - !GetAtt ConnectionTable.Arn
                   - !GetAtt OrderTable.Arn
@@ -120,6 +121,13 @@ Resources:
                   - states:SendTaskSuccess
                   - states:SendTaskFailure
                 Resource: '*'
+        - PolicyName: ManageWebSocketConnections
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: execute-api:ManageConnections
+                Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
 
   # ── Step Functions ─────────────────────
   StepFunctionsRole:
@@ -252,6 +260,8 @@ Resources:
           TABLE_ORDER: !Ref OrderTable
           DLQ_URL: !Ref OrderDLQ
           STEP_ARN: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:order-state-machine-${Stage}
+          TABLE_CONN: !Ref ConnectionTable
+          WS_ENDPOINT: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
 
   WsMessagePermission:
     Type: AWS::Lambda::Permission

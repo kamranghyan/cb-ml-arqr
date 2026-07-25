@@ -27,7 +27,10 @@ from app.core.dependencies import (
     get_order_repo,
     get_sfn_service,
     require_admin_or_tenant,
+    require_kitchen_or_admin,
+    optional_user,
     require_any_auth,
+    get_tenant_id,
 )
 from app.models.order import (
     LineItem,
@@ -53,12 +56,16 @@ _settings = get_settings()
 @router.post("", status_code=201, summary="Create a new order")
 async def create_order(
     body: CreateOrderBody,
-    user: Annotated[UserContext,            Depends(require_admin_or_tenant)],
+    tenant_id: Annotated[str,               Depends(get_tenant_id)],
     repo: Annotated[OrderRepository,        Depends(get_order_repo)],
     sfn:  Annotated[StepFunctionsService,   Depends(get_sfn_service)],
+    user: Annotated[UserContext | None,     Depends(optional_user)] = None,
 ):
     order_id = str(uuid.uuid4())
-    tenant_id = user.tenant_id
+    # tenant comes from X-Tenant-Id (guest has no token); a logged-in
+    # staff token, if present, may override with its own tenant claim.
+    if user is not None and getattr(user, "tenant_id", None):
+        tenant_id = user.tenant_id
 
     # Build the domain OrderRequest from the wire body + tenant from JWT
     request = OrderRequest(
@@ -127,11 +134,11 @@ async def create_order(
 @router.get("", summary="List recent orders for a restaurant")
 async def list_orders(
     restaurantId: Annotated[str, Query()],
+    tenant_id:    Annotated[str, Depends(get_tenant_id)],
+    repo:         Annotated[OrderRepository, Depends(get_order_repo)],
     hours:        Annotated[int, Query(ge=1, le=24)] = 4,
-    user:         Annotated[UserContext,     Depends(require_any_auth)] = None,
-    repo:         Annotated[OrderRepository, Depends(get_order_repo)] = None,
 ):
-    orders = repo.list_orders(restaurantId, user.tenant_id, hours=hours)
+    orders = repo.list_orders(restaurantId, tenant_id, hours=hours)
     return {"orders": clean_decimals(orders), "count": len(orders)}
 
 
@@ -139,11 +146,11 @@ async def list_orders(
 
 @router.get("/{orderId}", summary="Get a single order by ID")
 async def get_order(
-    orderId: str,
-    user:    Annotated[UserContext,     Depends(require_any_auth)],
-    repo:    Annotated[OrderRepository, Depends(get_order_repo)],
+    orderId:   str,
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    repo:      Annotated[OrderRepository, Depends(get_order_repo)],
 ):
-    order = repo.get_order(orderId, user.tenant_id)
+    order = repo.get_order(orderId, tenant_id)
     if not order:
         raise ResourceNotFoundError(resource="Order", identifier=orderId)
     return {"order": clean_decimals(dict(order)), "sfnStatus": None}
@@ -155,16 +162,17 @@ async def get_order(
 async def update_order(
     orderId: str,
     body:    UpdateOrderBody,
-    user:    Annotated[UserContext,          Depends(require_any_auth)],
+    user:    Annotated[UserContext,          Depends(require_kitchen_or_admin)],
+    tenant_id: Annotated[str,                Depends(get_tenant_id)],
     repo:    Annotated[OrderRepository,      Depends(get_order_repo)],
     sfn:     Annotated[StepFunctionsService, Depends(get_sfn_service)],
 ):
-    order = repo.get_order(orderId, user.tenant_id)
+    order = repo.get_order(orderId, tenant_id)
     if not order:
         raise ResourceNotFoundError(resource="Order", identifier=orderId)
 
     update = OrderStatusUpdate(
-        tenantId=user.tenant_id,
+        tenantId=tenant_id,
         kitchenAccepted=body.kitchenAccepted,
         foodReady=body.foodReady,
         delivered=body.delivered,
@@ -174,7 +182,7 @@ async def update_order(
 
     # Update DynamoDB (critical)
     try:
-        repo.update_status(orderId, user.tenant_id, new_status)
+        repo.update_status(orderId, tenant_id, new_status)
         log.info("order.status.updated", order_id=orderId, status=new_status)
     except Exception as exc:  # noqa: BLE001
         log.warning("order.status.update.failed", order_id=orderId, exc_message=str(exc))

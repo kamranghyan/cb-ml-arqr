@@ -7,9 +7,10 @@ All FastAPI dependency-injection factories in one place:
 * Tenant — X-Tenant-Id header / query param
 * Repos  — OrderRepository, StepFunctionsService
 
-Role model (orders are never public):
-    create           → admin / tenant
-    list/get/update  → admin / tenant / kitchen_staff
+Role model (matches the original us-east-1 flow):
+    create           → public (guest places order; tenant from X-Tenant-Id)
+    list/get         → public
+    update           → kitchen_staff / admin only
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 MUTATE_ROLES = ["menulay_admin", "menulay_tenant"]
 ANY_STAFF_ROLES = ["menulay_admin", "menulay_tenant", "menulay_kitchen_staff"]
+KITCHEN_ADMIN_ROLES = ["menulay_admin", "menulay_kitchen_staff"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -60,6 +62,27 @@ async def require_any_auth(
     user: Annotated[UserContext, Depends(get_current_user)],
 ) -> UserContext:
     """Any authenticated staff user (admin / tenant / kitchen)."""
+    return user
+
+
+async def optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+) -> UserContext | None:
+    """Return the user if a valid token is present, else None (public access)."""
+    if not credentials:
+        return None
+    try:
+        fake_event = {"headers": {"Authorization": f"Bearer {credentials.credentials}"}}
+        return _auth.get_user_from_event(fake_event)
+    except Exception:
+        return None
+
+
+async def require_kitchen_or_admin(
+    user: Annotated[UserContext, Depends(get_current_user)],
+) -> UserContext:
+    """Only kitchen staff or admin may mutate an order's status."""
+    _auth.require_roles(user, KITCHEN_ADMIN_ROLES)
     return user
 
 

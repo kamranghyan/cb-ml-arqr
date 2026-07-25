@@ -20,13 +20,56 @@ logger.setLevel(logging.INFO)
 TABLE_ORDER = os.environ["TABLE_ORDER"]
 STEP_ARN    = os.environ["STEP_ARN"]
 DLQ_URL     = os.environ["DLQ_URL"]
+TABLE_CONN  = os.environ["TABLE_CONN"]
+WS_ENDPOINT = os.environ["WS_ENDPOINT"]  # https://{apiId}.execute-api.{region}.amazonaws.com/{stage}
 
 VALID_STATUSES = {"pending", "confirmed", "processing", "cancelled", "delivered"}
 
-dynamodb = boto3.resource("dynamodb")
-table    = dynamodb.Table(TABLE_ORDER)
-sfn      = boto3.client("stepfunctions")
-sqs      = boto3.client("sqs")
+dynamodb   = boto3.resource("dynamodb")
+table      = dynamodb.Table(TABLE_ORDER)
+conn_table = dynamodb.Table(TABLE_CONN)
+sfn        = boto3.client("stepfunctions")
+sqs        = boto3.client("sqs")
+apigw_mgmt = boto3.client("apigatewaymanagementapi", endpoint_url=WS_ENDPOINT)
+
+
+def _broadcast(payload: dict, tenant_id: str, exclude_conn: str = "") -> None:
+    """Send payload to every connection for this tenant, except the sender."""
+    data = json.dumps(payload).encode()
+    try:
+        resp = conn_table.scan(
+            FilterExpression="tenantId = :t",
+            ExpressionAttributeValues={":t": tenant_id},
+            ProjectionExpression="connectionId",
+        )
+    except ClientError as e:
+        logger.error("Connection scan failed: %s", e)
+        return
+
+    sent = 0
+    for item in resp.get("Items", []):
+        conn_id = item["connectionId"]
+        if conn_id == exclude_conn:
+            continue
+        try:
+            apigw_mgmt.post_to_connection(ConnectionId=conn_id, Data=data)
+            sent += 1
+        except apigw_mgmt.exceptions.GoneException:
+            try:
+                conn_table.delete_item(Key={"connectionId": conn_id})
+            except ClientError:
+                pass
+        except ClientError as e:
+            logger.warning("post_to_connection failed conn=%s: %s", conn_id, e)
+    logger.info("Broadcast to tenant=%s sent=%d", tenant_id, sent)
+
+
+def _get_tenant_for_connection(conn_id: str) -> str:
+    try:
+        r = conn_table.get_item(Key={"connectionId": conn_id})
+        return (r.get("Item") or {}).get("tenantId", "")
+    except ClientError:
+        return ""
 
 
 def _send_to_dlq(connection_id: str, body: dict, reason: str) -> None:
@@ -59,16 +102,54 @@ def lambda_handler(event: dict, context) -> dict:
         logger.warning("Invalid JSON body from %s", connection_id)
         return {"statusCode": 400, "body": "Invalid JSON"}
 
+    action = (body.get("action") or "").lower()
+
+    # ── Action routing ────────────────────────────────────
+    # KDS/admin clients send {action:"subscribe", channel:"orders"} on open.
+    # There is nothing to persist — the connection row (with its role) already
+    # exists from $connect, which is what the notifications lambda targets.
+    # Just acknowledge so the client knows the socket is live.
+    if action == "subscribe":
+        channel = body.get("channel", "orders")
+        logger.info("subscribe: connectionId=%s channel=%s", connection_id, channel)
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"type": "SUBSCRIBED", "channel": channel}),
+        }
+
+    if action == "ping":
+        return {"statusCode": 200, "body": json.dumps({"type": "PONG"})}
+
+    # KDS broadcasts a status change to every other screen on the same tenant.
+    if action == "orderstatusupdate":
+        tenant_id = _get_tenant_for_connection(connection_id)
+        if not tenant_id:
+            logger.warning("orderStatusUpdate from unknown connection %s", connection_id)
+            return {"statusCode": 200, "body": json.dumps({"type": "IGNORED"})}
+        _broadcast(
+            {
+                "type":    "ORDER_UPDATE",
+                "orderId": body.get("orderId"),
+                "status":  body.get("status"),
+                "flags":   body.get("flags"),
+            },
+            tenant_id,
+            exclude_conn=connection_id,
+        )
+        return {"statusCode": 200, "body": json.dumps({"type": "BROADCAST_OK"})}
+
+    # ── Legacy status-update path (Step Functions task token) ─────────────────
     status     = body.get("status", "").lower()
     task_token = body.get("taskToken", "")
     order_id   = body.get("orderId") or str(uuid.uuid4())
 
-    # ── 2. Status validate karo ───────────────────────────
     if status not in VALID_STATUSES:
-        logger.warning("Invalid status '%s' from %s", status, connection_id)
+        logger.warning("Unhandled message from %s: action=%r status=%r",
+                       connection_id, action, status)
+        # 200 so API Gateway does not close the socket over an unknown message.
         return {
-            "statusCode": 400,
-            "body": f"Invalid status. Allowed: {sorted(VALID_STATUSES)}",
+            "statusCode": 200,
+            "body": json.dumps({"type": "IGNORED", "reason": "unknown action/status"}),
         }
 
     # ── 3. DynamoDB mein order save karo ─────────────────
