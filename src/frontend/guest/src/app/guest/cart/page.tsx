@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChevronRight, Lock, Trash2, Tag, MapPin } from 'lucide-react';
 import { useCartStore } from '@/lib/store';
 import { formatPrice } from '@/lib/utils';
+import { RESTAURANT_ID, TENANT_ID } from '@/lib/api-config';
 import { useTheme } from '@/hooks/useTheme';
 
 export default function CartPage() {
@@ -50,7 +51,7 @@ export default function CartPage() {
       }));
       const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
       const payload = {
-        tenantId: process.env.NEXT_PUBLIC_TENANT_ID_KDS, restaurantId: process.env.NEXT_PUBLIC_RESTAURANT_ID_KDS,
+        tenantId: TENANT_ID, restaurantId: RESTAURANT_ID,
         tableId: tid, currencyCode: 'PKR', totalAmountMinorUnits: lineItemsTotal, lineItems,
         ...(notes.trim() && { notes: notes.trim() }),
       };

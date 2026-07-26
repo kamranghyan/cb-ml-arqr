@@ -292,16 +292,6 @@ export const INITIAL_KDS_ORDERS: KdsOrder[] = [
   },
 ];
 
-// ─── Admin Users ─────────────────────────────────────────────────────────────
-
-export const ADMIN_USERS: AdminUser[] = [
-  { id: '1', initials: 'SA', name: 'Super Admin',   email: 'admin@lamaison.pk',  role: 'super',   mfaEnabled: true,  isOnline: true,  lastLogin: 'Just now'   },
-  { id: '2', initials: 'AR', name: 'Ahmed Raza',    email: 'ahmed@lamaison.pk',  role: 'manager', mfaEnabled: true,  isOnline: true,  lastLogin: '5 min ago'  },
-  { id: '3', initials: 'SF', name: 'Sara Farooq',   email: 'sara@lamaison.pk',   role: 'manager', mfaEnabled: true,  isOnline: false, lastLogin: '2 hrs ago'  },
-  { id: '4', initials: 'MK', name: 'M. Kamran',     email: 'kamran@lamaison.pk', role: 'kitchen', mfaEnabled: false, isOnline: true,  lastLogin: 'Just now'   },
-  { id: '5', initials: 'ZA', name: 'Zara Akram',    email: 'zara@lamaison.pk',   role: 'kitchen', mfaEnabled: true,  isOnline: false, lastLogin: 'Yesterday'  },
-  { id: '6', initials: 'IH', name: 'Imran Hussain', email: 'imran@lamaison.pk',  role: 'kitchen', mfaEnabled: false, isOnline: false, lastLogin: '3 days ago' },
-];
 
 // ─── QR Tables ───────────────────────────────────────────────────────────────
 
