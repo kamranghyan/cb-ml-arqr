@@ -144,6 +144,17 @@ def lambda_handler(event: dict, context) -> dict:
     tenant_id = claims.get("custom:tenant_id", "")
     groups    = claims.get("cognito:groups", [])
 
+    # Single role for easy targeting by the notifications lambda.
+    # Priority: kitchen > admin > tenant > guest.
+    if "menulay_kitchen_staff" in groups:
+        role = "kitchen"
+    elif "menulay_admin" in groups:
+        role = "admin"
+    elif "menulay_tenant" in groups:
+        role = "tenant"
+    else:
+        role = "guest"
+
     logger.info(
         "JWT valid — connectionId=%s userId=%s email=%s groups=%s",
         connection_id, user_id, email, groups
@@ -157,6 +168,7 @@ def lambda_handler(event: dict, context) -> dict:
         "email":        email,
         "tenantId":     tenant_id,
         "groups":       groups,
+        "role":         role,
         "connectedAt":  int(time.time()),
         "ttl":          ttl,
     })
@@ -168,6 +180,6 @@ def lambda_handler(event: dict, context) -> dict:
         except Exception as e:
             logger.warning("Redis HSET failed (non-critical): %s", e)
 
-    logger.info("Connected: connectionId=%s userId=%s tenantId=%s",
-                connection_id, user_id, tenant_id)
+    logger.info("Connected: connectionId=%s userId=%s tenantId=%s role=%s",
+                connection_id, user_id, tenant_id, role)
     return {"statusCode": 200, "body": "Connected"}
