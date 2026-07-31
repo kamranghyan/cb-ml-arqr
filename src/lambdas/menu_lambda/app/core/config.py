@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     menu_table: str = Field("MenuTable", alias="MENU_TABLE")
     tenant_table: str = Field("TenantTable", alias="TENANT_TABLE")
     restaurant_tables_table: str = Field(
-        "RestaurantTables-dev", alias="TABLE_RESTAURANT_TABLES"
+        "DiningTable-dev", alias="DINING_TABLE"
     )
 
     # ── S3 ────────────────────────────────────────────────────────────

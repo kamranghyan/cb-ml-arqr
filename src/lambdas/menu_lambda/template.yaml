@@ -48,8 +48,11 @@ Globals:
         ENVIRONMENT:             !Ref Environment
         LOG_LEVEL:               !Ref LogLevel
         MENU_TABLE:              !Ref MenuTable
-        TENANT_TABLE:            !Ref TenantTable
-        TABLE_RESTAURANT_TABLES: !Sub "RestaurantTables-${Environment}"
+        RESTAURANT_TABLE:        !Sub "RestaurantTable-${Environment}"
+        CATEGORY_TABLE:          !Sub "CategoryTable-${Environment}"
+        ITEM_TABLE:              !Sub "ItemTable-${Environment}"
+        DINING_TABLE:            !Sub "DiningTable-${Environment}"
+        TENANT_TABLE:            !Sub "TenantTable-${Environment}"
         S3_BUCKET:               !Ref AssetBucketName
         ASSET_BUCKET_NAME:       !Ref AssetBucketName
         REDIS_HOST:              !Ref RedisHost
@@ -118,8 +121,16 @@ Resources:
               Resource:
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/${MenuTable}"
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/${MenuTable}/index/*"
-                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/${TenantTable}"
-                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/RestaurantTables-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/RestaurantTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/RestaurantTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/CategoryTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/CategoryTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/DiningTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/DiningTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}/index/*"
             - Effect: Allow
               Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
               Resource: !Sub "arn:aws:s3:::${AssetBucketName}/*"
