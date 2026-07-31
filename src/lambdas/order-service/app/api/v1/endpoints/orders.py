@@ -8,6 +8,7 @@ PATCH  /orders/{orderId}   → update order (auth: admin/tenant/kitchen)
 
 All order routes require authentication — no public access.
 SKIP_MENU env var bypasses menu validation (dev/test only).
+This project has a good structured logger, so all log messages are JSON and can be parsed by CloudWatch Insights.
 """
 from __future__ import annotations
 
