@@ -1,16 +1,12 @@
 """
 app.services.table_service
 ==========================
-Restaurant Table/Floor CRUD — proper service layer.
+Restaurant dining-table CRUD.
 
-Ported from the legacy ``menu/handlers/table_handler.py``:
-instead of returning API Gateway response dicts, this service returns
-plain data and raises ``shared.exceptions`` errors, which the global
-FastAPI exception handlers translate to HTTP responses.
-
-DynamoDB schema:
-  PK: TENANT#{tenantId}#RESTAURANT#{restaurantId}
-  SK: TABLE#{tableId}
+Migrated from single-table (MenuTable, PK/SK) to a dedicated table:
+    DiningTable-dev
+    PK  = tableId
+    GSI = restaurantId-index → all tables for a restaurant
 """
 from __future__ import annotations
 
@@ -33,12 +29,10 @@ _ALLOWED_UPDATE_FIELDS = {"tableNumber", "zone", "outlet", "capacity", "isActive
 
 
 class TableService:
-    """CRUD for restaurant tables. One instance per Lambda container."""
+    """CRUD for restaurant dining tables. One instance per Lambda container."""
 
     def __init__(self, table_name: str | None = None, dynamodb=None):
-        self._table_name = table_name or os.environ.get(
-            "TABLE_RESTAURANT_TABLES", "RestaurantTables-dev"
-        )
+        self._table_name = table_name or os.environ.get("DINING_TABLE", "DiningTable-dev")
         ddb = dynamodb or boto3.resource("dynamodb")
         self._table = ddb.Table(self._table_name)
 
@@ -47,10 +41,8 @@ class TableService:
     def list(self, tenant_id: str, restaurant_id: str) -> dict[str, Any]:
         try:
             res = self._table.query(
-                KeyConditionExpression=(
-                    Key("PK").eq(self._pk(tenant_id, restaurant_id))
-                    & Key("SK").begins_with("TABLE#")
-                ),
+                IndexName="restaurantId-index",
+                KeyConditionExpression=Key("restaurantId").eq(restaurant_id),
             )
         except ClientError as exc:
             log.error("table.list.failed", extra={
@@ -84,8 +76,6 @@ class TableService:
         now = utc_now()
 
         item = {
-            "PK":           self._pk(tenant_id, restaurant_id),
-            "SK":           self._sk(table_id),
             "tableId":      table_id,
             "tableNumber":  table_number,
             "zone":         zone,
@@ -111,7 +101,7 @@ class TableService:
             "table_id": table_id, "table_number": table_number,
             "zone": zone, "restaurant_id": restaurant_id,
         })
-        return self._strip_keys(item)
+        return item
 
     def update(
         self, tenant_id: str, restaurant_id: str, table_id: str, body: dict,
@@ -127,11 +117,11 @@ class TableService:
 
         try:
             self._table.update_item(
-                Key={"PK": self._pk(tenant_id, restaurant_id), "SK": self._sk(table_id)},
+                Key={"tableId": table_id},
                 UpdateExpression=expr,
                 ExpressionAttributeNames=names,
                 ExpressionAttributeValues=values,
-                ConditionExpression="attribute_exists(PK)",
+                ConditionExpression="attribute_exists(tableId)",
             )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -148,8 +138,8 @@ class TableService:
     def delete(self, tenant_id: str, restaurant_id: str, table_id: str) -> dict[str, Any]:
         try:
             self._table.delete_item(
-                Key={"PK": self._pk(tenant_id, restaurant_id), "SK": self._sk(table_id)},
-                ConditionExpression="attribute_exists(PK)",
+                Key={"tableId": table_id},
+                ConditionExpression="attribute_exists(tableId)",
             )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -166,14 +156,6 @@ class TableService:
     # ── Helpers ───────────────────────────────────────────────────────────
 
     @staticmethod
-    def _pk(tenant_id: str, restaurant_id: str) -> str:
-        return f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}"
-
-    @staticmethod
-    def _sk(table_id: str) -> str:
-        return f"TABLE#{table_id}"
-
-    @staticmethod
     def _strip_keys(item: dict) -> dict:
-        """Remove DynamoDB-internal PK/SK keys from API response."""
+        """No PK/SK to strip anymore, but keep for response shape parity."""
         return {k: v for k, v in item.items() if k not in ("PK", "SK")}

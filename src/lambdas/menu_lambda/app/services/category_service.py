@@ -1,10 +1,11 @@
 """
-CategoryService — DynamoDB CRUD for MenuCategory entities.
+CategoryService — DynamoDB CRUD on the dedicated CategoryTable.
 
-Uses Query (not Scan) by PK prefix + SK begins_with("CATEGORY#").
-Cache keys:
-  - Per-category: menu:category:{tenantId}:{restaurantId}:{categoryId}
-  - List:         menu:categories:{tenantId}:{restaurantId}
+Migrated from single-table (MenuTable, PK/SK) to:
+    CategoryTable-dev
+    PK  = categoryId
+    GSI = restaurantId-index (PK restaurantId, SK displayOrder)
+          → all categories for a restaurant, ordered by displayOrder
 """
 from __future__ import annotations
 
@@ -25,8 +26,8 @@ from app.utils.retry import retry
 
 log = get_logger(__name__)
 
-_TABLE_NAME = os.environ.get("MENU_TABLE", "MenuTable")
-_PAGE_LIMIT  = 50
+_TABLE_NAME = os.environ.get("CATEGORY_TABLE", "CategoryTable-dev")
+_PAGE_LIMIT = 50
 
 
 class CategoryNotFoundError(Exception):
@@ -44,11 +45,11 @@ class CategoryService:
         self._cache = cache or CacheService()
         self._s3 = s3_svc or S3Service()
 
-    # ── Private helpers ───────────────────────────────────────────────────
+    # ── Private helpers (single-key: categoryId) ──────────────────────────
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_get(self, pk: str, sk: str) -> Optional[dict]:
-        resp = self._table.get_item(Key={"PK": pk, "SK": sk})
+    def _ddb_get(self, category_id: str) -> Optional[dict]:
+        resp = self._table.get_item(Key={"categoryId": category_id})
         item = resp.get("Item")
         return decimal_to_python(item) if item else None
 
@@ -57,10 +58,10 @@ class CategoryService:
         self._table.put_item(Item=item)
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_update(self, pk: str, sk: str, updates: dict) -> dict:
+    def _ddb_update(self, category_id: str, updates: dict) -> dict:
         expr, names, values = build_update_expression(updates)
         resp = self._table.update_item(
-            Key={"PK": pk, "SK": sk},
+            Key={"categoryId": category_id},
             UpdateExpression=expr,
             ExpressionAttributeNames=names,
             ExpressionAttributeValues=values,
@@ -69,38 +70,35 @@ class CategoryService:
         return decimal_to_python(resp.get("Attributes", {}))
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_delete(self, pk: str, sk: str) -> None:
-        self._table.delete_item(Key={"PK": pk, "SK": sk})
+    def _ddb_delete(self, category_id: str) -> None:
+        self._table.delete_item(Key={"categoryId": category_id})
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_list(
-        self, pk: str, exclusive_start_key: Optional[dict] = None
+    def _ddb_list_by_restaurant(
+        self, restaurant_id: str, exclusive_start_key: Optional[dict] = None
     ) -> tuple[list[dict], Optional[dict]]:
         kwargs: dict = {
-            "KeyConditionExpression": (
-                Key("PK").eq(pk) & Key("SK").begins_with("CATEGORY#")
-            ),
+            "IndexName": "restaurantId-index",
+            "KeyConditionExpression": Key("restaurantId").eq(restaurant_id),
             "Limit": _PAGE_LIMIT,
         }
         if exclusive_start_key:
             kwargs["ExclusiveStartKey"] = exclusive_start_key
-
         resp = self._table.query(**kwargs)
         items = [decimal_to_python(i) for i in resp.get("Items", [])]
         lek = resp.get("LastEvaluatedKey")
         return items, lek
 
-    def _pk(self, tenant_id: str, restaurant_id: str) -> str:
-        return f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}"
-
-    def _sk(self, category_id: str) -> str:
-        return f"CATEGORY#{category_id}"
+    def _to_item(self, category: MenuCategory) -> dict:
+        item = category.to_dict(exclude_none=True)
+        item.pop("imageUrl", None)
+        item.pop("PK", None)
+        item.pop("SK", None)
+        return item
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def create(
-        self, tenant_id: str, restaurant_id: str, body: dict
-    ) -> MenuCategory:
+    def create(self, tenant_id: str, restaurant_id: str, body: dict) -> MenuCategory:
         category_id = new_id()
 
         category = MenuCategory(
@@ -114,39 +112,27 @@ class CategoryService:
         )
         category.validate()
 
-        self._ddb_put(category.to_dynamo_item())
+        self._ddb_put(self._to_item(category))
 
-        # Write-through: individual key + bust list
         self._cache.set(
             CacheService.category_key(tenant_id, restaurant_id, category_id),
             category.to_dict(),
         )
-        self._cache.delete(
-            CacheService.categories_list_key(tenant_id, restaurant_id)
-        )
+        self._cache.delete(CacheService.categories_list_key(tenant_id, restaurant_id))
 
         log.info("Category created", extra={
-            "tenantId": tenant_id,
-            "restaurantId": restaurant_id,
-            "categoryId": category_id,
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "categoryId": category_id,
         })
         return category
 
-    def get(
-        self, tenant_id: str, restaurant_id: str, category_id: str
-    ) -> MenuCategory:
+    def get(self, tenant_id: str, restaurant_id: str, category_id: str) -> MenuCategory:
         cache_key = CacheService.category_key(tenant_id, restaurant_id, category_id)
-        pk = self._pk(tenant_id, restaurant_id)
-        sk = self._sk(category_id)
-
         raw = self._cache.get_or_load(
             cache_key,
-            loader=lambda: self._ddb_get(pk, sk),
+            loader=lambda: self._ddb_get(category_id),
         )
         if raw is None:
-            raise CategoryNotFoundError(
-                f"Category {category_id} not found"
-            )
+            raise CategoryNotFoundError(f"Category {category_id} not found")
         cat = MenuCategory.from_dict(raw)
         cat.imageUrl = self._s3.generate_read_url(cat.imageKey)
         return cat
@@ -157,29 +143,22 @@ class CategoryService:
         restaurant_id: str,
         encoded_lek: Optional[str] = None,
     ) -> tuple[list[MenuCategory], Optional[str]]:
-        """
-        List all categories for a restaurant (paginated).
-        Returns (categories, next_encoded_lek).
-        Only caches the first page (no cursor) to keep things simple.
-        """
-        pk = self._pk(tenant_id, restaurant_id)
+        """List all categories for a restaurant via GSI, ordered by displayOrder."""
         cache_key = CacheService.categories_list_key(tenant_id, restaurant_id)
         exclusive_start = decode_lek(encoded_lek)
 
         if exclusive_start is None:
-            # First page — try cache
             cached = self._cache.get(cache_key)
             if cached is not None:
                 cats = [MenuCategory.from_dict(c) for c in cached.get("items", [])]
                 return cats, cached.get("lek")
 
-        items, lek = self._ddb_list(pk, exclusive_start)
+        items, lek = self._ddb_list_by_restaurant(restaurant_id, exclusive_start)
         categories = [MenuCategory.from_dict(i) for i in items]
         for c in categories:
             c.imageUrl = self._s3.generate_read_url(c.imageKey)
 
         if exclusive_start is None and lek is None:
-            # Complete first page — cache it
             self._cache.set(cache_key, {
                 "items": [c.to_dict() for c in categories],
                 "lek": None,
@@ -188,11 +167,7 @@ class CategoryService:
         return categories, encode_lek(lek)
 
     def update(
-        self,
-        tenant_id: str,
-        restaurant_id: str,
-        category_id: str,
-        body: dict,
+        self, tenant_id: str, restaurant_id: str, category_id: str, body: dict
     ) -> MenuCategory:
         self.get(tenant_id, restaurant_id, category_id)  # 404 guard
 
@@ -200,38 +175,27 @@ class CategoryService:
         updates = {k: v for k, v in body.items() if k in mutable}
         updates["updatedAt"] = utc_now()
 
-        pk = self._pk(tenant_id, restaurant_id)
-        sk = self._sk(category_id)
-        attrs = self._ddb_update(pk, sk, updates)
+        attrs = self._ddb_update(category_id, updates)
 
-        # Bust both the individual and list caches
         self._cache.delete(
             CacheService.category_key(tenant_id, restaurant_id, category_id),
             CacheService.categories_list_key(tenant_id, restaurant_id),
         )
 
         log.info("Category updated", extra={
-            "tenantId": tenant_id,
-            "restaurantId": restaurant_id,
-            "categoryId": category_id,
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "categoryId": category_id,
         })
         return MenuCategory.from_dict(attrs)
 
-    def delete(
-        self, tenant_id: str, restaurant_id: str, category_id: str
-    ) -> None:
+    def delete(self, tenant_id: str, restaurant_id: str, category_id: str) -> None:
         self.get(tenant_id, restaurant_id, category_id)  # 404 guard
 
-        pk = self._pk(tenant_id, restaurant_id)
-        sk = self._sk(category_id)
-        self._ddb_delete(pk, sk)
+        self._ddb_delete(category_id)
 
         self._cache.delete(
             CacheService.category_key(tenant_id, restaurant_id, category_id),
             CacheService.categories_list_key(tenant_id, restaurant_id),
         )
         log.info("Category deleted", extra={
-            "tenantId": tenant_id,
-            "restaurantId": restaurant_id,
-            "categoryId": category_id,
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "categoryId": category_id,
         })

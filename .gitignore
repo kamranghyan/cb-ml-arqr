@@ -37,3 +37,8 @@ override.tf.json
 terraform.rc
 
 .aws-sam/
+
+# Node dependencies
+node_modules/
+dist/
+.env

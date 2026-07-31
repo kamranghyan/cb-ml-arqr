@@ -1,9 +1,16 @@
 """
-RestaurantService — DynamoDB CRUD for Restaurant entities.
+RestaurantService — DynamoDB CRUD on the dedicated RestaurantTable.
 
-Write-through cache pattern:
-  create / update / delete → mutate DDB first → invalidate / populate Redis
-  get                      → Redis first → DDB fallback via CacheService.get_or_load
+Migrated from single-table (MenuTable, PK/SK) to a normalized table:
+    RestaurantTable-dev
+    PK = restaurantId
+    GSI: tenantId-index (find a tenant's restaurant)
+
+Notes for the new model:
+  • A restaurant may be created WITHOUT an owner tenant (tenantId empty);
+    admin assigns a tenant later via auth_svc.
+  • Cache calls are kept but Redis is effectively disabled (skipped) in this
+    environment — CacheService swallows connection errors.
 """
 from __future__ import annotations
 
@@ -11,8 +18,8 @@ import os
 from typing import Optional
 
 import boto3
-from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
 from app.models.restaurant import Restaurant
 from app.models.address import Address
@@ -25,7 +32,7 @@ from app.utils.retry import retry
 
 log = get_logger(__name__)
 
-_TABLE_NAME = os.environ.get("MENU_TABLE", "MenuTable")
+_TABLE_NAME = os.environ.get("RESTAURANT_TABLE", "RestaurantTable-dev")
 
 
 class RestaurantNotFoundError(Exception):
@@ -43,14 +50,14 @@ class RestaurantService:
         self._cache = cache or CacheService()
         self._s3 = s3_svc or S3Service()
 
-    # ── Private helpers ───────────────────────────────────────────────────
+    # ── Private helpers (single-key: restaurantId) ────────────────────────
 
     def _cache_key(self, tenant_id: str, restaurant_id: str) -> str:
         return CacheService.restaurant_key(tenant_id, restaurant_id)
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_get(self, pk: str, sk: str) -> Optional[dict]:
-        resp = self._table.get_item(Key={"PK": pk, "SK": sk})
+    def _ddb_get(self, restaurant_id: str) -> Optional[dict]:
+        resp = self._table.get_item(Key={"restaurantId": restaurant_id})
         item = resp.get("Item")
         return decimal_to_python(item) if item else None
 
@@ -59,10 +66,10 @@ class RestaurantService:
         self._table.put_item(Item=item)
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_update(self, pk: str, sk: str, updates: dict) -> dict:
+    def _ddb_update(self, restaurant_id: str, updates: dict) -> dict:
         expr, names, values = build_update_expression(updates)
         resp = self._table.update_item(
-            Key={"PK": pk, "SK": sk},
+            Key={"restaurantId": restaurant_id},
             UpdateExpression=expr,
             ExpressionAttributeNames=names,
             ExpressionAttributeValues=values,
@@ -71,20 +78,34 @@ class RestaurantService:
         return decimal_to_python(resp.get("Attributes", {}))
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
-    def _ddb_delete(self, pk: str, sk: str) -> None:
-        self._table.delete_item(Key={"PK": pk, "SK": sk})
+    def _ddb_delete(self, restaurant_id: str) -> None:
+        self._table.delete_item(Key={"restaurantId": restaurant_id})
+
+    def _to_item(self, restaurant: Restaurant) -> dict:
+        """Serialize without the old PK/SK keys."""
+        item = restaurant.to_dict(exclude_none=True)
+        item.pop("logoUrl", None)
+        item.pop("PK", None)
+        item.pop("SK", None)
+        return item
 
     # ── Public API ────────────────────────────────────────────────────────
 
     def create(self, tenant_id: str, body: dict) -> Restaurant:
-        """Create a new restaurant; generate ID and timestamps."""
+        """
+        Create a restaurant. In the new model the admin creates restaurants and
+        `tenant_id` may be empty (owner assigned later). If a tenant_id is passed
+        (e.g. body.tenantId), it is stored as the owner.
+        """
         restaurant_id = new_id()
         now = utc_now()
+
+        owner_tenant = body.get("tenantId") or tenant_id or ""
 
         addr_raw = body.get("address") or {}
         restaurant = Restaurant(
             restaurantId=restaurant_id,
-            tenantId=tenant_id,
+            tenantId=owner_tenant,
             name=body.get("name", ""),
             address=Address.from_dict(addr_raw),
             timezone=body.get("timezone", ""),
@@ -96,68 +117,49 @@ class RestaurantService:
         )
         restaurant.validate()
 
-        dynamo_item = restaurant.to_dynamo_item()
-        self._ddb_put(dynamo_item)
-
-        # Write-through: populate cache immediately after successful write
-        cache_key = self._cache_key(tenant_id, restaurant_id)
-        self._cache.set(cache_key, restaurant.to_dict())
+        self._ddb_put(self._to_item(restaurant))
+        self._cache.set(self._cache_key(owner_tenant, restaurant_id), restaurant.to_dict())
 
         log.info("Restaurant created", extra={
-            "tenantId": tenant_id, "restaurantId": restaurant_id
+            "tenantId": owner_tenant, "restaurantId": restaurant_id
         })
         return restaurant
 
     def get(self, tenant_id: str, restaurant_id: str) -> Restaurant:
-        """Fetch restaurant; Redis → DDB fallback."""
+        """Fetch a restaurant by id. tenant_id kept for cache key + signature compat."""
         cache_key = self._cache_key(tenant_id, restaurant_id)
-        pk = f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}"
-        sk = "METADATA"
-
         raw = self._cache.get_or_load(
             cache_key,
-            loader=lambda: self._ddb_get(pk, sk),
+            loader=lambda: self._ddb_get(restaurant_id),
         )
-
         if raw is None:
             raise RestaurantNotFoundError(
-                f"Restaurant {restaurant_id} not found for tenant {tenant_id}"
+                f"Restaurant {restaurant_id} not found"
             )
         restaurant = Restaurant.from_dict(raw)
         restaurant.logoUrl = self._s3.generate_read_url(restaurant.logoKey)
         return restaurant
 
     def update(self, tenant_id: str, restaurant_id: str, body: dict) -> Restaurant:
-        """Partial update — only fields present in body are changed."""
-        # Verify existence first
-        self.get(tenant_id, restaurant_id)
+        """Partial update — only present fields change."""
+        self.get(tenant_id, restaurant_id)  # 404 guard
 
-        mutable = {
-            "name", "timezone", "currencyCode",
-            "isActive", "logoKey",
-        }
-        updates: dict = {
-            k: v for k, v in body.items() if k in mutable
-        }
+        mutable = {"name", "timezone", "currencyCode", "isActive", "logoKey", "tenantId"}
+        updates: dict = {k: v for k, v in body.items() if k in mutable}
 
-        # Address is a nested map — replace entirely if provided
         if "address" in body:
             updates["address"] = body["address"]
 
         updates["updatedAt"] = utc_now()
 
-        pk = f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}"
-        attrs = self._ddb_update(pk, "METADATA", updates)
-
-        # Invalidate so next GET rebuilds from DDB
+        attrs = self._ddb_update(restaurant_id, updates)
         self._cache.delete(self._cache_key(tenant_id, restaurant_id))
 
-        restaurant = Restaurant.from_dynamo_item(attrs)
+        restaurant = Restaurant.from_dict(attrs)
         log.info("Restaurant updated", extra={
             "tenantId": tenant_id, "restaurantId": restaurant_id
         })
         return restaurant
-
 
     def list_all(
         self,
@@ -165,49 +167,51 @@ class RestaurantService:
         encoded_lek: Optional[str] = None,
     ) -> tuple[list[Restaurant], Optional[str]]:
         """
-        List all restaurants for a tenant.
-        Uses DynamoDB Scan with FilterExpression on PK prefix and SK = METADATA.
+        List restaurants.
+          • admin (no tenant scoping): pass tenant_id="" or None → returns ALL restaurants (scan).
+          • tenant: pass their tenant_id → returns only their restaurant(s) via tenantId-index.
         Returns (restaurants, next_encoded_lek).
         """
-        from boto3.dynamodb.conditions import Attr
         from app.utils.dynamo_helpers import encode_lek, decode_lek
 
         exclusive_start = decode_lek(encoded_lek)
-        pk_prefix       = f"TENANT#{tenant_id}#RESTAURANT#"
 
-        scan_kwargs: dict = {
-            "FilterExpression": (
-                Attr("PK").begins_with(pk_prefix) &
-                Attr("SK").eq("METADATA")
-            ),
-            "Limit": 100,
-        }
-        if exclusive_start:
-            scan_kwargs["ExclusiveStartKey"] = exclusive_start
+        if tenant_id:
+            # tenant-scoped: query the GSI
+            query_kwargs: dict = {
+                "IndexName": "tenantId-index",
+                "KeyConditionExpression": Key("tenantId").eq(tenant_id),
+                "Limit": 100,
+            }
+            if exclusive_start:
+                query_kwargs["ExclusiveStartKey"] = exclusive_start
+            resp = self._table.query(**query_kwargs)
+        else:
+            # admin: full scan
+            scan_kwargs: dict = {"Limit": 100}
+            if exclusive_start:
+                scan_kwargs["ExclusiveStartKey"] = exclusive_start
+            resp = self._table.scan(**scan_kwargs)
 
-        resp  = self._table.scan(**scan_kwargs)
         items = [decimal_to_python(i) for i in resp.get("Items", [])]
-        lek   = resp.get("LastEvaluatedKey")
+        lek = resp.get("LastEvaluatedKey")
 
         restaurants = []
         for raw in items:
-            r = Restaurant.from_dynamo_item(raw)
+            r = Restaurant.from_dict(raw)
             r.logoUrl = self._s3.generate_read_url(r.logoKey)
             restaurants.append(r)
 
         log.info("Restaurants listed", extra={
-            "tenantId": tenant_id, "count": len(restaurants)
+            "tenantId": tenant_id or "ALL", "count": len(restaurants)
         })
         return restaurants, encode_lek(lek)
 
     def delete(self, tenant_id: str, restaurant_id: str) -> None:
-        """Delete restaurant and invalidate cache."""
+        """Delete a restaurant."""
         self.get(tenant_id, restaurant_id)  # 404 guard
-
-        pk = f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}"
-        self._ddb_delete(pk, "METADATA")
+        self._ddb_delete(restaurant_id)
         self._cache.delete(self._cache_key(tenant_id, restaurant_id))
-
         log.info("Restaurant deleted", extra={
             "tenantId": tenant_id, "restaurantId": restaurant_id
         })

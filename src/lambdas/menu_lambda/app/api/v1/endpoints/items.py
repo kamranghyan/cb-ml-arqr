@@ -3,7 +3,7 @@ app.api.v1.endpoints.items
 ==========================
 GET    /menus/restaurants/{rid}/items         → public
 GET    /menus/restaurants/{rid}/items/{iid}   → public
-POST   /menus/restaurants/{rid}/items         → admin/tenant
+POST   /menus/restaurants/{rid}/items         → admin/tenantx
 PUT    /menus/restaurants/{rid}/items/{iid}   → admin/tenant
 DELETE /menus/restaurants/{rid}/items/{iid}   → admin/tenant
 """
