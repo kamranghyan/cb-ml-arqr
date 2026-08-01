@@ -70,18 +70,29 @@ class UserContext:
 
     Attributes
     ----------
-    sub       : Cognito user sub (unique user ID)
-    email     : User email address (may be empty for access tokens)
-    tenant_id : Custom attribute `custom:tenant_id` from the token
-    groups    : Cognito group memberships (e.g. ["menulay_admin"])
-    claims    : Full raw JWT claims dict
+    sub           : Cognito user sub (unique user ID)
+    email         : User email address (may be empty for access tokens)
+    tenant_id     : `custom:tenant_id` — the company. Empty for platform admins.
+    restaurant_id : `custom:restaurant_id` — the branch this user is bound to.
+                    Set for restaurant_admin and kitchen staff; empty for
+                    platform admins and tenant owners (who span all branches).
+    groups        : Cognito group memberships (e.g. ["menulay_admin"])
+    claims        : Full raw JWT claims dict
+
+    Role model
+    ----------
+    platform admin   groups=[menulay_admin]              no tenant, no restaurant
+    tenant owner     groups=[menulay_tenant]             tenant only
+    restaurant admin groups=[menulay_restaurant_admin]   tenant + restaurant
+    kitchen staff    groups=[menulay_kitchen_staff]      tenant + restaurant
     """
 
-    sub:       str
-    email:     str
-    tenant_id: str
-    groups:    list[str] = field(default_factory=list)
-    claims:    dict      = field(default_factory=dict, compare=False)
+    sub:           str
+    email:         str
+    tenant_id:     str
+    restaurant_id: str  = ""
+    groups:        list[str] = field(default_factory=list)
+    claims:        dict      = field(default_factory=dict, compare=False)
 
     def is_admin(self) -> bool:
         return "menulay_admin" in self.groups
@@ -91,6 +102,29 @@ class UserContext:
 
     def is_kitchen(self) -> bool:
         return "menulay_kitchen_staff" in self.groups
+
+    def is_restaurant_admin(self) -> bool:
+        return "menulay_restaurant_admin" in self.groups
+
+    def is_staff(self) -> bool:
+        """Anyone bound to a single restaurant (restaurant admin or kitchen)."""
+        return self.is_restaurant_admin() or self.is_kitchen()
+
+    def can_access_restaurant(self, restaurant_id: str) -> bool:
+        """
+        Scope check used by menu/order services.
+
+        platform admin   → any restaurant (support override)
+        tenant owner     → any restaurant of its tenant (caller must have
+                           already confirmed the restaurant's tenantId matches)
+        restaurant admin
+        kitchen staff    → only the restaurant bound to their token
+        """
+        if self.is_admin():
+            return True
+        if self.is_tenant():
+            return True
+        return bool(self.restaurant_id) and self.restaurant_id == restaurant_id
 
     def is_admin_or_tenant(self) -> bool:
         return self.is_admin() or self.is_tenant()
@@ -219,6 +253,7 @@ class CognitoAuth:
             sub=claims.get("sub", ""),
             email=claims.get("email", ""),
             tenant_id=claims.get("custom:tenant_id", ""),
+            restaurant_id=claims.get("custom:restaurant_id", ""),
             groups=claims.get("cognito:groups", []),
             claims=claims,
         )
