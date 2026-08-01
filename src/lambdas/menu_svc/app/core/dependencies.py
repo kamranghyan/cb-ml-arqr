@@ -17,7 +17,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from shared.aws_clients import get_dynamodb_resource
 from shared.cognito_auth import CognitoAuth, UserContext
-from shared.exceptions import BadRequestError, ForbiddenError, TokenMissingError
+from shared.exceptions import (
+    BadRequestError,
+    ForbiddenError,
+    ResourceNotFoundError,
+    TokenMissingError,
+)
 
 from app.core.config import get_settings
 from app.repositories.s3_repository import S3Repository
@@ -43,6 +48,7 @@ _cache = CacheService()
 _s3_svc = S3Service()
 _s3_repo = S3Repository()
 _tenant_limits = TenantLimits()
+_restaurant_service = RestaurantService(cache=_cache, s3_svc=_s3_svc)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -104,6 +110,52 @@ async def require_restaurant_manager(
 # ══════════════════════════════════════════════════════════════════════════════
 # Scope enforcement
 # ══════════════════════════════════════════════════════════════════════════════
+
+async def restaurant_write_scope(
+    restaurantId: str,
+    user: Annotated[UserContext, Depends(require_restaurant_manager)],
+    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-Id")] = None,
+) -> tuple[UserContext, str]:
+    """
+    Guard for every write under /restaurants/{restaurantId}/… (categories,
+    items, tables).
+
+    Returns (user, tenant_id) after checking that:
+      • the caller has a role allowed to manage restaurant content
+      • a restaurant admin / kitchen user is writing to its OWN branch
+      • a platform admin has said which tenant it is acting for
+      • THE RESTAURANT ACTUALLY BELONGS TO THAT TENANT — without this a
+        tenant could write into another company's restaurant just by
+        knowing its id.
+
+    Endpoints use it as:
+        scope: Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)]
+        user, tenant_id = scope
+    """
+    tenant_id = resolve_write_tenant(user, x_tenant_id)
+    assert_restaurant_scope(user, restaurantId)
+    _assert_restaurant_belongs_to_tenant(restaurantId, tenant_id)
+    return user, tenant_id
+
+
+def _assert_restaurant_belongs_to_tenant(restaurant_id: str, tenant_id: str) -> None:
+    """
+    Look the restaurant up and confirm its tenantId matches.
+
+    A missing restaurant is reported as 404 rather than 403 — the caller has
+    no business learning that some other tenant owns that id.
+    """
+    from app.services.restaurant_service import RestaurantNotFoundError
+
+    try:
+        restaurant = _restaurant_service.get(tenant_id, restaurant_id)
+    except RestaurantNotFoundError as exc:
+        raise ResourceNotFoundError("Restaurant", restaurant_id) from exc
+
+    owner = getattr(restaurant, "tenantId", "")
+    if owner and owner != tenant_id:
+        raise ResourceNotFoundError("Restaurant", restaurant_id)
+
 
 def resolve_write_tenant(user: UserContext, body_tenant_id: str | None = None) -> str:
     """

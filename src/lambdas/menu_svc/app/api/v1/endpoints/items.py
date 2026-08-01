@@ -3,7 +3,7 @@ app.api.v1.endpoints.items
 ==========================
 GET    /menus/restaurants/{rid}/items         → public
 GET    /menus/restaurants/{rid}/items/{iid}   → public
-POST   /menus/restaurants/{rid}/items         → admin/tenantx
+POST   /menus/restaurants/{rid}/items         → admin/tenant
 PUT    /menus/restaurants/{rid}/items/{iid}   → admin/tenant
 DELETE /menus/restaurants/{rid}/items/{iid}   → admin/tenant
 """
@@ -21,7 +21,7 @@ from app.core.dependencies import (
     get_item_service,
     get_menu_tenant,
     get_s3_repo,
-    require_admin_or_tenant,
+    restaurant_write_scope,
 )
 from app.models.base import ValidationError
 from app.repositories.s3_repository import S3Repository
@@ -81,10 +81,11 @@ async def get_item(
 async def create_item(
     restaurantId: str,
     request:      Request,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[MenuItemService, Depends(get_item_service)],
     s3_repo:      Annotated[S3Repository,    Depends(get_s3_repo)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
     coerce_bool(body, "isActive")
     coerce_int(body, "priceMinorUnits")
@@ -95,13 +96,13 @@ async def create_item(
         )
 
     try:
-        item = svc.create(user.tenant_id, restaurantId, body)
+        item = svc.create(tenant_id, restaurantId, body)
         ct = request.headers.get("content-type", "")
         if "multipart/form-data" in ct:
             try:
                 raw_event = build_gateway_event(await request.body(), ct)
                 assets = s3_repo.upload_item_assets(
-                    raw_event, restaurantId, item.itemId, user.tenant_id
+                    raw_event, restaurantId, item.itemId, tenant_id
                 )
                 updates = {}
                 if assets.get("imageKey"):
@@ -111,7 +112,7 @@ async def create_item(
                     updates["arModelKey"] = assets["arModelKey"]
                     item.arModelUrl = assets.get("arModelUrl")
                 if updates:
-                    item = svc.update(user.tenant_id, restaurantId, item.itemId, updates)
+                    item = svc.update(tenant_id, restaurantId, item.itemId, updates)
                     if assets.get("imageUrl"):
                         item.imageUrl = assets["imageUrl"]
                     if assets.get("arModelUrl"):
@@ -128,12 +129,13 @@ async def update_item(
     restaurantId: str,
     itemId:       str,
     request:      Request,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[MenuItemService, Depends(get_item_service)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
     try:
-        return svc.update(user.tenant_id, restaurantId, itemId, body).to_dict()
+        return svc.update(tenant_id, restaurantId, itemId, body).to_dict()
     except MenuItemNotFoundError as exc:
         raise ResourceNotFoundError("MenuItem", itemId) from exc
     except MenuItemConflictError as exc:
@@ -144,11 +146,12 @@ async def update_item(
 async def delete_item(
     restaurantId: str,
     itemId:       str,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[MenuItemService, Depends(get_item_service)],
 ):
+    user, tenant_id = scope
     try:
-        svc.delete(user.tenant_id, restaurantId, itemId)
+        svc.delete(tenant_id, restaurantId, itemId)
         return {"message": "Item deleted"}
     except MenuItemNotFoundError as exc:
         raise ResourceNotFoundError("MenuItem", itemId) from exc

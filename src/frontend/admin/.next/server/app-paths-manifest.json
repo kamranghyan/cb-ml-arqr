@@ -1,10 +1,10 @@
 {
-  "/api/auth/route": "app/api/auth/route.js",
-  "/api/orders/route": "app/api/orders/route.js",
+  "/api/menu/[...path]/route": "app/api/menu/[...path]/route.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/orders/route": "app/api/orders/route.js",
   "/login/admin/page": "app/login/admin/page.js",
-  "/page": "app/page.js",
   "/admin/dashboard/page": "app/admin/dashboard/page.js",
-  "/admin/menu/page": "app/admin/menu/page.js",
-  "/admin/users/page": "app/admin/users/page.js"
+  "/admin/settings/page": "app/admin/settings/page.js",
+  "/admin/users/page": "app/admin/users/page.js",
+  "/admin/menu/page": "app/admin/menu/page.js"
 }

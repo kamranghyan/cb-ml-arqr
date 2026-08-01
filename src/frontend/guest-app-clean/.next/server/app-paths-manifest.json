@@ -1,10 +1,4 @@
 {
-  "/api/orders/route": "app/api/orders/route.js",
-  "/api/orders/[id]/route": "app/api/orders/[id]/route.js",
-  "/api/menu/[...path]/route": "app/api/menu/[...path]/route.js",
-  "/guest/menu/[id]/page": "app/guest/menu/[id]/page.js",
-  "/guest/page": "app/guest/page.js",
-  "/guest/cart/page": "app/guest/cart/page.js",
-  "/guest/tracking/page": "app/guest/tracking/page.js",
-  "/guest/menu/page": "app/guest/menu/page.js"
+  "/page": "app/page.js",
+  "/guest/page": "app/guest/page.js"
 }
