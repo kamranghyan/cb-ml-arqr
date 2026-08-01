@@ -1,11 +1,16 @@
 """
 app.api.v1.endpoints.restaurants
 ================================
-GET    /menus/restaurants                → public
-GET    /menus/restaurants/{id}           → public
-POST   /menus/restaurants                → admin/tenant
-PUT    /menus/restaurants/{id}           → admin/tenant
-DELETE /menus/restaurants/{id}           → admin/tenant
+Who may do what
+---------------
+GET    /menus/restaurants        public read (guest menu) — X-Tenant-Id header
+                                 logged in: scoped to the caller's role
+GET    /menus/restaurants/{id}   public read
+POST   /menus/restaurants        tenant owner (own tenant, plan limit applies)
+                                 platform admin may act for a tenant by passing
+                                 tenantId in the body (support override)
+PUT    /menus/restaurants/{id}   tenant owner | restaurant admin (own branch)
+DELETE /menus/restaurants/{id}   tenant owner only (admin as support override)
 """
 from __future__ import annotations
 
@@ -14,32 +19,59 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from shared.cognito_auth import UserContext
-from shared.exceptions import BadRequestError, ResourceNotFoundError
+from shared.exceptions import BadRequestError, ForbiddenError, ResourceNotFoundError
 from shared.structured_logger import get_logger
 
 from app.core.dependencies import (
+    assert_restaurant_scope,
     get_menu_tenant,
     get_restaurant_service,
     get_s3_repo,
-    require_admin_or_tenant,
+    get_tenant_limits,
+    optional_user,
+    require_restaurant_manager,
+    require_tenant_owner,
+    resolve_write_tenant,
 )
 from app.models.base import ValidationError
 from app.repositories.s3_repository import S3Repository
 from app.schemas.common import PaginatedResponse
 from app.services.restaurant_service import RestaurantNotFoundError, RestaurantService
+from app.services.tenant_limits import TenantLimits
 from app.utils.request_helpers import build_gateway_event, parse_body
 
 log = get_logger("api.restaurants")
 router = APIRouter()
 
 
-@router.get("/restaurants", summary="List all restaurants for a tenant")
+# ── Reads ─────────────────────────────────────────────────────────────
+
+@router.get("/restaurants", summary="List restaurants visible to the caller")
 async def list_restaurants(
     tenant_id: Annotated[str,               Depends(get_menu_tenant)],
     svc:       Annotated[RestaurantService, Depends(get_restaurant_service)],
+    user:      Annotated[Optional[UserContext], Depends(optional_user)] = None,
     cursor:    Optional[str] = Query(None),
 ):
-    restaurants, next_cursor = svc.list_all(tenant_id, encoded_lek=cursor)
+    """
+    platform admin   → every restaurant
+    tenant owner     → all restaurants of its tenant
+    restaurant admin
+    kitchen staff    → only the branch it is bound to
+    guest (no token) → the tenant in the X-Tenant-Id header
+    """
+    if user and user.is_admin():
+        restaurants, next_cursor = svc.list_all("", encoded_lek=cursor)
+    else:
+        scope = user.tenant_id if (user and user.tenant_id) else tenant_id
+        restaurants, next_cursor = svc.list_all(scope, encoded_lek=cursor)
+
+        # Branch-bound users see only their own restaurant.
+        if user and user.is_staff() and user.restaurant_id:
+            restaurants = [
+                r for r in restaurants if r.restaurantId == user.restaurant_id
+            ]
+
     return PaginatedResponse(
         items=[r.to_dict() for r in restaurants],
         count=len(restaurants),
@@ -59,51 +91,80 @@ async def get_restaurant(
         raise ResourceNotFoundError("Restaurant", restaurantId) from exc
 
 
+# ── Writes ────────────────────────────────────────────────────────────
+
 @router.post("/restaurants", status_code=201, summary="Create a restaurant")
 async def create_restaurant(
     request: Request,
-    user:    Annotated[UserContext,       Depends(require_admin_or_tenant)],
+    user:    Annotated[UserContext,       Depends(require_tenant_owner)],
     svc:     Annotated[RestaurantService, Depends(get_restaurant_service)],
+    limits:  Annotated[TenantLimits,      Depends(get_tenant_limits)],
     s3_repo: Annotated[S3Repository,      Depends(get_s3_repo)],
 ):
     body = await parse_body(request)
+
+    # Whose restaurant is this? (admin must say; a tenant gets its own)
+    tenant_id = resolve_write_tenant(user, body.get("tenantId"))
+
+    # Subscription check before anything is written.
+    limits.assert_can_add_restaurant(tenant_id)
+
     try:
-        restaurant = svc.create(user.tenant_id, body)
-        # Handle multipart logo upload
-        ct = request.headers.get("content-type", "")
-        if "multipart/form-data" in ct:
-            try:
-                raw_event = build_gateway_event(await request.body(), ct)
-                s3_key, logo_url = s3_repo.upload_restaurant_logo(
-                    raw_event, restaurant.restaurantId, user.tenant_id,
-                )
-                if s3_key:
-                    restaurant = svc.update(
-                        user.tenant_id, restaurant.restaurantId, {"logoKey": s3_key}
-                    )
-                    restaurant.logoUrl = logo_url
-            except Exception as exc:
-                log.warning(
-                    "logo.upload.failed",
-                    restaurant_id=restaurant.restaurantId, exc=str(exc),
-                )
-        return restaurant.to_dict()
+        restaurant = svc.create(tenant_id, body)
     except ValidationError as exc:
         raise BadRequestError(str(exc.errors)) from exc
+
+    limits.adjust_count(tenant_id, +1)
+
+    if user.is_admin():
+        log.info("restaurant.created.by_admin",
+                 admin=user.email, tenant_id=tenant_id,
+                 restaurant_id=restaurant.restaurantId)
+
+    # Optional multipart logo in the same request.
+    ct = request.headers.get("content-type", "")
+    if "multipart/form-data" in ct:
+        try:
+            raw_event = build_gateway_event(await request.body(), ct)
+            s3_key, logo_url = s3_repo.upload_restaurant_logo(
+                raw_event, restaurant.restaurantId, tenant_id,
+            )
+            if s3_key:
+                restaurant = svc.update(
+                    tenant_id, restaurant.restaurantId, {"logoKey": s3_key}
+                )
+                restaurant.logoUrl = logo_url
+        except Exception as exc:  # noqa: BLE001
+            log.warning("logo.upload.failed",
+                        restaurant_id=restaurant.restaurantId, exc=str(exc))
+
+    return restaurant.to_dict()
 
 
 @router.put("/restaurants/{restaurantId}", summary="Update a restaurant")
 async def update_restaurant(
     restaurantId: str,
     request:      Request,
-    user:         Annotated[UserContext,       Depends(require_admin_or_tenant)],
+    user:         Annotated[UserContext,       Depends(require_restaurant_manager)],
     svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
 ):
     body = await parse_body(request)
+    tenant_id = resolve_write_tenant(user, body.get("tenantId"))
+
+    # A restaurant admin may only touch its own branch.
+    assert_restaurant_scope(user, restaurantId)
+
+    # And the restaurant must actually belong to that tenant.
     try:
-        return svc.update(user.tenant_id, restaurantId, body).to_dict()
+        existing = svc.get(tenant_id, restaurantId)
     except RestaurantNotFoundError as exc:
         raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if existing.tenantId and existing.tenantId != tenant_id:
+        raise ForbiddenError("This restaurant belongs to another tenant.")
+
+    try:
+        return svc.update(tenant_id, restaurantId, body).to_dict()
     except ValidationError as exc:
         raise BadRequestError(str(exc.errors)) from exc
 
@@ -111,11 +172,26 @@ async def update_restaurant(
 @router.delete("/restaurants/{restaurantId}", summary="Delete a restaurant")
 async def delete_restaurant(
     restaurantId: str,
-    user:         Annotated[UserContext,       Depends(require_admin_or_tenant)],
+    user:         Annotated[UserContext,       Depends(require_tenant_owner)],
     svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+    limits:       Annotated[TenantLimits,      Depends(get_tenant_limits)],
+    tenantId:     Optional[str] = Query(None),
 ):
+    tenant_id = resolve_write_tenant(user, tenantId)
+
     try:
-        svc.delete(user.tenant_id, restaurantId)
-        return {"message": "Restaurant deleted"}
+        existing = svc.get(tenant_id, restaurantId)
     except RestaurantNotFoundError as exc:
         raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if existing.tenantId and existing.tenantId != tenant_id:
+        raise ForbiddenError("This restaurant belongs to another tenant.")
+
+    svc.delete(tenant_id, restaurantId)
+    limits.adjust_count(tenant_id, -1)
+
+    if user.is_admin():
+        log.info("restaurant.deleted.by_admin",
+                 admin=user.email, tenant_id=tenant_id, restaurant_id=restaurantId)
+
+    return {"message": "Restaurant deleted"}
