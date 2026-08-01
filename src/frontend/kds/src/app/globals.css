@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
+
+  body {
+    background-color: #c3c3c3;
+    color: white;
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+  }
+
+  ::-webkit-scrollbar        { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 9999px; }
+
+  input, textarea, select {
+    outline: none;
+    background-color: rgba(255,255,255,0.04);
+    border: 0.5px solid rgba(255,255,255,0.08);
+    color: white;
+    border-radius: 0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.875rem;
+    transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: rgba(212,163,78,0.4); }
+  input::placeholder, textarea::placeholder  { color: rgba(255,255,255,0.2); }
+}
+
+@layer components {
+  /* Phone shell */
+  .phone-shell {
+    width: 100%;
+    background-color: #181818;
+   
+    border: 1px solid rgba(212,163,78,0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+    position: relative;
+  }
+
+  /* Gold CTA button */
+  .btn-gold {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    width: 100%; height: 3.5rem; border-radius: 1rem;
+    background: linear-gradient(135deg, #14b8a6 0%, #c4873c 100%);
+    color: #ffffff; font-weight: 500; font-size: 1rem;
+    border: none; cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    position: relative; overflow: hidden;
+  }
+  .btn-gold:hover   { opacity: 0.92; transform: translateY(-1px); }
+  .btn-gold:active  { transform: scale(0.97); }
+  .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+
+   .btn-gold-small {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    width: 40%; height: 3.5rem; border-radius: 1rem;
+    background: linear-gradient(135deg, #14b8a6 0%, #c4873c 100%);
+    color: #ffffff; font-weight: 500; font-size: 1rem;
+    border: none; cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    position: relative; overflow: hidden;
+  }
+  /* Ghost button */
+  .btn-ghost {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    height: 3rem; border-radius: 0.75rem; background: transparent;
+    border: 0.5px solid rgba(212,163,78,0.25); color: rgba(212,163,78,0.7);
+    font-size: 0.875rem; cursor: pointer; transition: background 0.2s, border-color 0.2s;
+  }
+  .btn-ghost:hover { background: rgba(212,163,78,0.05); border-color: rgba(212,163,78,0.4); }
+
+  /* Status chips — all defined with plain CSS to avoid @apply opacity issues */
+  .chip-active    { background: rgba(76,175,80,0.10);  border: 0.5px solid rgba(76,175,80,0.20);   color: #81c784; }
+  .chip-inactive  { background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.25); }
+  .chip-draft     { background: rgba(255,167,38,0.08);  border: 0.5px solid rgba(255,167,38,0.20);  color: #ffb74d; }
+  .chip-new       { background: rgba(255,167,38,0.10);  border: 0.5px solid rgba(255,167,38,0.30);  color: #ffb74d; }
+  .chip-preparing { background: rgba(33,150,243,0.10);  border: 0.5px solid rgba(33,150,243,0.25);  color: #64b5f6; }
+  .chip-ready     { background: rgba(76,175,80,0.10);   border: 0.5px solid rgba(76,175,80,0.25);   color: #81c784; }
+  .chip-delivered { background: rgba(212,163,78,0.10);  border: 0.5px solid rgba(212,163,78,0.30);  color: #14b8a6; }
+
+  /* Role chips */
+  .chip-super   { background: rgba(212,163,78,0.12);  border: 0.5px solid rgba(212,163,78,0.30);  color: #14b8a6; }
+  .chip-manager { background: rgba(147,112,219,0.12); border: 0.5px solid rgba(147,112,219,0.25); color: #b09fd9; }
+  .chip-kitchen { background: rgba(33,150,243,0.10);  border: 0.5px solid rgba(33,150,243,0.20);  color: #64b5f6; }
+
+  /* Allergen badges */
+  .allergen-present { background: rgba(239,83,80,0.07);  border: 0.5px solid rgba(239,83,80,0.20);  color: rgba(239,130,128,0.85); }
+  .allergen-free    { background: rgba(76,175,80,0.06);   border: 0.5px solid rgba(76,175,80,0.15);  color: rgba(100,200,130,0.80); }
+
+  /* Admin sidebar item */
+  .sb-item {
+    display: flex; align-items: center; gap: 0.625rem;
+    padding: 0.625rem 0.75rem; border-radius: 0.75rem;
+    cursor: pointer; transition: background 0.18s;
+    color: rgba(255,255,255,0.35); font-size: 0.8125rem; text-decoration: none;
+  }
+  .sb-item:hover  { background: rgba(255,255,255,0.04); }
+  .sb-item.active {
+    background: rgba(212,163,78,0.10); border: 0.5px solid rgba(212,163,78,0.20);
+    color: #14b8a6; font-weight: 500;
+  }
+
+  /* Section label */
+  .section-label {
+    font-size: 0.6875rem; color: rgba(255,255,255,0.30);
+    text-transform: uppercase; letter-spacing: 0.12em; font-weight: 500;
+  }
+
+  /* KDS timer colours */
+  .timer-green { color: #81c784; }
+  .timer-amber { color: #ffb74d; }
+  .timer-red   { color: #ef6e6b; animation: timerpulse 1s ease-in-out infinite; }
+
+  /* Shimmer overlay */
+  .shimmer::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    animation: shimmer 2.8s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .font-serif   { font-family: 'Playfair Display', serif; }
+  .font-mono-dm { font-family: 'DM Mono', monospace; }
+}
+
+/* Keyframes */
+@keyframes shimmer     { 0% { left: -100%; } 60%, 100% { left: 140%; } }
+@keyframes timerpulse  { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes blink       { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+@keyframes newflash    {
+  0%   { border-color: rgba(255,167,38,0.8); box-shadow: 0 0 20px rgba(255,167,38,0.3); }
+  100% { border-color: rgba(255,255,255,0.06); box-shadow: none; }
+}
+@keyframes slideIn     { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ── Safe-area padding for iOS notch / home indicator ── */
+.pt-safe-top  { padding-top: env(safe-area-inset-top, 16px); }
+.pb-safe-bot  { padding-bottom: env(safe-area-inset-bottom, 16px); }

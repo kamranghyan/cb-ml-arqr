@@ -1,0 +1,588 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "MenuLay Cognito Stack - manual auth only, no SSO",
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "dev",
+      "AllowedValues": [
+        "dev",
+        "staging",
+        "prod"
+      ],
+      "Description": "Deployment environment"
+    },
+    "AdminEmail": {
+      "Type": "String",
+      "Default": "admin@menulay.com",
+      "Description": "MenuLay platform admin email"
+    },
+    "CognitoDomainPrefix": {
+      "Type": "String",
+      "Default": "menulay-auth",
+      "Description": "Must be globally unique across ALL AWS accounts"
+    }
+  },
+  "Resources": {
+    "MenulayUserPool": {
+      "Type": "AWS::Cognito::UserPool",
+      "Properties": {
+        "UserPoolName": {
+          "Fn::Sub": "menulay-user-pool-${Environment}"
+        },
+        "UsernameAttributes": [
+          "email"
+        ],
+        "AutoVerifiedAttributes": [
+          "email"
+        ],
+        "Policies": {
+          "PasswordPolicy": {
+            "MinimumLength": 8,
+            "RequireUppercase": true,
+            "RequireLowercase": true,
+            "RequireNumbers": true,
+            "RequireSymbols": false
+          }
+        },
+        "AdminCreateUserConfig": {
+          "AllowAdminCreateUserOnly": false
+        },
+        "Schema": [
+          {
+            "Name": "email",
+            "AttributeDataType": "String",
+            "Required": true,
+            "Mutable": true
+          },
+          {
+            "Name": "role",
+            "AttributeDataType": "String",
+            "Required": false,
+            "Mutable": true,
+            "StringAttributeConstraints": {
+              "MaxLength": "50"
+            }
+          },
+          {
+            "Name": "tenant_id",
+            "AttributeDataType": "String",
+            "Required": false,
+            "Mutable": true,
+            "StringAttributeConstraints": {
+              "MaxLength": "100"
+            }
+          },
+          {
+            "Name": "tenant_name",
+            "AttributeDataType": "String",
+            "Required": false,
+            "Mutable": true,
+            "StringAttributeConstraints": {
+              "MaxLength": "200"
+            }
+          },
+          {
+            "Name": "display_name",
+            "AttributeDataType": "String",
+            "Required": false,
+            "Mutable": true,
+            "StringAttributeConstraints": {
+              "MaxLength": "200"
+            }
+          },
+          {
+            "Name": "plan_tier",
+            "AttributeDataType": "String",
+            "Required": false,
+            "Mutable": true,
+            "StringAttributeConstraints": {
+              "MaxLength": "50"
+            }
+          }
+        ],
+        "AccountRecoverySetting": {
+          "RecoveryMechanisms": [
+            {
+              "Name": "verified_email",
+              "Priority": 1
+            }
+          ]
+        },
+        "EmailConfiguration": {
+          "EmailSendingAccount": "COGNITO_DEFAULT"
+        },
+        "UserPoolTags": {
+          "Project": "MenuLay",
+          "Environment": {
+            "Ref": "Environment"
+          }
+        }
+      }
+    },
+    "MenulayUserPoolDomain": {
+      "Type": "AWS::Cognito::UserPoolDomain",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "Domain": {
+          "Fn::Sub": "${CognitoDomainPrefix}-${Environment}"
+        },
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        }
+      }
+    },
+    "MenulayWebClient": {
+      "Type": "AWS::Cognito::UserPoolClient",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "ClientName": {
+          "Fn::Sub": "menulay-web-client-${Environment}"
+        },
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "GenerateSecret": false,
+        "ExplicitAuthFlows": [
+          "ALLOW_USER_PASSWORD_AUTH",
+          "ALLOW_USER_SRP_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH"
+        ],
+        "SupportedIdentityProviders": [
+          "COGNITO"
+        ],
+        "AllowedOAuthFlowsUserPoolClient": false,
+        "TokenValidityUnits": {
+          "AccessToken": "hours",
+          "IdToken": "hours",
+          "RefreshToken": "days"
+        },
+        "AccessTokenValidity": 8,
+        "IdTokenValidity": 8,
+        "RefreshTokenValidity": 30,
+        "PreventUserExistenceErrors": "ENABLED",
+        "EnableTokenRevocation": true,
+        "ReadAttributes": [
+          "email",
+          "custom:role",
+          "custom:tenant_id",
+          "custom:tenant_name",
+          "custom:display_name",
+          "custom:plan_tier"
+        ],
+        "WriteAttributes": [
+          "email",
+          "custom:role",
+          "custom:tenant_id",
+          "custom:tenant_name",
+          "custom:display_name",
+          "custom:plan_tier"
+        ]
+      }
+    },
+    "MenulayKdsClient": {
+      "Type": "AWS::Cognito::UserPoolClient",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "ClientName": {
+          "Fn::Sub": "menulay-kds-client-${Environment}"
+        },
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "GenerateSecret": false,
+        "ExplicitAuthFlows": [
+          "ALLOW_USER_PASSWORD_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH"
+        ],
+        "SupportedIdentityProviders": [
+          "COGNITO"
+        ],
+        "AllowedOAuthFlowsUserPoolClient": false,
+        "TokenValidityUnits": {
+          "AccessToken": "hours",
+          "IdToken": "hours",
+          "RefreshToken": "hours"
+        },
+        "AccessTokenValidity": 8,
+        "IdTokenValidity": 8,
+        "RefreshTokenValidity": 12,
+        "PreventUserExistenceErrors": "ENABLED",
+        "EnableTokenRevocation": true,
+        "ReadAttributes": [
+          "email",
+          "custom:role",
+          "custom:tenant_id",
+          "custom:tenant_name",
+          "custom:display_name"
+        ]
+      }
+    },
+    "MenulayAdminGroup": {
+      "Type": "AWS::Cognito::UserPoolGroup",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "GroupName": "menulay_admin",
+        "Description": "MenuLay SaaS owners - full platform access",
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Precedence": 1
+      }
+    },
+    "MenulayTenantGroup": {
+      "Type": "AWS::Cognito::UserPoolGroup",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "GroupName": "menulay_tenant",
+        "Description": "Restaurant owners - scoped to their tenant_id",
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Precedence": 2
+      }
+    },
+    "MenulayKitchenStaffGroup": {
+      "Type": "AWS::Cognito::UserPoolGroup",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "GroupName": "menulay_kitchen_staff",
+        "Description": "Kitchen staff - order queue read and status update only",
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Precedence": 3
+      }
+    },
+    "MenulayAdminUser": {
+      "Type": "AWS::Cognito::UserPoolUser",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Username": {
+          "Ref": "AdminEmail"
+        },
+        "MessageAction": "SUPPRESS",
+        "UserAttributes": [
+          {
+            "Name": "email",
+            "Value": {
+              "Ref": "AdminEmail"
+            }
+          },
+          {
+            "Name": "email_verified",
+            "Value": "true"
+          },
+          {
+            "Name": "custom:role",
+            "Value": "admin"
+          },
+          {
+            "Name": "custom:display_name",
+            "Value": "MenuLay Admin"
+          },
+          {
+            "Name": "custom:plan_tier",
+            "Value": "platform"
+          }
+        ]
+      }
+    },
+    "MenulaySampleTenantUser": {
+      "Type": "AWS::Cognito::UserPoolUser",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Username": "tenant@burgerhouse.com",
+        "MessageAction": "SUPPRESS",
+        "UserAttributes": [
+          {
+            "Name": "email",
+            "Value": "tenant@burgerhouse.com"
+          },
+          {
+            "Name": "email_verified",
+            "Value": "true"
+          },
+          {
+            "Name": "custom:role",
+            "Value": "tenant"
+          },
+          {
+            "Name": "custom:tenant_id",
+            "Value": "tenant-burger-house-001"
+          },
+          {
+            "Name": "custom:tenant_name",
+            "Value": "Burger House"
+          },
+          {
+            "Name": "custom:display_name",
+            "Value": "Burger House Owner"
+          },
+          {
+            "Name": "custom:plan_tier",
+            "Value": "starter"
+          }
+        ]
+      }
+    },
+    "MenulaySampleKitchenUser": {
+      "Type": "AWS::Cognito::UserPoolUser",
+      "DependsOn": [
+        "MenulayUserPool"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "Username": "kitchen@burgerhouse.com",
+        "MessageAction": "SUPPRESS",
+        "UserAttributes": [
+          {
+            "Name": "email",
+            "Value": "kitchen@burgerhouse.com"
+          },
+          {
+            "Name": "email_verified",
+            "Value": "true"
+          },
+          {
+            "Name": "custom:role",
+            "Value": "kitchen_staff"
+          },
+          {
+            "Name": "custom:tenant_id",
+            "Value": "tenant-burger-house-001"
+          },
+          {
+            "Name": "custom:tenant_name",
+            "Value": "Burger House"
+          },
+          {
+            "Name": "custom:display_name",
+            "Value": "Chef Ali"
+          }
+        ]
+      }
+    },
+    "MenulayAdminGroupMembership": {
+      "Type": "AWS::Cognito::UserPoolUserToGroupAttachment",
+      "DependsOn": [
+        "MenulayAdminUser",
+        "MenulayAdminGroup"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "GroupName": "menulay_admin",
+        "Username": {
+          "Ref": "AdminEmail"
+        }
+      }
+    },
+    "MenulayTenantGroupMembership": {
+      "Type": "AWS::Cognito::UserPoolUserToGroupAttachment",
+      "DependsOn": [
+        "MenulaySampleTenantUser",
+        "MenulayTenantGroup"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "GroupName": "menulay_tenant",
+        "Username": "tenant@burgerhouse.com"
+      }
+    },
+    "MenulayKitchenGroupMembership": {
+      "Type": "AWS::Cognito::UserPoolUserToGroupAttachment",
+      "DependsOn": [
+        "MenulaySampleKitchenUser",
+        "MenulayKitchenStaffGroup"
+      ],
+      "Properties": {
+        "UserPoolId": {
+          "Ref": "MenulayUserPool"
+        },
+        "GroupName": "menulay_kitchen_staff",
+        "Username": "kitchen@burgerhouse.com"
+      }
+    },
+    "MenulayIdentityPool": {
+      "Type": "AWS::Cognito::IdentityPool",
+      "DependsOn": [
+        "MenulayWebClient"
+      ],
+      "Properties": {
+        "IdentityPoolName": {
+          "Fn::Sub": "menulay_identity_pool_${Environment}"
+        },
+        "AllowUnauthenticatedIdentities": true,
+        "CognitoIdentityProviders": [
+          {
+            "ClientId": {
+              "Ref": "MenulayWebClient"
+            },
+            "ProviderName": {
+              "Fn::Sub": "cognito-idp.${AWS::Region}.amazonaws.com/${MenulayUserPool}"
+            },
+            "ServerSideTokenCheck": true
+          }
+        ]
+      }
+    },
+    "MenulayGuestRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "cognito-identity.amazonaws.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "cognito-identity.amazonaws.com:amr": "unauthenticated"
+                },
+                "StringLike": {
+                  "cognito-identity.amazonaws.com:aud": "us-east-1:*"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "menulay-guest-api-policy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "execute-api:Invoke"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/GET/menus/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/POST/orders"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/GET/orders/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "MenulayIdentityPoolRoleAttachment": {
+      "Type": "AWS::Cognito::IdentityPoolRoleAttachment",
+      "DependsOn": [
+        "MenulayIdentityPool",
+        "MenulayGuestRole"
+      ],
+      "Properties": {
+        "IdentityPoolId": {
+          "Ref": "MenulayIdentityPool"
+        },
+        "Roles": {
+          "unauthenticated": {
+            "Fn::GetAtt": [
+              "MenulayGuestRole",
+              "Arn"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "UserPoolId": {
+      "Value": {
+        "Ref": "MenulayUserPool"
+      },
+      "Description": "NEXT_PUBLIC_COGNITO_USER_POOL_ID",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "menulay-user-pool-id-${Environment}"
+        }
+      }
+    },
+    "WebClientId": {
+      "Value": {
+        "Ref": "MenulayWebClient"
+      },
+      "Description": "NEXT_PUBLIC_COGNITO_WEB_CLIENT_ID",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "menulay-web-client-id-${Environment}"
+        }
+      }
+    },
+    "KdsClientId": {
+      "Value": {
+        "Ref": "MenulayKdsClient"
+      },
+      "Description": "NEXT_PUBLIC_COGNITO_KDS_CLIENT_ID",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "menulay-kds-client-id-${Environment}"
+        }
+      }
+    },
+    "IdentityPoolId": {
+      "Value": {
+        "Ref": "MenulayIdentityPool"
+      },
+      "Description": "NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "menulay-identity-pool-id-${Environment}"
+        }
+      }
+    },
+    "Region": {
+      "Value": {
+        "Ref": "AWS::Region"
+      },
+      "Description": "NEXT_PUBLIC_COGNITO_REGION"
+    },
+    "CognitoDomain": {
+      "Value": {
+        "Fn::Sub": "https://${CognitoDomainPrefix}-${Environment}.auth.${AWS::Region}.amazoncognito.com"
+      },
+      "Description": "Cognito Hosted UI base URL"
+    }
+  }
+}
