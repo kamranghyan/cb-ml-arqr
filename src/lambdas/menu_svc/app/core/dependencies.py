@@ -40,8 +40,10 @@ _auth = CognitoAuth()
 _bearer = HTTPBearer(auto_error=False)
 
 MUTATE_ROLES = ["menulay_admin", "menulay_tenant"]
-# Anyone who may touch a restaurant's content (menu, tables, orders).
-MANAGE_ROLES = ["menulay_admin", "menulay_tenant", "menulay_restaurant_admin"]
+# Anyone who may touch a restaurant's content (menu, categories, tables, QR).
+# The tenant owner manages every branch it owns; a platform admin acts only as
+# a support override and must name the tenant it is acting for.
+MANAGE_ROLES = ["menulay_admin", "menulay_tenant"]
 
 # ── Module-level singletons (warm invocation reuse) ───────────────────────────
 _cache = CacheService()
@@ -102,7 +104,7 @@ async def require_tenant_owner(
 async def require_restaurant_manager(
     user: Annotated[UserContext, Depends(get_current_user)],
 ) -> UserContext:
-    """Tenant owner, restaurant admin, or platform admin."""
+    """Tenant owner, or platform admin acting as support."""
     _auth.require_roles(user, MANAGE_ROLES)
     return user
 
@@ -122,7 +124,7 @@ async def restaurant_write_scope(
 
     Returns (user, tenant_id) after checking that:
       • the caller has a role allowed to manage restaurant content
-      • a restaurant admin / kitchen user is writing to its OWN branch
+      • a branch-bound user (kitchen) is writing to its OWN branch
       • a platform admin has said which tenant it is acting for
       • THE RESTAURANT ACTUALLY BELONGS TO THAT TENANT — without this a
         tenant could write into another company's restaurant just by
@@ -185,9 +187,9 @@ def resolve_write_tenant(user: UserContext, body_tenant_id: str | None = None) -
 
 def assert_restaurant_scope(user: UserContext, restaurant_id: str) -> None:
     """
-    Restaurant admins and kitchen staff are pinned to one branch.
-    Tenant owners span every branch of their tenant (the caller is expected to
-    have already matched the restaurant's tenantId). Platform admins pass.
+    Kitchen staff are pinned to one branch. Tenant owners span every branch of
+    their tenant (the caller is expected to have already matched the
+    restaurant's tenantId). Platform admins pass.
     """
     if user.is_admin() or user.is_tenant():
         return

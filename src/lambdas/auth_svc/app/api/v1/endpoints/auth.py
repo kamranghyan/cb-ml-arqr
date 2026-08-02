@@ -8,10 +8,9 @@ GET  /auth/me         any logged-in user
 
 Registration rules
 ------------------
-role=admin            platform admin only  (or the one-off seed script)
-role=tenant           platform admin only  → also creates the TenantTable row
-role=restaurant_admin tenant owner (own tenant) or platform admin
-role=staff            tenant owner (own tenant) or platform admin
+role=admin   platform admin only  (or the one-off seed script)
+role=tenant  platform admin only  → also creates the TenantTable row
+role=staff   tenant owner (own tenant) or platform admin
 """
 from __future__ import annotations
 
@@ -47,10 +46,9 @@ log = get_logger("auth.endpoints")
 _settings = get_settings()
 
 _GROUP_FOR_ROLE = {
-    "admin":            _settings.group_admin,
-    "tenant":           _settings.group_tenant,
-    "restaurant_admin": _settings.group_restaurant_admin,
-    "staff":            _settings.group_staff,
+    "admin":  _settings.group_admin,
+    "tenant": _settings.group_tenant,
+    "staff":  _settings.group_staff,
 }
 
 _ROLE_FOR_GROUP = {v: k for k, v in _GROUP_FOR_ROLE.items()}
@@ -151,7 +149,7 @@ async def register(
             raise ForbiddenError(
                 "Only a platform administrator may create admin or tenant accounts."
             )
-    else:  # restaurant_admin | staff
+    else:  # staff
         if caller is None:
             raise ForbiddenError("Authentication required.")
         if not (caller.is_admin() or caller.is_tenant()):
@@ -179,7 +177,7 @@ async def register(
         tenant_id = tenant["tenantId"]
         restaurant_id = ""
 
-    elif role in ("restaurant_admin", "staff"):
+    elif role == "staff":
         if not tenant_id:
             raise BadRequestError(f"tenantId is required when creating a {role}.")
         if not restaurant_id:

@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     # ── Cognito groups (roles) ────────────────────────────────────────
     group_admin:            str = "menulay_admin"
     group_tenant:           str = "menulay_tenant"
-    group_restaurant_admin: str = "menulay_restaurant_admin"
     group_staff:            str = "menulay_kitchen_staff"
 
 

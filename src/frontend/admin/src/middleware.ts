@@ -1,9 +1,13 @@
-// src/middleware.ts
-// Route protection — runs at the edge before every request
+// src/middleware.ts  —  ADMIN APP (platform administrators)
+//
+// This app is the platform console: tenants, plans, support. Only
+// menulay_admin belongs here. A tenant owner who lands on it is sent to the
+// tenant app instead of being shown a console they cannot use.
 
 import { NextRequest, NextResponse } from 'next/server'
 
-// ── Parse JWT without a lib (edge-compatible) ────────────────────────────────
+const TENANT_APP_URL = process.env.NEXT_PUBLIC_TENANT_APP_URL ?? 'http://localhost:3003'
+
 function parseJwt(token: string): Record<string, unknown> {
   try {
     const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
@@ -20,65 +24,42 @@ function isTokenExpired(claims: Record<string, unknown>): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // ── Public routes — always allow ──────────────────────────────────────────
   if (
-    pathname.startsWith('/guest') ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/') ||
-    pathname === '/' ||
     pathname.startsWith('/public')
   ) {
     return NextResponse.next()
   }
 
-  // ── Get token from cookie ─────────────────────────────────────────────────
-  const idToken = request.cookies.get('menulay_id_token')?.value
+  if (!pathname.startsWith('/admin')) return NextResponse.next()
 
-  // ── Admin routes — allow menulay_admin AND menulay_tenant ─────────────────
-  if (pathname.startsWith('/admin')) {
-    if (!idToken) {
-      return NextResponse.redirect(new URL('/login/admin', request.url))
-    }
-    const claims = parseJwt(idToken)
-    if (isTokenExpired(claims)) {
-      return NextResponse.redirect(new URL('/login/admin?reason=expired', request.url))
-    }
-    const groups = (claims['cognito:groups'] as string[]) ?? []
-    if (
-      !groups.includes('menulay_admin') &&
-      !groups.includes('menulay_tenant')
-    ) {
-      return NextResponse.redirect(new URL('/login/admin?reason=unauthorized', request.url))
-    }
-    return NextResponse.next()
+  const idToken = request.cookies.get('menulay_id_token')?.value
+  if (!idToken) {
+    return NextResponse.redirect(new URL('/login/admin', request.url))
   }
 
-  // ── KDS routes — allow menulay_kitchen_staff AND menulay_admin ────────────
-  if (pathname.startsWith('/kds')) {
-    if (!idToken) {
-      return NextResponse.redirect(new URL('/login/kds', request.url))
-    }
-    const claims = parseJwt(idToken)
-    if (isTokenExpired(claims)) {
-      return NextResponse.redirect(new URL('/login/kds?reason=expired', request.url))
-    }
-    const groups = (claims['cognito:groups'] as string[]) ?? []
-    if (
-      !groups.includes('menulay_kitchen_staff') &&
-      !groups.includes('menulay_admin')
-    ) {
-      return NextResponse.redirect(new URL('/login/kds?reason=unauthorized', request.url))
-    }
-    return NextResponse.next()
+  const claims = parseJwt(idToken)
+  if (isTokenExpired(claims)) {
+    return NextResponse.redirect(new URL('/login/admin?reason=expired', request.url))
+  }
+
+  const groups = (claims['cognito:groups'] as string[]) ?? []
+
+  // A tenant owner has their own console — send them there rather than
+  // bouncing them back to a login screen they just passed.
+  if (groups.includes('menulay_tenant')) {
+    return NextResponse.redirect(new URL(TENANT_APP_URL))
+  }
+
+  if (!groups.includes('menulay_admin')) {
+    return NextResponse.redirect(new URL('/login/admin?reason=unauthorized', request.url))
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: [
-    '/admin/:path*',
-    '/kds/:path*',
-  ],
+  matcher: ['/admin/:path*'],
 }
