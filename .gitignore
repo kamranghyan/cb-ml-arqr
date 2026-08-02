@@ -42,3 +42,18 @@ terraform.rc
 node_modules/
 dist/
 .env
+
+
+# Next.js build output
+.next/
+out/
+
+# Production build
+build/
+
+# Node modules
+node_modules/
+
+# IDEs and tools
+.DS_Store
+.env*.local
