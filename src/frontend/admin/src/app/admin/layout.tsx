@@ -4,12 +4,16 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  Building2,
   LayoutDashboard, BookOpen, QrCode, ChefHat,
   BarChart2, Receipt, Users, Settings, LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const NAV = [
+  { section: 'Platform', items: [
+    { href: '/admin/tenants',   label: 'Tenants',         icon: Building2       },
+  ]},
   { section: 'Main', items: [
     { href: '/admin/dashboard', label: 'Dashboard',       icon: LayoutDashboard },
     { href: '/admin/menu',      label: 'Menu Management', icon: BookOpen        },

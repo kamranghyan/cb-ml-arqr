@@ -20,7 +20,7 @@ from shared.cognito_auth import UserContext
 from app.core.dependencies import (
     get_menu_tenant,
     get_table_service,
-    require_admin_or_tenant,
+    restaurant_write_scope,
 )
 from app.services.table_service import TableService
 from app.utils.request_helpers import parse_body
@@ -45,11 +45,12 @@ async def list_tables(
 async def create_table(
     restaurantId: str,
     request:      Request,
-    user:         Annotated[UserContext,  Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],  Depends(restaurant_write_scope)],
     svc:          Annotated[TableService, Depends(get_table_service)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
-    return svc.create(user.tenant_id, restaurantId, body)
+    return svc.create(tenant_id, restaurantId, body)
 
 
 @router.put(
@@ -60,11 +61,12 @@ async def update_table(
     restaurantId: str,
     tableId:      str,
     request:      Request,
-    user:         Annotated[UserContext,  Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],  Depends(restaurant_write_scope)],
     svc:          Annotated[TableService, Depends(get_table_service)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
-    return svc.update(user.tenant_id, restaurantId, tableId, body)
+    return svc.update(tenant_id, restaurantId, tableId, body)
 
 
 @router.delete(
@@ -74,7 +76,8 @@ async def update_table(
 async def delete_table(
     restaurantId: str,
     tableId:      str,
-    user:         Annotated[UserContext,  Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],  Depends(restaurant_write_scope)],
     svc:          Annotated[TableService, Depends(get_table_service)],
 ):
-    return svc.delete(user.tenant_id, restaurantId, tableId)
+    user, tenant_id = scope
+    return svc.delete(tenant_id, restaurantId, tableId)

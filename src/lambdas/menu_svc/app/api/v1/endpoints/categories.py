@@ -21,7 +21,7 @@ from app.core.dependencies import (
     get_category_service,
     get_menu_tenant,
     get_s3_repo,
-    require_admin_or_tenant,
+    restaurant_write_scope,
 )
 from app.models.base import ValidationError
 from app.repositories.s3_repository import S3Repository
@@ -77,25 +77,26 @@ async def get_category(
 async def create_category(
     restaurantId: str,
     request:      Request,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[CategoryService, Depends(get_category_service)],
     s3_repo:      Annotated[S3Repository,    Depends(get_s3_repo)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
     coerce_bool(body, "isActive")
     coerce_int(body, "displayOrder")
     try:
-        cat = svc.create(user.tenant_id, restaurantId, body)
+        cat = svc.create(tenant_id, restaurantId, body)
         ct = request.headers.get("content-type", "")
         if "multipart/form-data" in ct:
             try:
                 raw_event = build_gateway_event(await request.body(), ct)
                 s3_key, image_url = s3_repo.upload_category_image(
-                    raw_event, restaurantId, cat.categoryId, user.tenant_id,
+                    raw_event, restaurantId, cat.categoryId, tenant_id,
                 )
                 if s3_key:
                     cat = svc.update(
-                        user.tenant_id, restaurantId, cat.categoryId,
+                        tenant_id, restaurantId, cat.categoryId,
                         {"imageKey": s3_key},
                     )
                     cat.imageUrl = image_url
@@ -117,12 +118,13 @@ async def update_category(
     restaurantId: str,
     categoryId:   str,
     request:      Request,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[CategoryService, Depends(get_category_service)],
 ):
+    user, tenant_id = scope
     body = await parse_body(request)
     try:
-        return svc.update(user.tenant_id, restaurantId, categoryId, body).to_dict()
+        return svc.update(tenant_id, restaurantId, categoryId, body).to_dict()
     except CategoryNotFoundError as exc:
         raise ResourceNotFoundError("Category", categoryId) from exc
 
@@ -134,11 +136,12 @@ async def update_category(
 async def delete_category(
     restaurantId: str,
     categoryId:   str,
-    user:         Annotated[UserContext,     Depends(require_admin_or_tenant)],
+    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
     svc:          Annotated[CategoryService, Depends(get_category_service)],
 ):
+    user, tenant_id = scope
     try:
-        svc.delete(user.tenant_id, restaurantId, categoryId)
+        svc.delete(tenant_id, restaurantId, categoryId)
         return {"message": "Category deleted"}
     except CategoryNotFoundError as exc:
         raise ResourceNotFoundError("Category", categoryId) from exc

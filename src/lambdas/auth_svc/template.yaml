@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: MenuLay auth-svc — login, registration, tenant management
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  CognitoUserPoolId:
+    Type: String
+    Default: ap-south-1_SCyQ50etN
+  CognitoClientId:
+    Type: String
+    Default: 7903hkujl9qeq67toemi5qrhes
+  CognitoRegion:
+    Type: String
+    Default: ap-south-1
+  LogLevel:
+    Type: String
+    Default: INFO
+  SharedLayerArn:
+    Type: String
+    Default: arn:aws:lambda:ap-south-1:833090513377:layer:menulay-shared-dev:7
+    Description: ARN of the menulay-shared layer (including version)
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 512
+
+Resources:
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub auth-svc-${Environment}
+      CodeUri: ./
+      Handler: handler.lambda_handler
+      Layers:
+        - !Ref SharedLayerArn
+      Role: !GetAtt AuthFunctionRole.Arn
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !Ref LogLevel
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          COGNITO_REGION: !Ref CognitoRegion
+          TENANT_TABLE: !Sub TenantTable-${Environment}
+          RESTAURANT_TABLE: !Sub RestaurantTable-${Environment}
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /
+            Method: ANY
+        ApiProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /{proxy+}
+            Method: ANY
+
+  AuthApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub auth-api-${Environment}
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PATCH,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Tenant-Id'"
+        AllowOrigin: "'*'"
+
+  AuthFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        # ── Cognito admin operations — ONLY this service gets these ──
+        - PolicyName: CognitoUserManagement
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminSetUserPassword
+                  - cognito-idp:AdminAddUserToGroup
+                  - cognito-idp:AdminRemoveUserFromGroup
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminDeleteUser
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminEnableUser
+                  - cognito-idp:AdminDisableUser
+                  - cognito-idp:AdminListGroupsForUser
+                  - cognito-idp:ListUsers
+                  - cognito-idp:ListGroups
+                Resource: !Sub arn:aws:cognito-idp:${CognitoRegion}:${AWS::AccountId}:userpool/${CognitoUserPoolId}
+              # Login / refresh are unauthenticated API calls on the client id.
+              - Effect: Allow
+                Action:
+                  - cognito-idp:InitiateAuth
+                Resource: '*'
+        # ── TenantTable ──────────────────────────────────────────────
+        - PolicyName: TenantTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantTable-${Environment}
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantTable-${Environment}/index/*
+        # ── RestaurantTable (read-only: counting a tenant's restaurants) ──
+        - PolicyName: RestaurantTableRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/RestaurantTable-${Environment}
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/RestaurantTable-${Environment}/index/*
+
+Outputs:
+  AuthApiUrl:
+    Description: Auth API endpoint
+    Value: !Sub https://${AuthApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+  AuthFunctionArn:
+    Value: !GetAtt AuthFunction.Arn
