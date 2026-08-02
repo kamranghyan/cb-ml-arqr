@@ -7,7 +7,7 @@
  *
  * All calls go through the /api/auth-svc proxy so the browser never talks to
  * the API Gateway directly.
- Hemlooo*/
+ */
 
 import { getValidIdToken } from './cognito'
 
@@ -37,7 +37,7 @@ export interface ApiUser {
   status:       string
 }
 
-export type UserRole = 'admin' | 'tenant' | 'restaurant_admin' | 'staff'
+export type UserRole = 'admin' | 'tenant' | 'staff'
 
 export interface RegisterPayload {
   role:     UserRole
@@ -47,7 +47,7 @@ export interface RegisterPayload {
   /** role=tenant */
   companyName?: string
   planTier?:    PlanTier
-  /** role=restaurant_admin | staff */
+  /** role=staff */
   tenantId?:     string
   restaurantId?: string
 }
@@ -155,20 +155,6 @@ export async function deleteTenant(tenantId: string): Promise<void> {
 export async function fetchUsers(): Promise<ApiUser[]> {
   const data = await authFetch<{ users: ApiUser[] }>('/auth/users')
   return data.users ?? []
-}
-
-/** Branch manager for one restaurant. */
-export async function createRestaurantAdmin(payload: {
-  email:        string
-  password:     string
-  name?:        string
-  restaurantId: string
-  tenantId?:    string     // omitted for a tenant owner — taken from the token
-}): Promise<{ sub: string; email: string }> {
-  return authFetch('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ role: 'restaurant_admin', ...payload } satisfies RegisterPayload),
-  })
 }
 
 /** Kitchen staff for one restaurant. */

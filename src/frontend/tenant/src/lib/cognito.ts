@@ -63,7 +63,6 @@ export function parseJwt(token: string): Record<string, unknown> {
 const ROLE_BY_GROUP: Record<string, string> = {
   menulay_admin:            'admin',              // platform admin
   menulay_tenant:           'tenant',             // company owner
-  menulay_restaurant_admin: 'restaurant_admin',   // branch manager
   menulay_kitchen_staff:    'staff',
 }
 
@@ -213,8 +212,7 @@ export async function signOut(): Promise<void> {
 export function isAdmin(user: AuthUser | null)        { return user?.groups.includes('menulay_admin') ?? false }
 export function isTenant(user: AuthUser | null)       { return user?.groups.includes('menulay_tenant') ?? false }
 export function isKitchenStaff(user: AuthUser | null) { return user?.groups.includes('menulay_kitchen_staff') ?? false }
-export function isRestaurantAdmin(user: AuthUser | null) { return user?.groups.includes('menulay_restaurant_admin') ?? false }
-/** Users pinned to a single branch (branch manager or kitchen). */
+/** Users pinned to a single branch. Today that means kitchen staff. */
 export function isBranchUser(user: AuthUser | null) {
-  return isRestaurantAdmin(user) || isKitchenStaff(user)
+  return isKitchenStaff(user)
 }

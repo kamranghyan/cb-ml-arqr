@@ -74,17 +74,17 @@ class UserContext:
     email         : User email address (may be empty for access tokens)
     tenant_id     : `custom:tenant_id` — the company. Empty for platform admins.
     restaurant_id : `custom:restaurant_id` — the branch this user is bound to.
-                    Set for restaurant_admin and kitchen staff; empty for
-                    platform admins and tenant owners (who span all branches).
+                    Set for kitchen staff; empty for platform admins and tenant
+                    owners, who are not tied to a single branch.
     groups        : Cognito group memberships (e.g. ["menulay_admin"])
     claims        : Full raw JWT claims dict
 
     Role model
     ----------
-    platform admin   groups=[menulay_admin]              no tenant, no restaurant
-    tenant owner     groups=[menulay_tenant]             tenant only
-    restaurant admin groups=[menulay_restaurant_admin]   tenant + restaurant
-    kitchen staff    groups=[menulay_kitchen_staff]      tenant + restaurant
+    platform admin  groups=[menulay_admin]           no tenant, no restaurant
+    tenant owner    groups=[menulay_tenant]          tenant only — manages every
+                                                     branch, its menu and QR codes
+    kitchen staff   groups=[menulay_kitchen_staff]   tenant + one restaurant
     """
 
     sub:           str
@@ -103,22 +103,18 @@ class UserContext:
     def is_kitchen(self) -> bool:
         return "menulay_kitchen_staff" in self.groups
 
-    def is_restaurant_admin(self) -> bool:
-        return "menulay_restaurant_admin" in self.groups
-
     def is_staff(self) -> bool:
-        """Anyone bound to a single restaurant (restaurant admin or kitchen)."""
-        return self.is_restaurant_admin() or self.is_kitchen()
+        """Users pinned to a single restaurant. Today that means kitchen staff."""
+        return self.is_kitchen()
 
     def can_access_restaurant(self, restaurant_id: str) -> bool:
         """
         Scope check used by menu/order services.
 
-        platform admin   → any restaurant (support override)
-        tenant owner     → any restaurant of its tenant (caller must have
-                           already confirmed the restaurant's tenantId matches)
-        restaurant admin
-        kitchen staff    → only the restaurant bound to their token
+        platform admin → any restaurant (support override)
+        tenant owner   → any restaurant of its tenant (the caller must have
+                         already confirmed the restaurant's tenantId matches)
+        kitchen staff  → only the restaurant bound to their token
         """
         if self.is_admin():
             return True

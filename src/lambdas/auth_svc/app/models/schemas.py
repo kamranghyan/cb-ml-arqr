@@ -10,7 +10,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 # Roles a caller may create. "admin" is platform-admin only (or seed script).
-Role = Literal["admin", "tenant", "restaurant_admin", "staff"]
+Role = Literal["admin", "tenant", "staff"]
 
 PlanTier = Literal["starter", "professional", "enterprise"]
 
@@ -45,7 +45,7 @@ class UserProfile(BaseModel):
     sub:          str
     email:        str
     name:         str = ""
-    role:         str                      # admin | tenant | restaurant_admin | staff
+    role:         str                      # admin | tenant | staff
     tenantId:     str = ""
     restaurantId: str = ""
     groups:       list[str] = Field(default_factory=list)
@@ -57,10 +57,10 @@ class RegisterBody(BaseModel):
     """
     One endpoint creates every kind of user; `role` decides the rules.
 
-    role=admin            platform admin        — no tenant, no restaurant
-    role=tenant           company owner         — needs companyName + planTier
-    role=restaurant_admin branch manager        — needs tenantId + restaurantId
-    role=staff            kitchen staff         — needs tenantId + restaurantId
+    role=admin   platform admin — no tenant, no restaurant
+    role=tenant  company owner  — needs companyName + planTier; manages every
+                 branch it owns, including menus and QR codes
+    role=staff   kitchen staff  — needs tenantId + restaurantId
     """
     role:     Role
     email:    EmailStr
@@ -71,7 +71,7 @@ class RegisterBody(BaseModel):
     companyName: Optional[str] = None
     planTier:    Optional[PlanTier] = "starter"
 
-    # role=restaurant_admin | staff
+    # role=staff
     tenantId:     Optional[str] = None
     restaurantId: Optional[str] = None
 
