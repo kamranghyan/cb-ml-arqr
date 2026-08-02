@@ -44,6 +44,8 @@ export interface ApiMenuResponse {
 }
 
 // ── Auth-aware fetch — injects token for protected routes ─────────────────────
+// /lib/menu-api.ts
+
 async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = await getValidIdToken()
 
@@ -54,6 +56,25 @@ async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> 
 
   if (token) headers['Authorization'] = token
 
+  // ✅ Add X-Tenant-Id header
+  let tenantId = '';
+  try {
+    if (token) {
+      const decoded = JSON.parse(atob(token.split('.')[1]));
+      tenantId = decoded?.['custom:tenant_id'] || decoded?.tenantId || '';
+    }
+  } catch (e) {
+    console.warn('Could not extract tenantId from token');
+  }
+  
+  if (!tenantId && ADMIN_RESTAURANT_ID) {
+    tenantId = ADMIN_RESTAURANT_ID;
+  }
+  
+  if (tenantId) {
+    headers['X-Tenant-Id'] = tenantId;
+  }
+
   const res = await fetch(url, { ...options, headers })
 
   if (!res.ok) {
@@ -63,6 +84,7 @@ async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> 
 
   return res.json() as Promise<T>
 }
+
 
 // ── Fetch all menu items ───────────────────────────────────────────────────────
 export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem[]> {
@@ -103,26 +125,40 @@ export async function createMenuItem(payload: Partial<ApiMenuItem>): Promise<Api
 
 // ── Update menu item ──────────────────────────────────────────────────────────
 export async function updateMenuItem(
-  itemId:   string,
-  payload:  Partial<ApiMenuItem>,
+  itemId: string,
+  payload: Partial<ApiMenuItem>,
   version?: number,
 ): Promise<ApiMenuItem> {
   const { price, status, ...rest } = payload as any
-  const apiPayload = {
+  
+  const apiPayload: any = {
     ...rest,
-    priceMinorUnits: Math.round((price ?? 0) * 100),
-    ...(status != null && { isActive: status === 'active' }),
-    ...(version != null && { version }),
+    ...(price !== undefined && { priceMinorUnits: Math.round(price * 100) }),
+    ...(status !== undefined && { isActive: status === 'active' }),
+  };
+  
+  // ✅ Only add version if provided AND version is not -1
+  if (version !== undefined && version !== -1) {
+    apiPayload.version = version;
   }
+  
+  // ✅ If version is -1 or undefined, don't send version (backend will use latest)
+  
+  console.log('📤 Update payload:', apiPayload);
+  console.log('📤 Version sent:', version);
+  
   return menuFetch<ApiMenuItem>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), {
     method: 'PUT',
-    body:   JSON.stringify(apiPayload),
-  })
+    body: JSON.stringify(apiPayload),
+  });
 }
 
-// ── Delete menu item ──────────────────────────────────────────────────────────
-export async function deleteMenuItem(itemId: string): Promise<void> {
-  await menuFetch<void>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), { method: 'DELETE' })
+// ── Delete menu item (Hard Delete - Permanently) ────────────────────────────
+export async function deleteMenuItem(itemId: string, restaurantId?: string): Promise<void> {
+  const rid = restaurantId?.trim() || ADMIN_RESTAURANT_ID;
+  await menuFetch<void>(MENU_API.item(itemId, rid), { 
+    method: 'DELETE' 
+  });
 }
 
 // ── Normalise raw API response ────────────────────────────────────────────────

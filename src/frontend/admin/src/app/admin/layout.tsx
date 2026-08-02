@@ -14,6 +14,7 @@ const NAV = [
     { href: '/admin/dashboard', label: 'Dashboard',       icon: LayoutDashboard },
     { href: '/admin/menu',      label: 'Menu Management', icon: BookOpen        },
     { href: '/admin/qr',        label: 'QR Codes',        icon: QrCode          },
+    { href: '/admin/restaurants',     label: 'Restaurants', icon: Users    },
     { href: '/admin/orders',    label: 'Kitchen Orders',  icon: ChefHat         },
   ]},
   { section: 'Reports', items: [

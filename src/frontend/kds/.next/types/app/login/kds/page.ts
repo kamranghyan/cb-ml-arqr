@@ -1,4 +1,4 @@
-// File: D:\workspace\projects\cb-ml-arqr\src\frontend\kds\src\app\login\kds\page.tsx
+// File: C:\cb-projects\cb-ml-arqr\src\frontend\kds\src\app\login\kds\page.tsx
 import * as entry from '../../../../../src/app/login/kds/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
