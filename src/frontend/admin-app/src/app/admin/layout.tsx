@@ -13,7 +13,7 @@ const NAV = [
     { href: '/admin/users',     label: 'Users',    icon: Users          },
   ]},
 ];
-
+//testing
 const C = { red: '#E1251B', dark: '#891C1C', gold: '#FFC72C', bg: '#FFF8F1', white: '#fff', border: '#F0E8E0', text: '#1A1A1A', muted: '#687780', subtle: '#9CA3AF' };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
