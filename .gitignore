@@ -57,3 +57,7 @@ node_modules/
 # IDEs and tools
 .DS_Store
 .env*.local
+
+src/frontend/guest/.next/
+
+**/.next/
