@@ -214,10 +214,12 @@ class ArAssetsService:
         restaurant_id: str,
         item_id:       str,
     ) -> dict:
-        return {
-            "PK": f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}",
-            "SK": f"ITEM#{item_id}",
-        }
+        """
+        ItemTable is keyed by itemId alone. tenant_id and restaurant_id are
+        kept in the signature because callers pass them, and because _ddb_get
+        uses restaurant_id to confirm the item really belongs to that branch.
+        """
+        return {"itemId": item_id}
 
     def _ddb_get(
         self,
@@ -230,7 +232,7 @@ class ArAssetsService:
         try:
             resp = self._ddb.get_item(
                 Key=key,
-                ProjectionExpression="arModelKey",
+                ProjectionExpression="arModelKey, restaurantId",
             )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -240,6 +242,14 @@ class ArAssetsService:
         item = resp.get("Item")
         if not item:
             raise ResourceNotFoundError(resource="Menu item", identifier=item_id)
+
+        # itemId is a global key now, so confirm the item is actually in the
+        # branch the caller named — otherwise one restaurant could read or
+        # overwrite another's AR model by guessing an id.
+        owner = item.get("restaurantId", "")
+        if owner and restaurant_id and owner != restaurant_id:
+            raise ResourceNotFoundError(resource="Menu item", identifier=item_id)
+
         return item
 
     def _ddb_update(
@@ -249,6 +259,9 @@ class ArAssetsService:
         item_id:       str,
         updates:       dict,
     ) -> None:
+        # Confirms existence AND that the item belongs to this restaurant.
+        self._ddb_get(tenant_id, restaurant_id, item_id)
+
         key          = self._ddb_key(tenant_id, restaurant_id, item_id)
         expr_parts   = [f"#f_{k} = :v_{k}" for k in updates]
         update_expr  = "SET " + ", ".join(expr_parts)
@@ -261,7 +274,7 @@ class ArAssetsService:
                 UpdateExpression=update_expr,
                 ExpressionAttributeNames=expr_names,
                 ExpressionAttributeValues=expr_values,
-                ConditionExpression="attribute_exists(PK)",
+                ConditionExpression="attribute_exists(itemId)",
             )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -276,12 +289,14 @@ class ArAssetsService:
         restaurant_id: str,
         item_id:       str,
     ) -> None:
+        self._ddb_get(tenant_id, restaurant_id, item_id)
+
         key = self._ddb_key(tenant_id, restaurant_id, item_id)
         try:
             self._ddb.update_item(
                 Key=key,
                 UpdateExpression="REMOVE arModelKey, arScale, arPlacement",
-                ConditionExpression="attribute_exists(PK)",
+                ConditionExpression="attribute_exists(itemId)",
             )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
