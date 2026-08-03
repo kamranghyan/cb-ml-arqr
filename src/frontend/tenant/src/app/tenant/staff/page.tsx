@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Loader2, RefreshCw, AlertCircle, Plus, Trash2, X } from 'lucide-react';
-import { fetchUsers, createRestaurantAdmin, createStaff, deleteUser, type ApiUser } from '@/lib/auth-api';
+import { fetchUsers, createStaff, deleteUser, type ApiUser } from '@/lib/auth-api';
 import { fetchRestaurants, type ApiRestaurant } from '@/lib/admin-api';
 
 const C = {
@@ -50,12 +50,12 @@ export default function StaffPage() {
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: '0 0 4px' }}>Staff</h1>
           <p style={{ color: C.muted, fontSize: 14, margin: 0 }}>
-            Branch managers and kitchen staff across your restaurants.
+            Kitchen users. Each one sees only the restaurant you assign.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={load} style={ghost}><RefreshCw size={14} /> Refresh</button>
-          <button onClick={() => setOpen(true)} style={primary}><Plus size={16} /> Add Person</button>
+          <button onClick={() => setOpen(true)} style={primary}><Plus size={16} /> Add Kitchen User</button>
         </div>
       </div>
 
@@ -70,7 +70,7 @@ export default function StaffPage() {
           <Users size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
           <p style={{ margin: 0, fontWeight: 600 }}>No staff yet.</p>
           <p style={{ margin: '4px 0 0', fontSize: 13 }}>
-            Add a branch manager or kitchen user to get started.
+            Add a kitchen user so they can work the orders screen.
           </p>
         </div>
       )}
@@ -126,7 +126,6 @@ function AddModal({ restaurants, onClose, onSaved, say }: {
   say: (m: string, k?: 'ok'|'err') => void;
 }) {
   const [f, setF] = useState({
-    role: 'staff' as 'staff' | 'restaurant_admin',
     email: '', password: '', name: '',
     restaurantId: restaurants[0]?.restaurantId ?? '',
   });
@@ -136,8 +135,9 @@ function AddModal({ restaurants, onClose, onSaved, say }: {
   async function save() {
     setSaving(true);
     try {
-      const fn = f.role === 'restaurant_admin' ? createRestaurantAdmin : createStaff;
-      await fn({ email: f.email, password: f.password, name: f.name, restaurantId: f.restaurantId });
+      await createStaff({
+        email: f.email, password: f.password, name: f.name, restaurantId: f.restaurantId,
+      });
       say(`Created — share the login with ${f.email}`);
       onSaved();
     } catch (e: any) { say(e.message, 'err'); }
@@ -155,21 +155,14 @@ function AddModal({ restaurants, onClose, onSaved, say }: {
         background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Add Person</h3>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Add Kitchen User</h3>
           <button onClick={onClose} style={{ ...ghost, border: 'none' }}><X size={18} /></button>
         </div>
         <p style={{ color: C.muted, fontSize: 13, margin: '0 0 18px' }}>
-          They will only see the restaurant you pick.
+          They will only see orders for the restaurant you pick.
         </p>
 
         <div style={{ display: 'grid', gap: 12 }}>
-          <div>
-            <label style={label}>Role</label>
-            <select style={input} value={f.role} onChange={e => set('role', e.target.value)}>
-              <option value="staff">Kitchen staff — sees and updates orders</option>
-              <option value="restaurant_admin">Branch manager — manages the menu too</option>
-            </select>
-          </div>
           <div>
             <label style={label}>Restaurant</label>
             <select style={input} value={f.restaurantId} onChange={e => set('restaurantId', e.target.value)}>
