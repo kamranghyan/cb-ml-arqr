@@ -223,6 +223,21 @@ async def get_menu_tenant(
     return x_tenant_id
 
 
+async def get_menu_tenant_optional(
+    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-Id")] = None,
+) -> str:
+    """
+    Tenant header, but not required.
+
+    A guest arriving from a QR code knows only the restaurant id — the tenant
+    is what they are trying to discover. RestaurantTable is keyed by
+    restaurantId alone, so the lookup does not need a tenant; it is used only
+    for the cache key. Endpoints using this must not expose anything beyond
+    the restaurant's own public details.
+    """
+    return x_tenant_id or ""
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Service factories
 # ══════════════════════════════════════════════════════════════════════════════

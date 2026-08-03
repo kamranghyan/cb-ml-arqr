@@ -1,63 +1,87 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+﻿// src/app/api/menu/[...path]/route.ts  —  TENANT CONSOLE
+//
+// The company is whoever is signed in. Their token carries custom:tenant_id,
+// so nothing about the tenant is configured here — one build serves every
+// company that logs in.
 
-export const maxDuration = 30
+import { NextRequest, NextResponse } from 'next/server'
 
-const AWS_BASE  = process.env.NEXT_PUBLIC_API_BASE
-  ?? 'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ??
+  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
 
-const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID
-  ?? 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-
-function getJwtClaim(t: string, c: string): string | null {
+/** Read (not verify) the token payload — the backend verifies it properly. */
+function parseJwt(token: string): Record<string, unknown> {
   try {
-    return JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString())[c] ?? null
-  } catch { return null }
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))
+  } catch {
+    return {}
+  }
 }
 
-async function handler(
-  req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params
-  const qs       = req.nextUrl.searchParams.toString()
-  const upstream = `${AWS_BASE}/menus/${path.join('/')}${qs ? `?${qs}` : ''}`
-  const ct       = req.headers.get('content-type') ?? ''
-  let   auth     = req.headers.get('authorization') ?? ''
-  // API Gateway can drop a bare token; always forward with the Bearer scheme.
-  if (auth && !auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
+const NO_TENANT = NextResponse.json(
+  {
+    error:
+      'Your session does not identify a company. Please sign in again.',
+  },
+  { status: 401 },
+)
 
-  // Always use env TENANT_ID — ignore JWT tenant (guest menu is public)
-  const tenantId = TENANT_ID
+async function forward(req: NextRequest, path: string[]) {
+  // API Gateway drops a bare token — always forward with the Bearer scheme.
+  let auth = req.headers.get('authorization') ?? ''
+  if (!auth) return NO_TENANT
+  if (!auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
 
-  console.log(`[menu-proxy] ${req.method} ${upstream} | tenant:${tenantId} | ct:${ct.slice(0,30)}`)
+  const tenantId = (parseJwt(auth.slice(7))['custom:tenant_id'] as string) ?? ''
+  if (!tenantId) return NO_TENANT
 
-  const hdrs: HeadersInit = {
+  const upstream = `${API_BASE}/menus/${path.join('/')}${req.nextUrl.search}`
+  const ct = req.headers.get('content-type') ?? ''
+
+  const headers: Record<string, string> = {
     'X-Tenant-Id': tenantId,
-    ...(auth ? { Authorization: auth } : {}),
-    ...(!ct.includes('multipart') ? { 'Content-Type': ct || 'application/json' } : {}),
+    Authorization: auth,
   }
 
-  let body: BodyInit | undefined
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    body = ct.includes('multipart') ? await req.formData() : await req.text()
+  const init: RequestInit = { method: req.method, headers, cache: 'no-store' }
+
+  if (!['GET', 'HEAD'].includes(req.method)) {
+    if (ct.includes('multipart')) {
+      // The multipart boundary lives inside the Content-Type header, so it has
+      // to be forwarded verbatim — dropping it makes the server read the whole
+      // body as one field. Send the bytes untouched.
+      headers['Content-Type'] = ct
+      init.body = await req.arrayBuffer()
+    } else {
+      headers['Content-Type'] = ct || 'application/json'
+      init.body = await req.text()
+    }
   }
+
+  const res  = await fetch(upstream, init)
+  const text = await res.text()
 
   try {
-    const res  = await fetch(upstream, { method: req.method, headers: hdrs, body })
-    const text = await res.text()
-    console.log('[proxy] ->', res.status, text.slice(0, 100))
-    return new NextResponse(text, {
-      status:  res.status,
-      headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
-    })
-  } catch (e: any) {
-    return NextResponse.json({ error: 'Proxy error', message: e?.message }, { status: 502 })
+    return NextResponse.json(text ? JSON.parse(text) : {}, { status: res.status })
+  } catch {
+    return new NextResponse(text, { status: res.status })
   }
 }
 
-export const GET     = handler
-export const POST    = handler
-export const PUT     = handler
-export const DELETE  = handler
-export const PATCH   = handler
-export const OPTIONS = () => new NextResponse(null, { status: 204 })
+export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(req, (await ctx.params).path)
+}
+export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(req, (await ctx.params).path)
+}
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(req, (await ctx.params).path)
+}
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(req, (await ctx.params).path)
+}
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(req, (await ctx.params).path)
+}
