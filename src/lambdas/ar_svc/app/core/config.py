@@ -21,8 +21,9 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
     # ── DynamoDB ──────────────────────────────────────────────────────
-    # AR metadata lives on the menu items table (TABLE_MENU / MENU_TABLE).
-    menu_table: str = Field("", alias="TABLE_MENU")
+    # AR metadata (arModelKey, arScale, arPlacement) lives on the menu item
+    # itself, which now has its own table.
+    item_table: str = Field("ItemTable-dev", alias="ITEM_TABLE")
 
     # ── S3 ────────────────────────────────────────────────────────────
     asset_bucket_name: str = Field("", alias="ASSET_BUCKET_NAME")
