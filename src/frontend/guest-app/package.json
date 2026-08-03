@@ -1,0 +1,33 @@
+{
+  "name": "menulay-guest",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1053.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.383.0",
+    "next": "^14.2.35",
+    "qrcode": "^1.5.4",
+    "react": "^18",
+    "react-dom": "^18",
+    "socket.io-client": "^4.7.5",
+    "three": "^0.164.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18",
+    "@types/three": "^0.164.0",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.9.3"
+  }
+}

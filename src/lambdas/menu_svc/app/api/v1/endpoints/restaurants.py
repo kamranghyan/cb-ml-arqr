@@ -25,6 +25,7 @@ from shared.structured_logger import get_logger
 from app.core.dependencies import (
     assert_restaurant_scope,
     get_menu_tenant,
+    get_menu_tenant_optional,
     get_restaurant_service,
     get_s3_repo,
     get_tenant_limits,
@@ -79,12 +80,51 @@ async def list_restaurants(
     ).to_dict()
 
 
+@router.get(
+    "/public/restaurants/{restaurantId}",
+    summary="Public restaurant lookup (used by the guest QR flow)",
+)
+async def public_restaurant(
+    restaurantId: str,
+    svc: Annotated[RestaurantService, Depends(get_restaurant_service)],
+):
+    """
+    Open endpoint — no token, no X-Tenant-Id.
+
+    A guest scans a QR code that carries only ?rid=…&tid=…, so the app needs a
+    way to turn that id into the branch and the tenant it belongs to. Returns
+    just enough to render a menu; nothing private.
+    """
+    try:
+        restaurant = svc.get("", restaurantId)
+    except RestaurantNotFoundError as exc:
+        raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if not restaurant.isActive:
+        raise ResourceNotFoundError("Restaurant", restaurantId)
+
+    return {
+        "restaurantId": restaurant.restaurantId,
+        "tenantId":     restaurant.tenantId,
+        "name":         restaurant.name,
+        "currencyCode": restaurant.currencyCode,
+        "timezone":     restaurant.timezone,
+        "logoUrl":      restaurant.logoUrl,
+        "address":      restaurant.address.to_dict() if restaurant.address else None,
+    }
+
+
 @router.get("/restaurants/{restaurantId}", summary="Get a single restaurant")
 async def get_restaurant(
     restaurantId: str,
-    tenant_id:    Annotated[str,               Depends(get_menu_tenant)],
     svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+    tenant_id:    Annotated[str, Depends(get_menu_tenant_optional)] = "",
 ):
+    """
+    Public. A guest scanning a QR code has only the restaurant id, so the
+    tenant header is optional here — the response tells them which tenant the
+    branch belongs to, which the rest of the guest flow then sends along.
+    """
     try:
         return svc.get(tenant_id, restaurantId).to_dict()
     except RestaurantNotFoundError as exc:

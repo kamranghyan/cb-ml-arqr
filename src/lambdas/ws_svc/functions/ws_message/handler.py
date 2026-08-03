@@ -33,24 +33,48 @@ sqs        = boto3.client("sqs")
 apigw_mgmt = boto3.client("apigatewaymanagementapi", endpoint_url=WS_ENDPOINT)
 
 
-def _broadcast(payload: dict, tenant_id: str, exclude_conn: str = "") -> None:
-    """Send payload to every connection for this tenant, except the sender."""
+def _broadcast(
+    payload: dict,
+    tenant_id: str,
+    restaurant_id: str = "",
+    exclude_conn: str = "",
+) -> None:
+    """
+    Push payload to the other screens that should see it.
+
+    Scope rules:
+      • always limited to the sender's tenant
+      • if the sender is bound to a branch (kitchen staff), only screens on
+        that same branch receive it — Islamabad's kitchen must not see
+        Lahore's orders
+      • connections with no restaurantId (tenant owners watching everything)
+        still receive it
+    """
     data = json.dumps(payload).encode()
     try:
         resp = conn_table.scan(
             FilterExpression="tenantId = :t",
             ExpressionAttributeValues={":t": tenant_id},
-            ProjectionExpression="connectionId",
+            ProjectionExpression="connectionId, restaurantId",
         )
     except ClientError as e:
         logger.error("Connection scan failed: %s", e)
         return
 
     sent = 0
+    skipped_branch = 0
     for item in resp.get("Items", []):
         conn_id = item["connectionId"]
         if conn_id == exclude_conn:
             continue
+
+        # Branch isolation: a sender on a branch only reaches that branch
+        # (plus tenant-wide listeners that have no branch of their own).
+        if restaurant_id:
+            target_branch = item.get("restaurantId", "")
+            if target_branch and target_branch != restaurant_id:
+                skipped_branch += 1
+                continue
         try:
             apigw_mgmt.post_to_connection(ConnectionId=conn_id, Data=data)
             sent += 1
@@ -61,15 +85,18 @@ def _broadcast(payload: dict, tenant_id: str, exclude_conn: str = "") -> None:
                 pass
         except ClientError as e:
             logger.warning("post_to_connection failed conn=%s: %s", conn_id, e)
-    logger.info("Broadcast to tenant=%s sent=%d", tenant_id, sent)
+    logger.info(
+        "Broadcast tenant=%s restaurant=%s sent=%d skipped_other_branch=%d",
+        tenant_id, restaurant_id or "-", sent, skipped_branch)
 
 
-def _get_tenant_for_connection(conn_id: str) -> str:
+def _get_scope_for_connection(conn_id: str) -> tuple[str, str]:
+    """Returns (tenantId, restaurantId) for a connection; blanks if unknown."""
     try:
-        r = conn_table.get_item(Key={"connectionId": conn_id})
-        return (r.get("Item") or {}).get("tenantId", "")
+        item = conn_table.get_item(Key={"connectionId": conn_id}).get("Item") or {}
+        return item.get("tenantId", ""), item.get("restaurantId", "")
     except ClientError:
-        return ""
+        return "", ""
 
 
 def _send_to_dlq(connection_id: str, body: dict, reason: str) -> None:
@@ -122,7 +149,7 @@ def lambda_handler(event: dict, context) -> dict:
 
     # KDS broadcasts a status change to every other screen on the same tenant.
     if action == "orderstatusupdate":
-        tenant_id = _get_tenant_for_connection(connection_id)
+        tenant_id, restaurant_id = _get_scope_for_connection(connection_id)
         if not tenant_id:
             logger.warning("orderStatusUpdate from unknown connection %s", connection_id)
             return {"statusCode": 200, "body": json.dumps({"type": "IGNORED"})}
@@ -134,6 +161,7 @@ def lambda_handler(event: dict, context) -> dict:
                 "flags":   body.get("flags"),
             },
             tenant_id,
+            restaurant_id=restaurant_id,
             exclude_conn=connection_id,
         )
         return {"statusCode": 200, "body": json.dumps({"type": "BROADCAST_OK"})}

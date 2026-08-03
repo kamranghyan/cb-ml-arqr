@@ -1,1 +1,8 @@
-{}
+{
+  "/api/orders/route": "app/api/orders/route.js",
+  "/api/auth/route": "app/api/auth/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/kds/page": "app/kds/page.js",
+  "/page": "app/page.js",
+  "/login/kds/page": "app/login/kds/page.js"
+}

@@ -15,7 +15,8 @@ interface QrRecord {
   createdAt: string; linked: boolean; qrDataUrl?: string;
 }
 
-const DEFAULT_BASE  = process.env.NEXT_PUBLIC_BASE_URL      ?? 'http://localhost:3000';
+// Where a scanned QR should land: the guest app, not this console.
+const GUEST_BASE = process.env.NEXT_PUBLIC_GUEST_APP_URL ?? 'http://localhost:3000';
 const ZONES = ['All Zones', 'Main Hall', 'Garden Terrace', 'Private Dining'];
 const C = { red: '#E1251B', dark: '#891C1C', gold: '#FFC72C', bg: '#FFF8F1', white: '#fff', border: '#F0E8E0', text: '#1A1A1A', muted: '#687780', subtle: '#9CA3AF' };
 
@@ -32,7 +33,7 @@ function buildS3Url(s3Key: string) { return `https://lamaison-assets.s3.ap-south
 
 // Build a QR record from a real table stored in DynamoDB.
 function tableToRecord(t: ApiTable): QrRecord {
-  const base   = typeof window !== 'undefined' ? window.location.origin : DEFAULT_BASE;
+  const base   = GUEST_BASE;
   const s3Key  = buildS3Key(t.restaurantId, t.tableId);
   return {
     id:           t.tableId,
