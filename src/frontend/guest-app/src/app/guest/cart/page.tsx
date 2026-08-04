@@ -36,7 +36,7 @@ export default function CartPage() {
     setTableId(tid || `table-${tnum || '01'}`);
     setTableNum(tnum);
   }, []);
-
+//
 
   const getItemUnitPrice = (item: any) => {
     let unitPrice = item.price;
