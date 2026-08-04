@@ -7,7 +7,6 @@ dist
 *.mp4
 *.mov
 *.zip
-*.png
 *.jpg
 *.jpeg
 .env.local
