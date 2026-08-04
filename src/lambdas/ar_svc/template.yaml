@@ -92,7 +92,8 @@ Resources:
             - Effect: Allow
               Action: [dynamodb:GetItem, dynamodb:UpdateItem]
               Resource:
-                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/${MenuTable}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}/index/*"
             - Effect: Allow
               Action: [s3:GetObject]
               Resource: !Sub "arn:aws:s3:::${AssetBucketName}/*"
