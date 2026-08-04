@@ -10,3 +10,4 @@ dist
 *.jpg
 *.jpeg
 .env.local
+//
