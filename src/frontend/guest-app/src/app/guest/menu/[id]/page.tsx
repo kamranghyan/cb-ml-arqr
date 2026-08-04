@@ -1,20 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Heart, Star, ShoppingCart, Plus, Minus, Check } from 'lucide-react';
+import { ChevronLeft, Heart, Star, Plus, Minus, Check } from 'lucide-react';
 import Link from 'next/link';
 import { fetchMenuItem, normaliseItem, type ApiMenuItem } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
+import { useFavoritesStore } from '@/lib/favorites-store';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 
+const BRAND = '#ff5723';
+
+// ── Placeholder data — not yet available from the backend ───────────────────
+// TODO(backend): ApiMenuItem.customisations has no size/topping pricing
+// today. These replace the old free-text SIZES/EXTRAS with a priced model —
+// multipliers (0.75 / 1.00 / 1.25) are derived from the Figma's example
+// (600 / 800 / 1000 on an Rs.800 item), applied to the real item.price so
+// it's correct for whatever item a guest is actually viewing.
 const SIZES = [
-  { label: 'S',   desc: '12oz',  mult: 0.85 },
-  { label: 'M',   desc: '16oz',  mult: 1.00 },
-  { label: 'L',   desc: '20oz',  mult: 1.15 },
+  { label: 'Small',  mult: 0.75 },
+  { label: 'Medium', mult: 1.00 },
+  { label: 'Large',  mult: 1.25 },
 ];
-const EXTRAS = ['Extra shot', 'Oat milk', 'Less sugar', 'Extra hot', 'No ice'];
+const TOPPINGS = [
+  { label: 'Extra cheese', price: 100 },
+  { label: 'Mushrooms',    price: 100 },
+  { label: 'Olives',       price: 100 },
+  { label: 'Chicken',      price: 100 },
+];
 
 export default function ItemDetailPage() {
   const router    = useRouter();
@@ -23,33 +37,67 @@ export default function ItemDetailPage() {
 
   const [item,     setItem]     = useState<ApiMenuItem | null>(null);
   const [loading,  setLoading]  = useState(true);
-  const [size,     setSize]     = useState(1); // index
+  const [size,     setSize]     = useState(1); // index — Medium default (see note below)
   const [qty,      setQty]      = useState(1);
-  const [extras,   setExtras]   = useState<string[]>([]);
-  const [liked,    setLiked]    = useState(false);
+  const [toppings, setToppings] = useState<string[]>(['Extra cheese']); // matches Figma's shown default
   const [added,    setAdded]    = useState(false);
-  const { addItem, itemCount }  = useCartStore();
+  const { addItem } = useCartStore();
+  const { isFavorite, toggleFavorite } = useFavoritesStore();
+  const liked = item ? isFavorite(item.id) : false;
 
-  const cartCount = itemCount();
+  // ── Image carousel — structurally real (scroll-snap + dots), but
+  // ApiMenuItem only has one imageUrl field today, so it renders as a single
+  // static image with no dots until the backend adds an images[] array.
+  const [activeImg, setActiveImg] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const images = [(item as any)?.imageUrl].filter(Boolean) as string[];
 
-  useEffect(() => {
-    if (!id) return;
-    // Also accept rid/tid from URL params (direct link from landing page)
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlRid = urlParams.get('rid'); const urlTid = urlParams.get('tid');
-    if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
-    if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
-    const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
-    if (!hasSession) { window.location.href = '/guest'; return; }
-    const rid = getGuestScope().restaurantId;
-    fetchMenuItem(id, rid)
-      .then(raw => { setItem(normaliseItem(raw)); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [id]);
+  function handleCarouselScroll() {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setActiveImg(Math.round(el.scrollLeft / el.clientWidth));
+  }
 
-  const toggleExtra = (e: string) => setExtras(p => p.includes(e) ? p.filter(x => x !== e) : [...p, e]);
+useEffect(() => {
+  if (!id) return;
+  
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlRid = urlParams.get('rid'); 
+  const urlTid = urlParams.get('tid');
+  
+  if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
+  if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
+  
+  const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
+  if (!hasSession) { 
+    window.location.href = '/guest'; 
+    return; 
+  }
+  
+  const rid = getGuestScope().restaurantId;
+  
+  console.log('📱 Fetching item with ID:', id, 'Restaurant:', rid);
+  
+  fetchMenuItem(id, rid)
+    .then(item => { 
+      console.log('✅ Item loaded successfully:', item);
+      setItem(item);  
+      setLoading(false); 
+    })
+    .catch((err) => { 
+      console.error('❌ Failed to fetch item:', err);
+      setLoading(false); 
+    });
+}, [id]);
 
-  const finalPrice = item ? Math.round(item.price * SIZES[size].mult * qty) : 0;
+  const toggleTopping = (label: string) =>
+    setToppings(p => p.includes(label) ? p.filter(x => x !== label) : [...p, label]);
+
+  const sizePrice     = item ? item.price * SIZES[size].mult : 0;
+  const toppingsTotal = toppings.reduce((sum, t) => sum + (TOPPINGS.find(x => x.label === t)?.price ?? 0), 0);
+  const unitPrice      = sizePrice + toppingsTotal;
+  const finalPrice     = Math.round(unitPrice * qty);
+
   const hasAr  = !!(item as any)?.arModelKey || !!(item as any)?.arModelUrl;
   const arUrl  = (item as any)?.arModelUrl ?? '';
   const rid    = getGuestScope().restaurantId;
@@ -57,149 +105,192 @@ export default function ItemDetailPage() {
 
   const handleAddToCart = () => {
     if (!item) return;
+    
+    // Calculate the total price for display
+    const sizePrice = item.price * SIZES[size].mult;
+    const toppingsTotal = toppings.reduce((sum, t) => sum + (TOPPINGS.find(x => x.label === t)?.price ?? 0), 0);
+    const totalUnitPrice = Math.round(sizePrice + toppingsTotal);
+    
     addItem({
-      menuItemId: item.id, name: item.name, emoji: item.emoji ?? '🍽️',
-      price: Math.round(item.price * SIZES[size].mult),
+      menuItemId: item.id,
+      name: item.name,
+      emoji: item.emoji ?? '🍽️',
+      price: item.price, // ← Store BASE price only
       quantity: qty,
-      options: { doneness: SIZES[size].label, side: extras.join(', ') },
+      options: {
+        size: SIZES[size].label,
+        sizeMultiplier: SIZES[size].mult, // ← Store multiplier for later calculation
+        toppings: toppings.join(', '),
+        toppingsTotal: toppingsTotal, // ← Store toppings total for later calculation
+        totalPrice: totalUnitPrice, // ← Store total for display
+      },
     });
+    
     setAdded(true);
     setTimeout(() => { setAdded(false); router.push('/guest/cart'); }, 800);
   };
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
-    text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280',
+    text: '#F5F0E8', muted: '#9CA3AF',
   } : {
-    bg: '#FFF8F1', card: '#FFFFFF', card2: '#F5F0EA', border: '#F0E8E0',
-    text: '#1A1A1A', muted: '#687780', sub: '#9CA3AF',
+    bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
+    text: '#000000', muted: '#6B6B6B',
   };
 
   if (loading) return (
     <div style={{ minHeight: '100dvh', background: D.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 32, height: 32, border: '3px solid #E1251B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 32, height: 32, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if (!item) return (
+    <div style={{ minHeight: '100dvh', background: D.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      <p style={{ color: D.text, fontSize: 18 }}>Item not found</p>
+      <button onClick={() => router.back()} style={{ color: BRAND, background: 'none', border: 'none', cursor: 'pointer' }}>
+        Go back
+      </button>
     </div>
   );
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans', sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── Item Hero ── */}
-      <div style={{ position: 'relative', background: D.card2, paddingBottom: 30 }}>
-        {/* Nav */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '52px 20px 20px' }}>
-          <button onClick={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <ArrowLeft size={18} color={D.text} />
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 160px' }}>
+
+        {/* ── Header — bare icons, no button chrome, matches Figma ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 0 16px' }}>
+          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
+            <ChevronLeft size={30} strokeWidth={2.5} />
           </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setLiked(!liked)}
-              style={{ width: 40, height: 40, borderRadius: 12, background: liked ? '#FFF0F0' : D.card, border: `1.5px solid ${liked ? '#FFD0D0' : D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Heart size={18} color={liked ? '#E1251B' : D.muted} fill={liked ? '#E1251B' : 'none'} />
-            </button>
-            <button onClick={() => router.push('/guest/cart')} style={{ width: 40, height: 40, borderRadius: 12, background: '#E1251B', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
-              <ShoppingCart size={17} color="#fff" />
-              {cartCount > 0 && <span style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: '#FFC72C', color: '#891C1C', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{cartCount}</span>}
-            </button>
-          </div>
+          <button
+            onClick={() => item && toggleFavorite({ id: item.id, name: item.name, price: item.price, emoji: item.emoji ?? '🍽️', imageUrl: (item as any).imageUrl, description: item.description })}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }}
+            aria-label="Save to favorites"
+          >
+            <Heart size={26} strokeWidth={2} fill={liked ? BRAND : 'none'} />
+          </button>
         </div>
 
-        {/* Item image */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '0 20px 20px' }}>
-          <div style={{ width: 160, height: 160, borderRadius: '50%', background: isDark ? '#2A2A2A' : '#E8DDD5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 80, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            {(item as any)?.imageUrl
-              ? <img src={(item as any).imageUrl} alt={item?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : item?.emoji}
+        {/* ── Image carousel ── */}
+        <div>
+          <div
+            ref={scrollRef}
+            onScroll={handleCarouselScroll}
+            style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', borderRadius: 20 }}
+          >
+            {images.length > 0 ? images.map((src, i) => (
+              <img key={i} src={src} alt={item?.name}
+                style={{ width: '100%', flexShrink: 0, scrollSnapAlign: 'center', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 20 }} />
+            )) : (
+              <div style={{ width: '100%', flexShrink: 0, aspectRatio: '16 / 9', borderRadius: 20, background: D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>
+                {item?.emoji ?? '🍽️'}
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* Rating pill */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#FFC72C', padding: '6px 16px', borderRadius: 20 }}>
-            <Star size={13} fill="#891C1C" color="#891C1C" />
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#891C1C' }}>4.8 · 2.4k reviews</span>
-          </div>
-          {hasAr && (
-            <Link href={arHref}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg,#891C1C,#E1251B)', padding: '6px 16px', borderRadius: 20, textDecoration: 'none' }}>
-              <span style={{ fontSize: 13 }}>🫙</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>View in 3D</span>
-            </Link>
+          {images.length > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+              {images.map((_, i) => (
+                <span key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i === activeImg ? BRAND : '#ffbca7' }} />
+              ))}
+            </div>
           )}
         </div>
-      </div>
 
-      {/* ── Scrollable Details ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 120px' }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: D.text, margin: '0 0 8px', fontFamily: 'Georgia, serif' }}>{item?.name}</h1>
-        <p style={{ fontSize: 14, color: D.muted, margin: '0 0 24px', lineHeight: 1.6 }}>{item?.description || 'A carefully crafted dish made with the finest ingredients.'}</p>
+        {/* ── Title ── */}
+        <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 28, fontWeight: 700, color: D.text, margin: '20px 0 16px' }}>
+          {item?.name}
+        </h1>
 
-        {/* AR banner — only when item has a 3D model */}
+        {/* ── Info card: rating + price + description ── */}
+        <div style={{ background: BRAND, borderRadius: 20, padding: '18px 20px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Star size={16} fill="#fff" color="#fff" />
+              <span style={{ fontSize: 15, color: '#fff' }}>{(item?.rating ?? 4.5).toFixed(1)} ({item?.reviewCount ?? 0} reviews)</span>
+            </div>
+            <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: '#fff' }}>Rs. {item?.price?.toLocaleString() ?? 0}</span>
+          </div>
+          <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.95)', margin: 0, lineHeight: 1.6 }}>
+            {item?.description || 'A carefully crafted dish made with the finest ingredients.'}
+          </p>
+        </div>
+
+        {/* ── AR entry — only when this item actually has a 3D model ── */}
         {hasAr && (
-          <Link href={arHref} style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '0 0 24px', padding: '14px 16px', background: 'linear-gradient(135deg, #891C1C, #B22222)', borderRadius: 16, textDecoration: 'none', boxShadow: '0 4px 16px rgba(137,28,28,0.25)' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,199,44,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🫙</div>
+          <Link href={arHref} style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '0 0 24px', padding: '14px 16px', background: BRAND, borderRadius: 16, textDecoration: 'none' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🫙</div>
             <div style={{ flex: 1 }}>
               <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, margin: 0 }}>View in Augmented Reality</p>
-              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, margin: '2px 0 0' }}>Place on your table · Mobile & Desktop</p>
+              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0' }}>Place on your table · Mobile & Desktop</p>
             </div>
-            <span style={{ color: '#FFC72C', fontSize: 20 }}>›</span>
+            <span style={{ color: '#fff', fontSize: 20 }}>›</span>
           </Link>
         )}
 
-        {/* Size selector */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: '0 0 12px' }}>Choose Size</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {SIZES.map((s, i) => (
-              <button key={s.label} onClick={() => setSize(i)}
-                style={{ flex: 1, padding: '12px 8px', borderRadius: 14, border: `2px solid ${size === i ? '#E1251B' : D.border}`, background: size === i ? '#E1251B' : D.card, color: size === i ? '#fff' : D.text, cursor: 'pointer', transition: 'all 0.2s' }}>
-                <p style={{ fontSize: 18, fontWeight: 800, margin: '0 0 2px' }}>{s.label}</p>
-                <p style={{ fontSize: 11, margin: '0 0 4px', opacity: 0.7 }}>{s.desc}</p>
-                <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>Rs. {Math.round((item?.price || 0) * s.mult).toLocaleString()}</p>
-              </button>
-            ))}
+        {/* ── Choose Size ── */}
+        <div style={{ marginBottom: 28 }}>
+          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Choose Size</h2>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {SIZES.map((s, i) => {
+              const selected = size === i;
+              return (
+                <button key={s.label} onClick={() => setSize(i)}
+                  style={{ flex: 1, padding: '16px 8px', borderRadius: 16, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 600, margin: '0 0 4px', color: selected ? '#fff' : BRAND }}>{s.label}</p>
+                  <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 15, margin: 0, color: selected ? '#fff' : BRAND }}>
+                    {Math.round((item?.price || 0) * s.mult).toLocaleString()}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Customise */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: '0 0 12px' }}>Customise</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {EXTRAS.map(e => (
-              <button key={e} onClick={() => toggleExtra(e)}
-                style={{ padding: '8px 16px', borderRadius: 20, border: `1.5px solid ${extras.includes(e) ? '#E1251B' : D.border}`, background: extras.includes(e) ? '#FFF0EE' : D.card, color: extras.includes(e) ? '#E1251B' : D.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>
-                {e}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Quantity */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: D.text }}>Quantity</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => setQty(q => Math.max(1, q - 1))}
-              style={{ width: 36, height: 36, borderRadius: 10, background: D.card2, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Minus size={16} color={D.text} />
-            </button>
-            <span style={{ fontSize: 18, fontWeight: 800, color: D.text, minWidth: 24, textAlign: 'center' }}>{qty}</span>
-            <button onClick={() => setQty(q => q + 1)}
-              style={{ width: 36, height: 36, borderRadius: 10, background: '#E1251B', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Plus size={16} color="#fff" />
-            </button>
+        {/* ── Extra Toppings ── */}
+        <div style={{ marginBottom: 12 }}>
+          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Extra Toppings</h2>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {TOPPINGS.map(t => {
+              const checked = toppings.includes(t.label);
+              return (
+                <button key={t.label} onClick={() => toggleTopping(t.label)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: 6, border: `2px solid ${BRAND}`, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {checked && <Check size={16} color="#363853" strokeWidth={3} />}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 16, color: D.text }}>{t.label}</span>
+                  <span style={{ fontSize: 15, color: D.text }}>RS:{t.price}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* ── Add to Cart CTA ── */}
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '16px 20px 32px', background: D.bg, borderTop: `1px solid ${D.border}` }}>
+      {/* ── Bottom bar: quantity stepper + Add to Cart ── */}
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '18px 20px 32px', background: BRAND, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(0,0,0,0.15)', borderRadius: 14, overflow: 'hidden', flexShrink: 0 }}>
+          <button onClick={() => setQty(q => Math.max(1, q - 1))}
+            style={{ width: 46, height: 54, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
+            <Minus size={18} />
+          </button>
+          <span style={{ width: 46, height: 54, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 700, color: '#000' }}>{qty}</span>
+          <button onClick={() => setQty(q => q + 1)}
+            style={{ width: 46, height: 54, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
+            <Plus size={18} />
+          </button>
+        </div>
         <button onClick={handleAddToCart}
-          style={{ width: '100%', height: 56, borderRadius: 28, background: added ? '#22c55e' : '#E1251B', color: '#fff', border: 'none', fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', cursor: 'pointer', boxShadow: added ? '0 6px 20px rgba(34,197,94,0.35)' : '0 6px 20px rgba(225,37,27,0.35)', transition: 'all 0.3s' }}>
-          <span>{added ? '✓ Added!' : 'Add to Cart'}</span>
-          <span style={{ background: 'rgba(255,255,255,0.25)', padding: '4px 14px', borderRadius: 20, fontSize: 14, fontWeight: 800 }}>
-            Rs. {finalPrice.toLocaleString()}
-          </span>
+          style={{ flex: 1, height: 54, borderRadius: 14, background: added ? '#22c55e' : '#e74f21', border: '1.5px solid rgba(0,0,0,0.15)', color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}>
+          {added ? '✓ Added!' : 'Add to Cart'}
         </button>
+      </div>
+      <div style={{ position: 'fixed', bottom: 104, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, textAlign: 'center', pointerEvents: 'none' }}>
+        <span style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 14px', borderRadius: 20 }}>
+          Total: Rs. {finalPrice.toLocaleString()}
+        </span>
       </div>
     </div>
   );

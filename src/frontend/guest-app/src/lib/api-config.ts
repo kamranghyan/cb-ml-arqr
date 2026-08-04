@@ -35,7 +35,7 @@ export const MENU_API = {
 // ── AR_API — proxied through /api/ar ─────────────────────────────────────────
 export const AR_API = {
   model: (itemId: string, rid = RESTAURANT_ID) =>
-    `/api/ar/${rid}/${itemId}`,
+     `/api/ar?rid=${rid}&iid=${itemId}`,
 }
 
 export const QR_API = {

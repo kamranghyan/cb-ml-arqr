@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, X } from 'lucide-react';
+import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
+import BottomNav from '@/components/guest/BottomNav';
+
+const BRAND = '#ff5723';
 
 interface LineItem { name: string; itemId: string; quantity: number; unitPriceMinorUnits: number; totalPriceMinorUnits: number; }
 interface ApiOrder { orderId: string; status: string; tableId?: string; lineItems: LineItem[]; placedAt?: string; totalAmountMinorUnits?: number; }
@@ -118,8 +121,8 @@ export default function TrackingPage() {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280',
   } : {
-    bg: '#FFF8F1', card: '#FFFFFF', card2: '#F5F0EA', border: '#F0E8E0',
-    text: '#1A1A1A', muted: '#687780', sub: '#9CA3AF',
+    bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
+    text: '#000000', muted: '#9D9D9D', sub: '#C4C4C4',
   };
 
   // Progress bar %
@@ -132,10 +135,10 @@ export default function TrackingPage() {
       {showCancel && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
           <div style={{ width: '100%', maxWidth: 480, margin: '0 auto', background: D.card, borderRadius: '24px 24px 0 0', padding: '28px 24px 40px' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: D.text, margin: '0 0 8px', textAlign: 'center' }}>Cancel Order?</h3>
+            <h3 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 8px', textAlign: 'center' }}>Cancel Order?</h3>
             <p style={{ fontSize: 13, color: D.muted, margin: '0 0 24px', textAlign: 'center' }}>This action cannot be undone. Please contact staff if needed.</p>
             {cancelError && (
-              <p style={{ fontSize: 12, color: '#E1251B', textAlign: 'center', margin: '0 0 12px' }}>{cancelError}</p>
+              <p style={{ fontSize: 12, color: BRAND, textAlign: 'center', margin: '0 0 12px' }}>{cancelError}</p>
             )}
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => { setShowCancel(false); setCancelError(''); }}
@@ -144,7 +147,7 @@ export default function TrackingPage() {
                 Keep Order
               </button>
               <button onClick={cancelOrder} disabled={cancelling}
-                style={{ flex: 1, height: 48, borderRadius: 24, background: '#E1251B', border: 'none', color: '#fff', fontSize: 14, fontWeight: 800, cursor: cancelling ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cancelling ? 0.7 : 1 }}>
+                style={{ flex: 1, height: 48, borderRadius: 24, background: BRAND, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: cancelling ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cancelling ? 0.7 : 1 }}>
                 {cancelling
                   ? <><div style={{ width: 16, height: 16, border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Cancelling…</>
                   : 'Cancel Order'}
@@ -161,7 +164,7 @@ export default function TrackingPage() {
             <ArrowLeft size={18} color={D.text} />
           </button>
           <div style={{ textAlign: 'center' }}>
-            <h1 style={{ fontSize: 17, fontWeight: 800, color: D.text, margin: 0 }}>Order Tracking</h1>
+            <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: D.text, margin: 0 }}>Order Tracking</h1>
             {latest && <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Order #{latest.orderId.slice(0,8).toUpperCase()}</p>}
           </div>
           <button onClick={() => load()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -170,12 +173,12 @@ export default function TrackingPage() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: `0 20px ${latest && !isCancelled ? 180 : 100}px` }}>
 
         {/* Loading */}
         {loading && orders.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 0', gap: 12 }}>
-            <div style={{ width: 28, height: 28, border: '3px solid #E1251B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ width: 28, height: 28, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
             <p style={{ color: D.muted, fontSize: 14 }}>Fetching your orders…</p>
           </div>
         )}
@@ -185,7 +188,7 @@ export default function TrackingPage() {
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <span style={{ fontSize: 40, opacity: 0.2 }}>📋</span>
             <p style={{ color: D.muted, fontSize: 14, marginTop: 12 }}>No orders yet</p>
-            <button onClick={() => router.push('/guest/menu')} style={{ marginTop: 16, padding: '10px 24px', borderRadius: 24, background: '#E1251B', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => router.push('/guest/menu')} style={{ marginTop: 16, padding: '10px 24px', borderRadius: 24, background: BRAND, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Browse Menu
             </button>
           </div>
@@ -196,10 +199,10 @@ export default function TrackingPage() {
             {/* ── Hero status card ── */}
             <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 24, padding: '28px 20px', marginBottom: 16, textAlign: 'center' }}>
               {/* Icon */}
-              <div style={{ width: 80, height: 80, borderRadius: '50%', background: isCancelled ? '#FFF0F0' : 'linear-gradient(135deg,#FFF3E0,#FFF8F1)', border: `3px solid ${isCancelled ? '#FFD0D0' : '#FFC72C'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(255,199,44,0.2)' }}>
-                {(() => { const Icon = STATUS_STEPS[currentStep]?.icon; return isCancelled ? '❌' : Icon ? <Icon size={36} color="#E1251B" /> : <span>🍽️</span>; })()}
+              <div style={{ width: 80, height: 80, borderRadius: '50%', background: isCancelled ? '#FFF0F0' : '#ffbca7', border: `3px solid ${isCancelled ? '#FFD0D0' : BRAND}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 16px' }}>
+                {(() => { const Icon = STATUS_STEPS[currentStep]?.icon; return isCancelled ? '❌' : Icon ? <Icon size={36} color={BRAND} /> : <span>🍽️</span>; })()}
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 900, color: D.text, fontFamily: 'Georgia,serif', margin: '0 0 4px' }}>
+              <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 21, fontWeight: 700, color: D.text, margin: '0 0 4px' }}>
                 {isCancelled ? 'Order Cancelled' : STATUS_STEPS[currentStep]?.label ?? 'Processing…'}
               </h2>
               <p style={{ fontSize: 13, color: D.muted, margin: '0 0 20px' }}>
@@ -209,7 +212,7 @@ export default function TrackingPage() {
               {/* Progress bar */}
               {!isCancelled && (
                 <div style={{ height: 6, background: D.card2, borderRadius: 3, overflow: 'hidden', margin: '0 8px' }}>
-                  <div style={{ height: '100%', background: 'linear-gradient(90deg,#891C1C,#E1251B)', borderRadius: 3, width: `${progressPct}%`, transition: 'width 1s ease' }} />
+                  <div style={{ height: '100%', background: BRAND, borderRadius: 3, width: `${progressPct}%`, transition: 'width 1s ease' }} />
                 </div>
               )}
             </div>
@@ -225,16 +228,16 @@ export default function TrackingPage() {
                     <div key={step.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: i < STATUS_STEPS.length - 1 ? 20 : 0, position: 'relative' }}>
                       {/* Connector line */}
                       {i < STATUS_STEPS.length - 1 && (
-                        <div style={{ position: 'absolute', left: 19, top: 40, width: 2, height: 20, background: done ? '#E1251B' : D.border }} />
+                        <div style={{ position: 'absolute', left: 19, top: 40, width: 2, height: 20, background: done ? BRAND : D.border }} />
                       )}
                       {/* Icon circle */}
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: `2px solid ${done || current ? '#E1251B' : D.border}`, background: done ? '#E1251B' : current ? '#FFF0EE' : D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: current ? '0 0 16px rgba(225,37,27,0.3)' : 'none', transition: 'all 0.5s' }}>
-                        {done ? <span style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>✓</span> : <Icon size={16} color={current ? '#E1251B' : D.sub} />}
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: `2px solid ${done || current ? BRAND : D.border}`, background: done ? BRAND : current ? '#ffe4d8' : D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.5s' }}>
+                        {done ? <span style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>✓</span> : <Icon size={16} color={current ? BRAND : D.sub} />}
                       </div>
                       <div style={{ flex: 1, paddingTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <p style={{ fontSize: 14, fontWeight: 700, color: done || current ? D.text : D.sub, margin: 0 }}>{step.label}</p>
-                          {current && <span style={{ fontSize: 9, background: '#E1251B', color: '#fff', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>Live</span>}
+                          <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 15, fontWeight: 600, color: done || current ? D.text : D.sub, margin: 0 }}>{step.label}</p>
+                          {current && <span style={{ fontSize: 9, background: BRAND, color: '#fff', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>Live</span>}
                         </div>
                         <p style={{ fontSize: 12, color: D.muted, margin: '2px 0 0' }}>{step.desc}</p>
                       </div>
@@ -252,16 +255,16 @@ export default function TrackingPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🍽️</div>
                     <div>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: D.text, margin: 0 }}>{li.name}</p>
+                      <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 14, fontWeight: 600, color: D.text, margin: 0 }}>{li.name}</p>
                       <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>× {li.quantity}</p>
                     </div>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#E1251B' }}>{formatRs(li.totalPriceMinorUnits)}</span>
+                  <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 14, fontWeight: 700, color: BRAND }}>{formatRs(li.totalPriceMinorUnits)}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, marginTop: 4, borderTop: `1.5px solid ${D.border}` }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: D.muted }}>Total</span>
-                <span style={{ fontSize: 18, fontWeight: 900, color: '#891C1C', fontFamily: 'Georgia,serif' }}>{formatRs(latest.totalAmountMinorUnits)}</span>
+                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 15, fontWeight: 700, color: D.text }}>Total</span>
+                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: D.text }}>{formatRs(latest.totalAmountMinorUnits)}</span>
               </div>
             </div>
 
@@ -271,9 +274,9 @@ export default function TrackingPage() {
         )}
       </div>
 
-      {/* Cancel button */}
+      {/* Cancel button — fixed above BottomNav, same convention as Cart's checkout button */}
       {latest && !isCancelled && (
-        <div style={{ padding: '14px 20px 32px', background: D.bg, borderTop: `1px solid ${D.border}` }}>
+        <div style={{ position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '0 20px', boxSizing: 'border-box', zIndex: 99 }}>
           <button onClick={() => setShowCancel(true)}
             style={{ width: '100%', height: 50, borderRadius: 25, background: D.card, border: `1.5px solid ${D.border}`, color: D.muted, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
             Cancel Order
@@ -281,6 +284,7 @@ export default function TrackingPage() {
         </div>
       )}
 
+      <BottomNav />
       <style>{`.animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );

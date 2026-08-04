@@ -75,15 +75,41 @@ export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem
 }
 
 // ── Fetch single item + AR model ──────────────────────────────────────────────
+// ── Fetch single item (only fetch AR if item has arModelKey) ────────────────
 export async function fetchMenuItem(itemId: string, restaurantId?: string): Promise<ApiMenuItem> {
-  const rid  = restaurantId?.trim() || RESTAURANT_ID
-  const item = await menuFetch<any>(MENU_API.item(itemId, rid))
+  const rid = restaurantId?.trim() || RESTAURANT_ID
+  
+  // Fetch the menu item first
+  const item = await menuFetch<any>(
+    MENU_API.item(itemId, rid),
+    {},
+    rid
+  )
+  
+  // Only try AR if the item has an arModelKey
+  if (item.arModelKey) {
+    try {
+      const arData = await fetchARModel(itemId, rid)
+      if (arData && arData.presignedUrl) {
+        return normaliseItem({ ...item, arModelUrl: arData.presignedUrl, hasArModel: true })
+      }
+    } catch (error) {
+      // Ignore
+    }
+  }
+  
+  return normaliseItem({ ...item, hasArModel: false })
+}
 
+async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
   try {
-    const arData = await menuFetch<any>(AR_API.model(itemId, rid))
-    return normaliseItem({ ...item, arModelUrl: arData.presignedUrl })
+    const res = await fetch(AR_API.model(itemId, rid), {
+      headers: { 'x-tenant-id': rid }
+    })
+    if (!res.ok) return null
+    return await res.json()
   } catch {
-    return normaliseItem(item)
+    return null
   }
 }
 
