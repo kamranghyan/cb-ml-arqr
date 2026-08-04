@@ -37,7 +37,7 @@ export default function CartPage() {
     setTableNum(tnum);
   }, []);
 
-  // Calculate total price for each item including options
+
   const getItemUnitPrice = (item: any) => {
     let unitPrice = item.price;
     if (item.options?.sizeMultiplier) {
