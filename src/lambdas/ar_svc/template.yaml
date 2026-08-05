@@ -60,7 +60,7 @@ Resources:
     Properties:
       LayerName: !Sub "menulay-shared-${Environment}"
       Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
-      ContentUri: ../../layers/shared_layer
+      ContentUri: ../layers/shared_layer
       CompatibleRuntimes:
         - python3.13
       CompatibleArchitectures:
