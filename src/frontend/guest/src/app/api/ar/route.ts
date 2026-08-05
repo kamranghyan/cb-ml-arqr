@@ -23,57 +23,21 @@ async function resolveTenant(restaurantId: string): Promise<string> {
   } catch { return ''; }
 }
 
-// app/api/ar/route.ts - update the error handling
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const rid = searchParams.get('rid');
   const iid = searchParams.get('iid');
-  
-  console.log('📡 AR GET request:', { rid, iid });
-  
-  if (!rid || !iid) {
-    return NextResponse.json({ error: 'Missing rid or iid' }, { status: 400 });
-  }
+  if (!rid || !iid) return NextResponse.json({ error: 'Missing rid or iid' }, { status: 400 });
 
   try {
-    const tenantId = await resolveTenant(rid);
-    console.log('📡 Tenant ID resolved:', tenantId);
-    
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Could not resolve tenant' }, { status: 404 });
-    }
-
-    const url = `${API_BASE}/${rid}/${iid}`;
-    console.log('📡 Fetching AR from:', url);
-    
-    const res = await fetch(url, {
+    const res = await fetch(`${API_BASE}/${rid}/${iid}`, {
       cache: 'no-store',
-      headers: { 
-        'Accept': 'application/json', 
-        'x-tenant-id': tenantId 
-      },
+      headers: { 'Accept': 'application/json', 'x-tenant-id': await resolveTenant(rid) },
     });
-    
     const text = await res.text();
-    console.log('📡 AR response status:', res.status);
-    
-    if (!res.ok) {
-      // For 404, return a clean response with status 404
-      if (res.status === 404) {
-        return NextResponse.json(
-          { error: 'item_not_found', message: 'AR model not found' }, 
-          { status: 404 }
-        );
-      }
-      return NextResponse.json(
-        { error: `AR API ${res.status}`, detail: text }, 
-        { status: res.status }
-      );
-    }
-    
+    if (!res.ok) return NextResponse.json({ error: `AR API ${res.status}`, detail: text }, { status: res.status });
     return NextResponse.json(JSON.parse(text), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err: any) {
-    console.error('❌ AR GET error:', err);
     return NextResponse.json({ error: err?.message }, { status: 500 });
   }
 }
