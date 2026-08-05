@@ -33,11 +33,15 @@ class LineItem(BaseModel):
 class OrderRequest(BaseModel):
     tenantId:              str
     restaurantId:          str
-    tableId:               str
+    tableId:               str = ""          # empty for pickup and delivery
     currencyCode:          str
     lineItems:             List[LineItem] = Field(..., min_length=1)
     totalAmountMinorUnits: int = Field(..., gt=0)
     guestConnectionId:     Optional[str] = None
+
+    orderType:             str = "dine_in"   # dine_in | pickup | delivery
+    deliveryAddress:       Optional[str] = None
+    contactPhone:          Optional[str] = None
 
     @model_validator(mode="after")
     def validate_total_amount(self):
@@ -78,6 +82,11 @@ class OrderRecord(BaseModel):
     currencyCode:              str
     stepFunctionsExecutionArn: str
     guestConnectionId:         Optional[str] = None
+
+    orderType:                 str = "dine_in"
+    deliveryAddress:           Optional[str] = None
+    contactPhone:              Optional[str] = None
+
     placedAt:                  str
     updatedAt:                 str
     ttl:                       int
@@ -99,6 +108,9 @@ class OrderRecord(BaseModel):
             currencyCode=request.currencyCode,
             stepFunctionsExecutionArn=execution_arn,
             guestConnectionId=request.guestConnectionId,
+            orderType=request.orderType,
+            deliveryAddress=request.deliveryAddress,
+            contactPhone=request.contactPhone,
             placedAt=placed_at,
             updatedAt=placed_at,
             ttl=ttl,
