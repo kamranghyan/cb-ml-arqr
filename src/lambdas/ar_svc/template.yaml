@@ -7,9 +7,6 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, staging, prod]
-  MenuTable:
-    Type: String
-    Default: MenuTable-dev
   AssetBucketName:
     Type: String
     Default: menu-assets-dev-833090513377
@@ -41,8 +38,7 @@ Globals:
       Variables:
         ENVIRONMENT:          !Ref Environment
         LOG_LEVEL:            !Ref LogLevel
-        TABLE_MENU:           !Ref MenuTable
-        MENU_TABLE:           !Ref MenuTable
+        ITEM_TABLE:           !Sub "ItemTable-${Environment}"
         ASSET_BUCKET_NAME:    !Ref AssetBucketName
         CF_DOMAIN:            !Ref CfDomain
         COGNITO_REGION:       !Ref CognitoRegion
@@ -64,7 +60,7 @@ Resources:
     Properties:
       LayerName: !Sub "menulay-shared-${Environment}"
       Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
-      ContentUri: ../layers/shared_layer
+      ContentUri: ../../layers/shared_layer
       CompatibleRuntimes:
         - python3.13
       CompatibleArchitectures:
