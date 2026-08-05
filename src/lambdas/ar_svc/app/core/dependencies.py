@@ -69,7 +69,7 @@ def get_ar_service() -> ArAssetsService:
     """Provide ArAssetsService with injected AWS clients (cached on warm starts)."""
     return ArAssetsService(
         s3_client=get_s3_client(),
-        ddb_table=get_dynamodb_resource().Table(_settings.menu_table),
+        ddb_table=get_dynamodb_resource().Table(_settings.item_table),
         cf_client=boto3.client("cloudfront"),
         bucket_name=_settings.asset_bucket_name,
         cf_domain=_settings.cf_domain,

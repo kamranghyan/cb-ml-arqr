@@ -214,11 +214,12 @@ class ArAssetsService:
         restaurant_id: str,
         item_id:       str,
     ) -> dict:
-        return {
-            "PK": f"TENANT#{tenant_id}#RESTAURANT#{restaurant_id}",
-            "SK": f"ITEM#{item_id}",
-        }
-
+        """
+        ItemTable is keyed by itemId alone. tenant_id and restaurant_id are
+        kept in the signature because callers pass them, and because _ddb_get
+        uses restaurant_id to confirm the item really belongs to that branch.
+        """
+        return {"itemId": item_id}
 
     def _ddb_get(
         self,
