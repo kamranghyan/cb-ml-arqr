@@ -91,16 +91,10 @@ export interface KdsOrderItem {
   done: boolean;
 }
 
-export type KdsOrderType = 'dine_in' | 'pickup' | 'delivery';
-
 export interface KdsOrder {
   id: string;
   table: string;
   zone: string;
-  /** Dine-in goes to a table; pickup is packed; delivery is sent out. */
-  orderType: KdsOrderType;
-  deliveryAddress?: string;
-  contactPhone?: string;
   status: KdsStatus;
   elapsedSeconds: number;
   maxSeconds: number;
