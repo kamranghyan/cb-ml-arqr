@@ -90,7 +90,7 @@ export default function KitchenDisplayPage() {
     try {
       const fresh=await fetchOrders(); const freshIds=new Set(fresh.map((o:any)=>o.id));
       const newOnes=fresh.filter((o:any)=>!prevIds.current.has(o.id));
-      if (newOnes.length>0&&prevIds.current.size>0) newOnes.forEach((o:any)=>{showToast(`🔔 New order #${o.id} — Table ${o.table}`);if(audio)playNewOrderBeep();});
+      if (newOnes.length>0&&prevIds.current.size>0) newOnes.forEach((o:any)=>{showToast(`🔔 New order #${o.id} — ${o.orderType === 'dine_in' ? `Table ${o.table}` : TYPE_LABEL[o.orderType as keyof typeof TYPE_LABEL] ?? ''}`);if(audio)playNewOrderBeep();});
       prevIds.current=freshIds;
       setOrders(prev=>{ const m=new Map(prev.map(o=>[o.id,o])); return fresh.map((o:any)=>{ const e=m.get(o.id); if(!e) return o; const er=STATUS_RANK[e.status]??0; const fr=STATUS_RANK[o.status]??0; const status=er>fr?e.status:o.status; return{...o,status,elapsedSeconds:e.elapsedSeconds,items:e.items}; }); });
       setApiState('live'); pollStart.current=Date.now();
@@ -191,9 +191,16 @@ export default function KitchenDisplayPage() {
                   <div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <p style={{fontFamily:'monospace',fontSize:13,fontWeight:800,color:C.dark,margin:0}}>#{order.id}</p>
+                      <span style={typeBadge(order.orderType)}>{TYPE_LABEL[order.orderType] ?? 'Dine in'}</span>
                       {allDone&&order.status!=='delivered'&&<span style={{fontSize:9,background:'#F0FFF4',border:'1px solid #BBF7D0',color:'#16a34a',padding:'2px 8px',borderRadius:20,fontWeight:700}}>ALL DONE</span>}
                     </div>
-                    <p style={{fontSize:11,color:C.muted,margin:'3px 0 0'}}>🪑 Table {order.table} · {order.zone}</p>
+                    <p style={{fontSize:11,color:C.muted,margin:'3px 0 0'}}>
+                      {order.orderType === 'delivery'
+                        ? <>🛵 {order.deliveryAddress || 'Delivery'}{order.contactPhone ? ` · ${order.contactPhone}` : ''}</>
+                        : order.orderType === 'pickup'
+                          ? <>🥡 Pickup at counter</>
+                          : <>🪑 Table {order.table} · {order.zone}</>}
+                    </p>
                   </div>
                   <div style={{textAlign:'right'}}>
                     <p style={{fontFamily:'monospace',fontSize:22,fontWeight:800,margin:0}} className={timerColorClass(order.elapsedSeconds,order.maxSeconds)}>{formatTimer(order.elapsedSeconds)}</p>
@@ -233,4 +240,28 @@ export default function KitchenDisplayPage() {
       <style>{`.animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
+}
+
+// ── Order type ────────────────────────────────────────────────────────────────
+
+const TYPE_LABEL: Record<string, string> = {
+  dine_in:  'Dine in',
+  pickup:   'Pickup',
+  delivery: 'Delivery',
+};
+
+const TYPE_COLOR: Record<string, string> = {
+  dine_in:  '#687780',   // ordinary — most orders are this
+  pickup:   '#B45309',   // needs packing
+  delivery: '#1D4ED8',   // needs a rider
+};
+
+/** Colour-codes what has to happen to the food once it is cooked. */
+function typeBadge(type: string): React.CSSProperties {
+  const color = TYPE_COLOR[type] ?? TYPE_COLOR.dine_in;
+  return {
+    fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
+    padding: '2px 8px', borderRadius: 20,
+    background: `${color}15`, border: `1px solid ${color}40`, color,
+  };
 }

@@ -85,6 +85,9 @@ async def create_order(
         ],
         totalAmountMinorUnits=body.totalAmountMinorUnits,
         guestConnectionId=body.guestConnectionId,
+        orderType=body.orderType,
+        deliveryAddress=body.deliveryAddress,
+        contactPhone=body.contactPhone,
     )
 
     # Menu validation (skippable in dev/test)
@@ -106,8 +109,10 @@ async def create_order(
     except DuplicateOrderError:
         raise BadRequestError("Order already exists.")
 
-    # Clear Redis cart (best-effort)
-    CartService().clear_cart(tenant_id, body.tableId)
+    # Clear the Redis cart (best-effort). Only dine-in carts are keyed by
+    # table — pickup and delivery have no table to clear.
+    if body.tableId:
+        CartService().clear_cart(tenant_id, body.tableId)
 
     # Start Step Functions
     try:
@@ -120,6 +125,7 @@ async def create_order(
     log.info(
         "order.placed",
         order_id=order_id, tenant_id=tenant_id, restaurant_id=body.restaurantId,
+        order_type=body.orderType,
     )
 
     return {

@@ -29,6 +29,9 @@ interface ApiOrder {
   orderId:                   string;
   status:                    string;
   tableId?:                  string;
+  orderType?:                string;
+  deliveryAddress?:          string;
+  contactPhone?:             string;
   tenantId?:                 string;
   restaurantId?:             string;
   lineItems:                 ApiLineItem[];
@@ -123,10 +126,16 @@ export function normaliseOrder(raw: ApiOrder): KdsOrder & { _apiId: string } {
 
   const shortId = raw.orderId.slice(0, 6).toUpperCase();
 
+  const orderType = (raw.orderType ?? 'dine_in') as 'dine_in' | 'pickup' | 'delivery';
+
   return {
     id:             `LM-${shortId}`,
-    table:          tableNum,
+    // Pickup and delivery have no table; show what the order actually is.
+    table:          orderType === 'dine_in' ? tableNum : '—',
     zone:           'Main Hall',
+    orderType,
+    deliveryAddress: raw.deliveryAddress,
+    contactPhone:    raw.contactPhone,
     status:         toKdsStatus(raw.status, raw.flags),
     elapsedSeconds: 0,
     maxSeconds:     1500,

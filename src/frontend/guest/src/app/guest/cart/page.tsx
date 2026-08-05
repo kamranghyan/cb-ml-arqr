@@ -4,64 +4,52 @@ import { getGuestScope } from '@/lib/guest-scope';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Trash2, Tag, MapPin, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Lock, Trash2, Tag, MapPin, Utensils, ShoppingBag, Bike } from 'lucide-react';
 import { useCartStore } from '@/lib/store';
+import { formatPrice } from '@/lib/utils';
 import { useTheme } from '@/hooks/useTheme';
-import BottomNav from '@/components/guest/BottomNav';
-import Image from 'next/image';
-
-const BRAND = '#ff5723';
 
 export default function CartPage() {
   const router = useRouter();
   const { isDark } = useTheme();
-  const { items, updateQuantity, removeItem, clearCart } = useCartStore();
+  const { items, updateQuantity, removeItem, subtotal, total, clearCart } = useCartStore();
 
-  const [tableId, setTableId] = useState('');
-  const [tableNum, setTableNum] = useState('');
-  const [promo, setPromo] = useState('');
+  const [tableId,      setTableId]      = useState('');
+  const [tableNum,     setTableNum]     = useState('');
+  const [promo,        setPromo]        = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
-  const [placing, setPlacing] = useState(false);
-  const [placed, setPlaced] = useState(false);
-  const [orderId, setOrderId] = useState('');
-  const [orderError, setOrderError] = useState('');
-  const [notes, setNotes] = useState('');
-  const [editMode, setEditMode] = useState(false);
+  const [placing,      setPlacing]      = useState(false);
+  const [placed,       setPlaced]       = useState(false);
+  const [orderId,      setOrderId]      = useState('');
+  const [orderError,   setOrderError]   = useState('');
+  const [notes,        setNotes]        = useState('');
+
+  // How the guest wants the food. Someone who scanned a table QR is dining
+  // in, so that stays the default; the other two are for people ordering
+  // from the counter or their phone.
+  const [orderType,    setOrderType]    = useState<'dine_in' | 'pickup' | 'delivery'>('dine_in');
+  const [address,      setAddress]      = useState('');
+  const [phone,        setPhone]        = useState('');
 
   useEffect(() => {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
     if (!hasSession) { window.location.href = '/guest'; return; }
-    const tid = sessionStorage.getItem('lm_tid') ?? '';
+    const tid  = sessionStorage.getItem('lm_tid')   ?? '';
     const tnum = sessionStorage.getItem('lm_table') ?? '';
     setTableId(tid || `table-${tnum || '01'}`);
     setTableNum(tnum);
   }, []);
-//
 
-  const getItemUnitPrice = (item: any) => {
-    let unitPrice = item.price;
-    if (item.options?.sizeMultiplier) {
-      unitPrice = item.price * item.options.sizeMultiplier;
-    }
-    if (item.options?.toppingsTotal) {
-      unitPrice += item.options.toppingsTotal;
-    }
-    return Math.round(unitPrice);
-  };
-
-  const getItemTotal = (item: any) => {
-    return getItemUnitPrice(item) * item.quantity;
-  };
-
-  const calculateSubtotal = () => {
-    return items.reduce((sum, item) => sum + getItemTotal(item), 0);
-  };
-
-  const discount = promoApplied ? Math.round(calculateSubtotal() * 0.1) : 0;
-  const taxAmt = Math.round(calculateSubtotal() * 0.06);
-  const grandTotal = calculateSubtotal() - discount + taxAmt;
+  const discount   = promoApplied ? Math.round(subtotal() * 0.1) : 0;
+  const lineTotal  = items.reduce((s, i) => s + Math.round(i.price * i.quantity * 100), 0);
+  const taxAmt     = Math.round(subtotal() * 0.15);
+  const grandTotal = subtotal() - discount + taxAmt;
 
   const applyPromo = () => { if (promo.trim().toUpperCase() === 'HAPPY20') setPromoApplied(true); };
+
+  // Delivery cannot go anywhere without an address and a number.
+  const canPlace =
+    orderType !== 'delivery' || (address.trim() !== '' && phone.trim() !== '');
 
   const placeOrder = async () => {
     const scope = getGuestScope();
@@ -69,70 +57,55 @@ export default function CartPage() {
     setPlacing(true); setOrderError('');
     try {
       const tid = sessionStorage.getItem('lm_tid') ?? tableId ?? 'table-01';
-      const lineItems = items.map(item => {
-        let unitPrice = item.price;
-        if (item.options?.sizeMultiplier) {
-          unitPrice = item.price * item.options.sizeMultiplier;
-        }
-        if (item.options?.toppingsTotal) {
-          unitPrice += item.options.toppingsTotal;
-        }
-        
-        return {
-          itemId: item.menuItemId,
-          name: item.name,
-          quantity: item.quantity,
-          unitPriceMinorUnits: Math.round(unitPrice * 100),
-          totalPriceMinorUnits: Math.round(unitPrice * item.quantity * 100),
-        };
-      });
+      const lineItems = items.map(item => ({
+        itemId: item.menuItemId, name: item.name, quantity: item.quantity,
+        unitPriceMinorUnits:  Math.round(item.price * 100),
+        totalPriceMinorUnits: Math.round(item.price * item.quantity * 100),
+      }));
       const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
       const payload = {
         restaurantId: scope.restaurantId,
-        tableId: tid,
         currencyCode: 'PKR',
         totalAmountMinorUnits: lineItemsTotal,
         lineItems,
+        orderType,
+        // Only a dine-in order belongs to a table.
+        tableId: orderType === 'dine_in' ? tid : '',
+        ...(orderType === 'delivery'
+          ? { deliveryAddress: address.trim(), contactPhone: phone.trim() }
+          : {}),
         ...(notes.trim() && { notes: notes.trim() }),
       };
-      const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? data?.message ?? `Error ${res.status}`);
-      setOrderId(data.orderId ?? '');
-      clearCart();
-      setPlaced(true);
-    } catch (err: any) {
-      setOrderError(err?.message ?? 'Failed to place order.');
-    } finally {
-      setPlacing(false);
-    }
+      setOrderId(data.orderId ?? ''); clearCart(); setPlaced(true);
+    } catch (err: any) { setOrderError(err?.message ?? 'Failed to place order.'); }
+    finally { setPlacing(false); }
   };
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280',
   } : {
-    bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-    text: '#000000', muted: '#6B6B6B', sub: '#C4C4C4',
+    bg: '#FFF8F1', card: '#FFFFFF', card2: '#F5F0EA', border: '#F0E8E0',
+    text: '#1A1A1A', muted: '#687780', sub: '#9CA3AF',
   };
 
   // ── Success screen ──
   if (placed) return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <Image src="/Images/success/tick.png" alt="Success tick" width={130} height={130} />
-
-      <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 28, fontWeight: 700, color: D.text, margin: '70px 0 8px', textAlign: 'center', color: "#FF5723" }}>Order Placed <br />
-        Successfully!</h2>
-      <p style={{ fontSize: 14, color: D.muted, textAlign: 'center', margin: '40px 0 5px', color: "#FF5723" }}>Order ID</p>
+      <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'linear-gradient(135deg,#22c55e,#16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 50, marginBottom: 24, boxShadow: '0 0 0 20px rgba(34,197,94,0.1)' }}>✓</div>
+      <h2 style={{ fontSize: 28, fontWeight: 900, color: D.text, fontFamily: 'Georgia,serif', margin: '0 0 8px', textAlign: 'center' }}>Order Placed!</h2>
+      <p style={{ fontSize: 14, color: D.muted, textAlign: 'center', margin: '0 0 20px' }}>Your order has been sent to the kitchen.</p>
       {orderId && (
-        <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace',marginBottom:"40px" }}>#{orderId.slice(0, 8).toUpperCase()}</span>
+        <div style={{ background: '#FFF3E0', border: '2px solid #FFC72C', borderRadius: 24, padding: '10px 24px', marginBottom: 24 }}>
+          <span style={{ fontSize: 16, fontWeight: 900, color: '#891C1C', fontFamily: 'monospace' }}>#{orderId.slice(0,8).toUpperCase()}</span>
+        </div>
       )}
-      <p style={{ fontSize: 14, color: D.muted, textAlign: 'center', margin: '10px 0 5px', color: "#FF5723" }}>Estimated Time</p>
-      <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace',marginBottom:"50px" }}>20-30 mins</span>
-
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button onClick={() => router.push('/guest/tracking')}
-          style={{ width: '100%', height: 52, borderRadius: 26, background: BRAND, color: '#fff', border: 'none', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          style={{ width: '100%', height: 52, borderRadius: 26, background: '#E1251B', color: '#fff', border: 'none', fontSize: 15, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 20px rgba(225,37,27,0.3)' }}>
           📡 Track My Order
         </button>
         <button onClick={() => router.push('/guest/menu')}
@@ -147,25 +120,20 @@ export default function CartPage() {
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
 
       {/* Header */}
-      <div style={{ padding: '52px 20px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
-            <ChevronLeft size={28} strokeWidth={2.5} />
+      <div style={{ padding: '52px 20px 16px', background: D.bg }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <button onClick={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ArrowLeft size={18} color={D.text} />
           </button>
-          {items.length > 0 && (
-            <button onClick={() => setEditMode(e => !e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 600, color: BRAND }}>
-              {editMode ? 'Done' : 'Edit'}
-            </button>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart</h1>
-          <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: D.text, margin: 0, fontFamily: 'Georgia,serif' }}>Your Cart</h1>
+            <p style={{ fontSize: 12, color: D.muted, margin: 0 }}>{items.length} item{items.length !== 1 ? 's' : ''} · {tableNum ? `Table ${tableNum}` : 'Walk-in'}</p>
+          </div>
         </div>
       </div>
 
-      {/* Scrollable - ADDED extra padding bottom to make room for BottomNav */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', paddingBottom: items.length > 0 ? '160px' : '100px' }}>
+      {/* Scrollable */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px' }}>
 
         {/* Items */}
         {items.length === 0 ? (
@@ -173,347 +141,168 @@ export default function CartPage() {
             <span style={{ fontSize: 48, opacity: 0.2 }}>🛒</span>
             <p style={{ color: D.muted, fontSize: 14, marginTop: 12 }}>Your cart is empty</p>
             <button onClick={() => router.push('/guest/menu')}
-              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 24, background: BRAND, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 24, background: '#E1251B', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Browse Menu
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 26, marginBottom: 24 }}>
-            {items.map(item => {
-              const unitPrice = getItemUnitPrice(item);
-              const itemTotal = getItemTotal(item);
-              const optionsDisplay = [];
-              if (item.options?.size) optionsDisplay.push(item.options.size);
-              if (item.options?.toppings && item.options.toppings !== '') optionsDisplay.push(item.options.toppings);
-              const variantLine = optionsDisplay.join(' · ');
-              
-              return (
-                <div key={item.id} style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 100, height: 100, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
-                    {(item as any).imageUrl
-                      ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : item.emoji}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            {items.map(item => (
+              <div key={item.id} style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 18, padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 60, height: 60, borderRadius: 14, background: D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>
+                    {item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 600, color: BRAND, margin: '0 0 4px' }}>{item.name}</p>
-                      {editMode && (
-                        <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.muted, flexShrink: 0, padding: 2 }} aria-label="Remove item">
-                          <Trash2 size={17} />
-                        </button>
-                      )}
-                    </div>
-                    {variantLine && <p style={{ fontSize: 15, color: D.text, margin: '0 0 8px' }}>{variantLine}</p>}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span style={{ fontSize: 16, color: D.text }}>Rs. {item.price.toLocaleString()} ×{item.quantity}</span>
-                      <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: BRAND }}>Rs. {itemTotal.toLocaleString()}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', width: 'fit-content' }}>
-                      <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
-                        <Minus size={15} />
-                      </button>
-                      <span style={{ width: 38, height: 40, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text }}>{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
-                        <Plus size={15} />
-                      </button>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                    <p style={{ fontSize: 11, color: D.muted, margin: '0 0 8px' }}>
+                      {Object.values(item.options).filter(Boolean).join(' · ') || 'No modifications'}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: '#E1251B' }}>Rs. {(item.price * item.quantity).toLocaleString()}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: `1.5px solid ${D.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                        <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: 32, height: 30, background: 'none', border: 'none', color: '#E1251B', fontSize: 18, fontWeight: 700, cursor: 'pointer' }}>−</button>
+                        <span style={{ width: 28, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: D.text, borderLeft: `1px solid ${D.border}`, borderRight: `1px solid ${D.border}` }}>{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: 32, height: 30, background: 'none', border: 'none', color: '#E1251B', fontSize: 18, fontWeight: 700, cursor: 'pointer' }}>+</button>
+                      </div>
                     </div>
                   </div>
+                  <button onClick={() => removeItem(item.id)} style={{ width: 28, height: 28, borderRadius: 8, background: '#FFF0F0', border: '1px solid #FFD0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                    <Trash2 size={13} color="#E1251B" />
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
         {items.length > 0 && (
           <>
-            {/* Table */}
-            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <MapPin size={16} color={BRAND} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 12, color: D.muted, margin: 0 }}>Dining at</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: 0 }}>{tableNum ? `Table ${tableNum}` : tableId || 'Walk-in Guest'}</p>
+            {/* How they want it */}
+            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '14px 16px', marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: D.muted, margin: '0 0 10px' }}>How would you like it?</p>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([
+                  ['dine_in',  'Dine in',  Utensils],
+                  ['pickup',   'Pickup',   ShoppingBag],
+                  ['delivery', 'Delivery', Bike],
+                ] as const).map(([value, label, Icon]) => {
+                  const active = orderType === value;
+                  return (
+                    <button key={value} onClick={() => setOrderType(value)} style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      gap: 5, padding: '11px 6px', borderRadius: 13, cursor: 'pointer',
+                      border: `1.5px solid ${active ? '#E1251B' : D.border}`,
+                      background: active ? '#FFF0EF' : 'transparent',
+                      color: active ? '#E1251B' : D.muted,
+                      fontSize: 12, fontWeight: active ? 800 : 600,
+                    }}>
+                      <Icon size={17} />
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              <span style={{ color: '#22c55e', fontWeight: 800 }}>✓</span>
+
+              {orderType === 'dine_in' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12,
+                              paddingTop: 12, borderTop: `1px solid ${D.border}` }}>
+                  <MapPin size={15} color="#E1251B" />
+                  <span style={{ fontSize: 13, color: D.text, fontWeight: 700 }}>
+                    {tableNum ? `Table ${tableNum}` : tableId || 'Walk-in Guest'}
+                  </span>
+                  <span style={{ marginLeft: 'auto', color: '#22c55e', fontWeight: 800 }}>✓</span>
+                </div>
+              )}
+
+              {orderType === 'pickup' && (
+                <p style={{ fontSize: 12.5, color: D.muted, margin: '12px 0 0',
+                            paddingTop: 12, borderTop: `1px solid ${D.border}` }}>
+                  We&apos;ll have it packed and ready at the counter.
+                </p>
+              )}
+
+              {orderType === 'delivery' && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${D.border}` }}>
+                  <input
+                    value={address} onChange={e => setAddress(e.target.value)}
+                    placeholder="Delivery address"
+                    style={fieldStyle(D)}
+                  />
+                  <input
+                    value={phone} onChange={e => setPhone(e.target.value)}
+                    placeholder="Phone number" inputMode="tel"
+                    style={{ ...fieldStyle(D), marginBottom: 0 }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Promo */}
-            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <Tag size={16} color={D.muted} />
               <input value={promo} onChange={e => setPromo(e.target.value)} placeholder="Add promo code"
                 style={{ flex: 1, background: 'none', border: 'none', fontSize: 14, color: D.text, outline: 'none' }} />
-              {promo && <button onClick={applyPromo} style={{ fontSize: 12, fontWeight: 700, color: BRAND, background: 'none', border: 'none', cursor: 'pointer' }}>Apply</button>}
+              {promo && <button onClick={applyPromo} style={{ fontSize: 12, fontWeight: 700, color: '#E1251B', background: 'none', border: 'none', cursor: 'pointer' }}>Apply</button>}
               {promoApplied && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>✓ 10% off</span>}
               <ChevronRight size={16} color={D.sub} />
             </div>
 
-            {/* Notes */}
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Special instructions for kitchen…" rows={2}
-              style={{ width: '100%', borderRadius: 14, padding: '12px 14px', fontSize: 13, marginBottom: 20, resize: 'none', background: D.card, border: `1.5px solid ${D.border}`, color: D.text, outline: 'none', fontFamily: "'DM Sans',sans-serif", boxSizing: 'border-box' }} />
-
-            {/* Divider */}
-            <div style={{ height: 1, background: BRAND, opacity: 0.35, marginBottom: 22 }} />
-
             {/* Bill */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>Subtotal</span>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>RS.{calculateSubtotal().toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>Tax (6%)</span>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>RS.{taxAmt.toLocaleString()}</span>
-              </div>
-              {promoApplied && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: '#16a34a' }}>Promo Discount</span>
-                  <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: '#16a34a' }}>-RS.{discount.toLocaleString()}</span>
+            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '16px', marginBottom: 12 }}>
+              {[
+                ['Subtotal', `Rs. ${subtotal().toLocaleString()}`],
+                ['Tax (15%)', `Rs. ${taxAmt.toLocaleString()}`],
+                ...(promoApplied ? [['Promo Discount', `- Rs. ${discount.toLocaleString()}`]] : []),
+              ].map(([l, v]) => (
+                <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${D.border}` }}>
+                  <span style={{ fontSize: 13, color: D.muted }}>{l}</span>
+                  <span style={{ fontSize: 13, color: l === 'Promo Discount' ? '#16a34a' : D.muted, fontWeight: l === 'Promo Discount' ? 700 : 400 }}>{v}</span>
                 </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text }}>Total</span>
-                <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text }}>RS.{grandTotal.toLocaleString()}</span>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: D.text }}>Total</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#E1251B', fontFamily: 'Georgia,serif' }}>Rs. {grandTotal.toLocaleString()}</span>
               </div>
             </div>
 
+            {/* Notes */}
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Special instructions for kitchen…" rows={2}
+              style={{ width: '100%', borderRadius: 14, padding: '12px 14px', fontSize: 13, marginBottom: 12, resize: 'none', background: D.card, border: `1.5px solid ${D.border}`, color: D.text, outline: 'none', fontFamily: "'DM Sans',sans-serif", boxSizing: 'border-box' }} />
+
             {/* Error */}
-            {orderError && <div style={{ padding: '12px 14px', background: '#FFF0F0', border: '1px solid #FFD0D0', borderRadius: 12, marginBottom: 16 }}>
-              <p style={{ fontSize: 12, color: BRAND, margin: 0 }}>{orderError}</p>
+            {orderError && <div style={{ padding: '12px 14px', background: '#FFF0F0', border: '1px solid #FFD0D0', borderRadius: 12, marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: '#E1251B', margin: 0 }}>{orderError}</p>
             </div>}
           </>
         )}
+        <div style={{ height: 100 }} />
       </div>
 
-      {/* Proceed to Checkout - MOVED UP so it's above BottomNav */}
+      {/* Footer CTA */}
       {items.length > 0 && (
-        <div style={{ 
-          position: 'fixed', 
-          bottom: '80px', /* ← Increased from 72px to make room for BottomNav */
-          left: '50%', 
-          transform: 'translateX(-50%)', 
-          width: '100%', 
-          maxWidth: 480, 
-          padding: '0 20px', 
-          boxSizing: 'border-box', 
-          zIndex: 10 /* ← Lower z-index so BottomNav can be on top if needed */
-        }}>
-          <button onClick={placeOrder} disabled={placing}
-            style={{ width: '100%', height: 58, borderRadius: 16, background: placing ? '#ccc' : BRAND, color: '#fff', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, cursor: placing ? 'not-allowed' : 'pointer', boxShadow: '0 8px 24px rgba(255,87,35,0.35)' }}>
+        <div style={{ padding: '14px 20px 32px', background: D.bg, borderTop: `1px solid ${D.border}` }}>
+          <button onClick={placeOrder} disabled={placing || !canPlace}
+            style={{ width: '100%', height: 56, borderRadius: 28, background: (placing || !canPlace) ? '#ccc' : '#E1251B', color: '#fff', border: 'none', fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', cursor: placing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 20px rgba(225,37,27,0.35)', transition: 'all 0.2s' }}>
             {placing
-              ? <div style={{ width: 20, height: 20, margin: '0 auto', border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              : 'Proceed to Checkout'}
+              ? <><div style={{ width: 20, height: 20, border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /></>
+              : <><span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Lock size={15} /> Place Order</span><span style={{ background: 'rgba(255,255,255,0.2)', padding: '4px 14px', borderRadius: 20 }}>→ Rs. {grandTotal.toLocaleString()}</span></>}
           </button>
         </div>
       )}
-
-      {/* BottomNav - MOVED to bottom with proper positioning */}
-      <div style={{ 
-        position: 'fixed', 
-        bottom: 0, 
-        left: '50%', 
-        transform: 'translateX(-50%)', 
-        width: '100%', 
-        maxWidth: 480, 
-        zIndex: 20 /* ← Higher z-index so it's on top */
-      }}>
-        <BottomNav />
-      </div>
-      
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-
-// navigation with checkout
-
-// 'use client';
-
-// import { useState, useEffect } from 'react';
-// import { useRouter } from 'next/navigation';
-// import { ChevronLeft, ChevronRight, Trash2, Tag, MapPin, Minus, Plus } from 'lucide-react';
-// import { useCartStore } from '@/lib/store';
-// import { useTheme } from '@/hooks/useTheme';
-// import BottomNav from '@/components/guest/BottomNav';
-
-// const BRAND = '#ff5723';
-
-// export default function CartPage() {
-//   const router = useRouter();
-//   const { isDark } = useTheme();
-//   const { items, updateQuantity, removeItem, subtotal } = useCartStore();
-
-//   const [tableId,      setTableId]      = useState('');
-//   const [tableNum,     setTableNum]     = useState('');
-//   const [promo,        setPromo]        = useState('');
-//   const [promoApplied, setPromoApplied] = useState(false);
-//   const [editMode,     setEditMode]     = useState(false); // "Edit" link — reveals remove buttons
-
-//   useEffect(() => {
-//     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
-//     if (!hasSession) { window.location.href = '/guest'; return; }
-//     const tid  = sessionStorage.getItem('lm_tid')   ?? '';
-//     const tnum = sessionStorage.getItem('lm_table') ?? '';
-//     setTableId(tid || `table-${tnum || '01'}`);
-//     setTableNum(tnum);
-//   }, []);
-
-//   const discount = promoApplied ? Math.round(subtotal() * 0.1) : 0;
-//   const taxAmt     = Math.round(subtotal() * 0.06); // matches Figma's "Tax (6%)" label
-//   const grandTotal = subtotal() - discount + taxAmt;
-
-//   const applyPromo = () => { if (promo.trim().toUpperCase() === 'HAPPY20') setPromoApplied(true); };
-
-//   const D = isDark ? {
-//     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
-//     text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280',
-//   } : {
-//     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-//     text: '#000000', muted: '#6B6B6B', sub: '#C4C4C4',
-//   };
-
-//   return (
-//     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-
-//       {/* Header */}
-//       <div style={{ padding: '52px 20px 16px' }}>
-//         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-//           <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
-//             <ChevronLeft size={28} strokeWidth={2.5} />
-//           </button>
-//           {items.length > 0 && (
-//             <button onClick={() => setEditMode(e => !e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 600, color: BRAND }}>
-//               {editMode ? 'Done' : 'Edit'}
-//             </button>
-//           )}
-//         </div>
-//         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-//           <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart</h1>
-//           <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span>
-//         </div>
-//       </div>
-
-//       {/* Scrollable */}
-//       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', paddingBottom: items.length > 0 ? 180 : 20 }}>
-
-//         {/* Items */}
-//         {items.length === 0 ? (
-//           <div style={{ textAlign: 'center', padding: '60px 0' }}>
-//             <span style={{ fontSize: 48, opacity: 0.2 }}>🛒</span>
-//             <p style={{ color: D.muted, fontSize: 14, marginTop: 12 }}>Your cart is empty</p>
-//             <button onClick={() => router.push('/guest/menu')}
-//               style={{ marginTop: 16, padding: '10px 24px', borderRadius: 24, background: BRAND, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-//               Browse Menu
-//             </button>
-//           </div>
-//         ) : (
-//           <div style={{ display: 'flex', flexDirection: 'column', gap: 26, marginBottom: 24 }}>
-//             {items.map(item => {
-//               const variantLine = Object.values(item.options).filter(Boolean).join(' · ');
-//               return (
-//                 <div key={item.id} style={{ display: 'flex', gap: 16 }}>
-//                   <div style={{ width: 100, height: 100, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
-//                     {(item as any).imageUrl
-//                       ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-//                       : item.emoji}
-//                   </div>
-//                   <div style={{ flex: 1, minWidth: 0 }}>
-//                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-//                       <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 600, color: BRAND, margin: '0 0 4px' }}>{item.name}</p>
-//                       {editMode && (
-//                         <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.muted, flexShrink: 0, padding: 2 }} aria-label="Remove item">
-//                           <Trash2 size={17} />
-//                         </button>
-//                       )}
-//                     </div>
-//                     {variantLine && <p style={{ fontSize: 15, color: D.text, margin: '0 0 8px' }}>{variantLine}</p>}
-//                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-//                       <span style={{ fontSize: 16, color: D.text }}>Rs. {item.price.toLocaleString()} ×{item.quantity}</span>
-//                       <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: BRAND }}>Rs. {(item.price * item.quantity).toLocaleString()}</span>
-//                     </div>
-//                     <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', width: 'fit-content' }}>
-//                       <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
-//                         style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
-//                         <Minus size={15} />
-//                       </button>
-//                       <span style={{ width: 38, height: 40, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text }}>{item.quantity}</span>
-//                       <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
-//                         style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
-//                         <Plus size={15} />
-//                       </button>
-//                     </div>
-//                   </div>
-//                 </div>
-//               );
-//             })}
-//           </div>
-//         )}
-
-//         {items.length > 0 && (
-//           <>
-//             {/* Table */}
-//             <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-//               <MapPin size={16} color={BRAND} />
-//               <div style={{ flex: 1 }}>
-//                 <p style={{ fontSize: 12, color: D.muted, margin: 0 }}>Dining at</p>
-//                 <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: 0 }}>{tableNum ? `Table ${tableNum}` : tableId || 'Walk-in Guest'}</p>
-//               </div>
-//               <span style={{ color: '#22c55e', fontWeight: 800 }}>✓</span>
-//             </div>
-
-//             {/* Promo */}
-//             <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-//               <Tag size={16} color={D.muted} />
-//               <input value={promo} onChange={e => setPromo(e.target.value)} placeholder="Add promo code"
-//                 style={{ flex: 1, background: 'none', border: 'none', fontSize: 14, color: D.text, outline: 'none' }} />
-//               {promo && <button onClick={applyPromo} style={{ fontSize: 12, fontWeight: 700, color: BRAND, background: 'none', border: 'none', cursor: 'pointer' }}>Apply</button>}
-//               {promoApplied && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>✓ 10% off</span>}
-//               <ChevronRight size={16} color={D.sub} />
-//             </div>
-
-//             {/* Divider */}
-//             <div style={{ height: 1, background: BRAND, opacity: 0.35, marginBottom: 22 }} />
-
-//             {/* Bill */}
-//             <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginBottom: 24 }}>
-//               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>Subtotal</span>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>RS.{subtotal().toLocaleString()}</span>
-//               </div>
-//               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>Tax (6%)</span>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text }}>RS.{taxAmt.toLocaleString()}</span>
-//               </div>
-//               {promoApplied && (
-//                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-//                   <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: '#16a34a' }}>Promo Discount</span>
-//                   <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: '#16a34a' }}>-RS.{discount.toLocaleString()}</span>
-//                 </div>
-//               )}
-//               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text }}>Total</span>
-//                 <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text }}>RS.{grandTotal.toLocaleString()}</span>
-//               </div>
-//             </div>
-//           </>
-//         )}
-//       </div>
-
-//       {/* Proceed to Checkout — now a real navigation to /guest/checkout,
-//           where order placement (and the success screen) now live. Notes
-//           and the success screen moved there too, so they're not duplicated
-//           across both pages. */}
-//       {items.length > 0 && (
-//         <div style={{ position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '0 20px', boxSizing: 'border-box', zIndex: 99 }}>
-//           <button onClick={() => router.push('/guest/checkout')}
-//             style={{ width: '100%', height: 58, borderRadius: 16, background: BRAND, color: '#fff', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 24px rgba(255,87,35,0.35)' }}>
-//             Proceed to Checkout
-//           </button>
-//         </div>
-//       )}
-
-//       <BottomNav />
-//     </div>
-//   );
-// }
+/** Delivery inputs share the card's look. */
+function fieldStyle(D: any): React.CSSProperties {
+  return {
+    width: '100%', padding: '11px 13px', marginBottom: 8,
+    borderRadius: 12, fontSize: 13.5,
+    background: D.bg, border: `1.5px solid ${D.border}`,
+    color: D.text, outline: 'none',
+    fontFamily: "'DM Sans',sans-serif", boxSizing: 'border-box',
+  };
+}
