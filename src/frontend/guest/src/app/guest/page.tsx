@@ -7,47 +7,57 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, ChevronRight, Star, Truck, Plus, Loader2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { fetchMenuItems, normaliseItem, type ApiMenuItem } from '@/lib/menu-api';
+import { 
+  fetchMenuItems, 
+  fetchRestaurants,
+  type ApiMenuItem,
+  type RestaurantData
+} from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import BottomNav from '@/components/guest/BottomNav';
-
-// ✅ Use menu-api functions instead of direct fetch
-// import { fetchMenuItems } from '@/lib/menu-api';
+import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
 // ── Placeholder data ───────────────────────────────────────────────────────────
 const PLACEHOLDER_CUISINE_TAGS = ['Sandwiches', 'Chinese', 'Thai Seafood', 'Beverages'];
-const PLACEHOLDER_HOURS    = '10:00AM – 11:00PM';
-const PLACEHOLDER_RATING   = '4.8/5 (100+)';
+const PLACEHOLDER_HOURS = '10:00AM – 11:00PM';
+const PLACEHOLDER_RATING = '4.8/5 (100+)';
 const PLACEHOLDER_DELIVERY = 'Free Delivery';
 
+// ✅ Static fallback values
+const STATIC_RESTAURANT_NAME = 'Cheezious';
+const STATIC_TAGLINE = 'Fine Dining Experience';
+const STATIC_IMAGE = '/images/menu/Restaurant-banner.avif';
+
 const CAT_EMOJI: Record<string, string> = {
-  all:'🍽️', starters:'🥗', mains:'🍽️', desserts:'🍰', beverages:'🥤',
-  drinks:'🥤', coffee:'☕', hot:'☕', iced:'🧊', pizza:'🍕',
-  burgers:'🍔', pasta:'🍝', seafood:'🐟', grill:'🔥', soup:'🍜',
-  bread:'🍞', cake:'🎂', other:'🍽️',
+  all: '🍽️', starters: '🥗', mains: '🍽️', desserts: '🍰', beverages: '🥤',
+  drinks: '🥤', coffee: '☕', hot: '☕', iced: '🧊', pizza: '🍕',
+  burgers: '🍔', pasta: '🍝', seafood: '🐟', grill: '🔥', soup: '🍜',
+  bread: '🍞', cake: '🎂', other: '🍽️',
 };
 function getCatEmoji(cat: string) {
   const c = cat.toLowerCase();
-  for (const [k,v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v;
+  for (const [k, v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v;
   return '🍽️';
 }
 
 function GuestContent() {
-  const params  = useSearchParams();
+  const params = useSearchParams();
   const { isDark } = useTheme();
 
-  const qrRid    = params.get('rid') || '';
-  const tid      = params.get('tid') || '';
+  const qrRid = params.get('rid') || '';
+  const tid = params.get('tid') || '';
   const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
 
-  const [restName,  setRestName]  = useState('Das Pardes');
-  const [tagline,   setTagline]   = useState('Fine Dining Experience');
-  const [zone,      setZone]      = useState('Main Hall');
-  const [items,     setItems]     = useState<ApiMenuItem[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  // ✅ State with static fallback values
+  const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
+  const [zone, setZone] = useState('Main Hall');
+  const [items, setItems] = useState<ApiMenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [restaurantImage, setRestaurantImage] = useState<string | null>(null);
+  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const { addItem } = useCartStore();
   const [search, setSearch] = useState('');
 
@@ -55,7 +65,7 @@ function GuestContent() {
     const n = parseInt(tableNum, 10);
     setZone(n >= 11 ? 'Private Dining' : n >= 9 ? 'Garden Terrace' : 'Main Hall');
     if (qrRid) sessionStorage.setItem('lm_rid', qrRid);
-    if (tid)   sessionStorage.setItem('lm_tid', tid);
+    if (tid) sessionStorage.setItem('lm_tid', tid);
     if (tableNum !== '—') sessionStorage.setItem('lm_table', tableNum);
 
     const rid = qrRid;
@@ -65,27 +75,55 @@ function GuestContent() {
       return;
     }
 
-    // ✅ Use menu-api fetchMenuItems (goes through /api/menu proxy)
-    fetchMenuItems(rid)
-      .then(data => {
-        // Try to get restaurant name from first item
-        if (data.length > 0 && (data[0] as any).restaurantName) {
-          setRestName((data[0] as any).restaurantName);
+    // ✅ Fetch Restaurant Data
+    const fetchRestaurantData = async () => {
+      try {
+        console.log('🏪 Fetching restaurants for rid:', rid);
+        const restaurants = await fetchRestaurants(rid);
+        console.log('✅ Restaurants response:', restaurants);
+        
+        if (restaurants.items && restaurants.items.length > 0) {
+          // Find specific restaurant
+          const restaurant = restaurants.items.find(r => r.restaurantId === rid);
+          console.log('🔍 Found restaurant:', restaurant);
+          
+          if (restaurant) {
+            setRestaurantData(restaurant);
+            
+            // Set restaurant name
+            if (restaurant.name && restaurant.name.trim()) {
+              setRestName(restaurant.name);
+            }
+          }
         }
-        if (data.length > 0 && (data[0] as any).restaurantTagline) {
-          setTagline((data[0] as any).restaurantTagline);
-        }
+      } catch (err) {
+        console.error('❌ Failed to fetch restaurant:', err);
+        // Keep static values
+      }
+    };
+
+    // ✅ Fetch menu items
+    const fetchMenuData = async () => {
+      try {
+        const data = await fetchMenuItems(rid);
         setItems(data);
-        setLoading(false);
-      })
-      .catch((err) => {
+        console.log('✅ Menu items fetched:', data.length);
+      } catch (err) {
         console.error('❌ Failed to load menu:', err);
+      }
+    };
+
+    // ✅ Fetch both in parallel
+    Promise.all([fetchRestaurantData(), fetchMenuData()])
+      .finally(() => {
+        console.log('✅ All data fetching complete!');
         setLoading(false);
       });
+
   }, [qrRid, tid, tableNum]);
 
   const isQrScan = params.has('rid') && params.has('tid');
-  const menuUrl  = `/guest/menu?rid=${qrRid}&tid=${tid}`;
+  const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
   // Build categories from items
   const cats = Array.from(new Set(items.map(i => i.category).filter(Boolean))).map(c => {
@@ -107,55 +145,61 @@ function GuestContent() {
   const filteredSearch = items.filter(i =>
     i.status !== 'inactive' &&
     (i.name.toLowerCase().includes(search.toLowerCase()) ||
-     (i.description ?? '').toLowerCase().includes(search.toLowerCase()))
+      (i.description ?? '').toLowerCase().includes(search.toLowerCase()))
   );
 
+  // ✅ Check if restaurant image exists and is valid
+  const hasRestaurantImage = restaurantImage && restaurantImage.trim() !== '';
+
+  // ✅ Display name: Restaurant Name or Static
+  const displayName = restName || STATIC_RESTAURANT_NAME;
+
   return (
-    <div style={{ 
-      minHeight: '100dvh', 
-      background: D.bg, 
-      fontFamily: "'DM Sans', sans-serif", 
-      maxWidth: 480, 
-      margin: '0 auto', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      transition: 'background 0.25s' 
+    <div style={{
+      minHeight: '100dvh',
+      background: D.bg,
+      fontFamily: "'DM Sans', sans-serif",
+      maxWidth: 480,
+      margin: '0 auto',
+      display: 'flex',
+      flexDirection: 'column',
+      transition: 'background 0.25s'
     }}>
       <GuestTopBar />
 
       {/* Scrollable content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-
         {/* ── Hero ────────────────────────────────────────────────────────────── */}
         <div style={{
-          position: 'relative', 
-          width: '100%', 
-          aspectRatio: '12 / 5', 
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '14 / 7',
           overflow: 'hidden',
-          background: 'linear-gradient(135deg, #ff5723 0%, #ff8a5c 55%, #ffbca7 100%)',
-          display: 'flex', 
-          alignItems: 'center', 
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
+          backgroundImage: hasRestaurantImage
+            ? `url(${restaurantImage})`
+            : `url(${STATIC_IMAGE})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}>
-          <div style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            opacity: 0.14, 
-            backgroundImage: 'radial-gradient(circle at 18% 25%, #fff 0%, transparent 42%), radial-gradient(circle at 82% 78%, #fff 0%, transparent 38%)' 
-          }} />
           <p style={{
-            fontFamily: "'Baloo 2', sans-serif", 
-            fontWeight: 800, 
+            fontFamily: "'Baloo 2', sans-serif",
+            fontWeight: 800,
             fontSize: 32,
-            color: '#fff', 
-            textAlign: 'center', 
-            letterSpacing: 1, 
+            color: '#fff',
+            textAlign: 'center',
+            letterSpacing: 1,
             margin: 0,
-            textTransform: 'uppercase', 
-            textShadow: '0 2px 14px rgba(0,0,0,0.18)', 
+            textTransform: 'uppercase',
             padding: '0 24px',
+            position: 'relative',
+            zIndex: 2,
+            textShadow: '0 2px 12px rgba(0,0,0,0.5)',
           }}>
-            {restName}
+            {displayName}
           </p>
         </div>
 
@@ -163,11 +207,22 @@ function GuestContent() {
         <div style={{ background: BRAND, padding: '20px 20px 22px', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontWeight: 800, fontSize: 23, color: '#fff', margin: '0 0 6px' }}>
-              {restName}
+              {displayName}
             </h1>
+            
+            {/* ✅ Show address from API if available */}
+            {restaurantData?.address && (
+              <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
+                {restaurantData.address.street}
+                {restaurantData.address.city && `, ${restaurantData.address.city}`}
+                {restaurantData.address.country && `, ${restaurantData.address.country}`}
+              </p>
+            )}
+            
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
               {PLACEHOLDER_CUISINE_TAGS.join(' | ')}
             </p>
+            
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: 0 }}>
               Open: {PLACEHOLDER_HOURS}
             </p>
@@ -194,19 +249,21 @@ function GuestContent() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search menu.."
-              style={{ 
-                width: '100%', 
-                height: 50, 
-                paddingLeft: 44, 
-                paddingRight: search ? 44 : 16, 
-                borderRadius: 14, 
-                background: D.input, 
-                border: `1.5px solid ${BRAND}`, 
-                fontSize: 14, 
-                color: D.text, 
-                outline: 'none', 
-                boxSizing: 'border-box', 
-                fontFamily: "'DM Sans', sans-serif" 
+              className='searchInput'
+              style={{
+                width: '100%',
+                height: 50,
+                paddingLeft: 44,
+                paddingRight: search ? 44 : 16,
+                borderRadius: 14,
+                background: D.input,
+                border: `1.5px solid ${BRAND}`,
+                fontSize: 14,
+                color: D.text,
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontFamily: "'DM Sans', sans-serif"
+
               }}
             />
             {search && (
@@ -219,37 +276,37 @@ function GuestContent() {
 
           {/* Search results */}
           {search.trim() && (
-            <div style={{ 
-              background: D.card, 
-              border: `1.5px solid ${D.border}`, 
-              borderRadius: 16, 
-              overflow: 'hidden', 
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)', 
-              marginTop: 8 
+            <div style={{
+              background: D.card,
+              border: `1.5px solid ${D.border}`,
+              borderRadius: 16,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+              marginTop: 8
             }}>
               {filteredSearch.slice(0, 6).map((item, idx, arr) => (
                 <Link key={item.id} href={`/guest/menu/${item.id}?rid=${qrRid}&tid=${tid}`}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 12, 
-                    padding: '12px 16px', 
-                    textDecoration: 'none', 
-                    borderBottom: idx < arr.length - 1 ? `1px solid ${D.border}` : 'none', 
-                    background: 'transparent' 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    textDecoration: 'none',
+                    borderBottom: idx < arr.length - 1 ? `1px solid ${D.border}` : 'none',
+                    background: 'transparent'
                   }}
                   onClick={() => setSearch('')}>
-                  <div style={{ 
-                    width: 44, 
-                    height: 44, 
-                    borderRadius: 12, 
-                    background: D.card2, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    fontSize: 22, 
-                    flexShrink: 0, 
-                    overflow: 'hidden' 
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    background: D.card2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 22,
+                    flexShrink: 0,
+                    overflow: 'hidden'
                   }}>
                     {(item as any).imageUrl
                       ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -288,6 +345,7 @@ function GuestContent() {
           </div>
 
           {/* Categories */}
+          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: D.text, margin: '0 0 16px' }}>Categories</h2>
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', gap: 14, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4 }}>
               {loading ? Array.from({ length: 5 }).map((_, i) => (
@@ -295,8 +353,27 @@ function GuestContent() {
               )) : cats.slice(0, 6).map(cat => (
                 <Link key={cat} href={`${menuUrl}&cat=${cat.toLowerCase()}`}
                   style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                  <div style={{ width: 76, height: 76, borderRadius: 18, background: isDark ? D.card2 : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
-                    {getCatEmoji(cat)}
+                  <div style={{
+                    width: 76,
+                    height: 76,
+                    borderRadius: 18,
+                    background: isDark ? D.card2 : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 32,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    border: `2px solid ${BRAND}`,
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundImage: `url('/Images/menu/burger.jpg')`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      opacity: 3,
+                    }} />
                   </div>
                   <span style={{ fontSize: 14, color: D.sub, textAlign: 'center' }}>{cat}</span>
                 </Link>
@@ -319,9 +396,23 @@ function GuestContent() {
                 <Link key={item.id} href={`/guest/menu/${item.id}?rid=${qrRid}&tid=${tid}`}
                   style={{ display: 'flex', gap: 16, padding: 16, background: D.card, border: `1.5px solid ${BRAND}`, borderRadius: 20, textDecoration: 'none' }}>
                   <div style={{ width: 100, height: 100, borderRadius: 14, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
-                    {(item as any).imageUrl
-                      ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : item.emoji}
+                    {(item as any).imageUrl ? (
+                      <img
+                        src={(item as any).imageUrl}
+                        alt={item.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
+                        <Image
+                          src='/Images/menu/pizza.jpg'
+                          alt={item.name}
+                          width={100}
+                          height={100}
+                          style={{ objectFit: 'cover' }}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 6px' }}>{item.name}</p>
@@ -339,18 +430,6 @@ function GuestContent() {
             </div>
           )}
 
-          {/* QR Session info */}
-          {isQrScan && (
-            <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', margin: '24px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F0FFF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ color: '#22c55e', fontSize: 16 }}>✓</span>
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', margin: 0 }}>QR Verified · Secure Session</p>
-                <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Table {tableNum} · {zone}</p>
-              </div>
-            </div>
-          )}
           <div style={{ height: 96 }} />
         </div>
       </div>

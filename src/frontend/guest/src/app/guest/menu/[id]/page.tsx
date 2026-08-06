@@ -58,37 +58,20 @@ export default function ItemDetailPage() {
     setActiveImg(Math.round(el.scrollLeft / el.clientWidth));
   }
 
-useEffect(() => {
-  if (!id) return;
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlRid = urlParams.get('rid'); 
-  const urlTid = urlParams.get('tid');
-  
-  if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
-  if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
-  
-  const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
-  if (!hasSession) { 
-    window.location.href = '/guest'; 
-    return; 
-  }
-  
-  const rid = getGuestScope().restaurantId;
-  
-  console.log('📱 Fetching item with ID:', id, 'Restaurant:', rid);
-  
-  fetchMenuItem(id, rid)
-    .then(item => { 
-      console.log('✅ Item loaded successfully:', item);
-      setItem(item);  
-      setLoading(false); 
-    })
-    .catch((err) => { 
-      console.error('❌ Failed to fetch item:', err);
-      setLoading(false); 
-    });
-}, [id]);
+  useEffect(() => {
+    if (!id) return;
+    // Also accept rid/tid from URL params (direct link from landing page)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlRid = urlParams.get('rid'); const urlTid = urlParams.get('tid');
+    if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
+    if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
+    const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
+    if (!hasSession) { window.location.href = '/guest'; return; }
+    const rid = getGuestScope().restaurantId;
+    fetchMenuItem(id, rid)
+      .then(raw => { setItem(normaliseItem(raw)); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [id]);
 
   const toggleTopping = (label: string) =>
     setToppings(p => p.includes(label) ? p.filter(x => x !== label) : [...p, label]);
@@ -100,32 +83,31 @@ useEffect(() => {
 
   const hasAr  = !!(item as any)?.arModelKey || !!(item as any)?.arModelUrl;
   const arUrl  = (item as any)?.arModelUrl ?? '';
+  // TEMP DEBUG — remove once the AR-banner issue is confirmed fixed.
+  // Tells us exactly which of the three cases we're in:
+  //   arModelKey/arModelUrl both null  -> backend has no AR model for this item (not a frontend bug)
+  //   hasArModel true but hasAr false  -> normaliseItem() and the component disagree, real frontend bug
+  //   everything populated but hasAr false -> render/condition bug, look at the JSX
+  if (!loading && item) {
+    console.log('🔍 AR debug:', {
+      itemId: item.id,
+      arModelKey: (item as any).arModelKey,
+      arModelUrl: (item as any).arModelUrl,
+      hasArModel_fromNormaliseItem: (item as any).hasArModel,
+      hasAr_computedHere: hasAr,
+    });
+  }
   const rid    = getGuestScope().restaurantId;
   const arHref = `/guest/ar?rid=${encodeURIComponent(rid)}&iid=${encodeURIComponent(id ?? '')}&name=${encodeURIComponent(item?.name ?? '')}&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
 
   const handleAddToCart = () => {
     if (!item) return;
-    
-    // Calculate the total price for display
-    const sizePrice = item.price * SIZES[size].mult;
-    const toppingsTotal = toppings.reduce((sum, t) => sum + (TOPPINGS.find(x => x.label === t)?.price ?? 0), 0);
-    const totalUnitPrice = Math.round(sizePrice + toppingsTotal);
-    
     addItem({
-      menuItemId: item.id,
-      name: item.name,
-      emoji: item.emoji ?? '🍽️',
-      price: item.price, // ← Store BASE price only
+      menuItemId: item.id, name: item.name, emoji: item.emoji ?? '🍽️',
+      price: Math.round(unitPrice),
       quantity: qty,
-      options: {
-        size: SIZES[size].label,
-        sizeMultiplier: SIZES[size].mult, // ← Store multiplier for later calculation
-        toppings: toppings.join(', '),
-        toppingsTotal: toppingsTotal, // ← Store toppings total for later calculation
-        totalPrice: totalUnitPrice, // ← Store total for display
-      },
+      options: { doneness: SIZES[size].label, side: toppings.join(', ') },
     });
-    
     setAdded(true);
     setTimeout(() => { setAdded(false); router.push('/guest/cart'); }, 800);
   };
@@ -142,15 +124,6 @@ useEffect(() => {
     <div style={{ minHeight: '100dvh', background: D.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: 32, height: 32, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
-
-  if (!item) return (
-    <div style={{ minHeight: '100dvh', background: D.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-      <p style={{ color: D.text, fontSize: 18 }}>Item not found</p>
-      <button onClick={() => router.back()} style={{ color: BRAND, background: 'none', border: 'none', cursor: 'pointer' }}>
-        Go back
-      </button>
     </div>
   );
 
@@ -189,6 +162,7 @@ useEffect(() => {
               </div>
             )}
           </div>
+          {/* Dots only render with real multiple images — see note above */}
           {images.length > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
               {images.map((_, i) => (
@@ -287,6 +261,9 @@ useEffect(() => {
           {added ? '✓ Added!' : 'Add to Cart'}
         </button>
       </div>
+      {/* Total isn't on the Figma button itself, but it's shown here so the
+          guest isn't blindsided at checkout — flagged in chat, remove if
+          you'd rather match the mockup with zero additions. */}
       <div style={{ position: 'fixed', bottom: 104, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, textAlign: 'center', pointerEvents: 'none' }}>
         <span style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 14px', borderRadius: 20 }}>
           Total: Rs. {finalPrice.toLocaleString()}

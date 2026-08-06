@@ -105,7 +105,7 @@ function MenuContent() {
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: 14 }}>
           <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: D.sub }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search food & drinks…"
+          <input className='searchInput' value={search} onChange={e => setSearch(e.target.value)} placeholder="Search food & drinks…"
             style={{ width: '100%', height: 46, paddingLeft: 42, paddingRight: 14, borderRadius: 14, background: D.input, border: `1.5px solid ${BRAND}`, fontSize: 14, color: D.text, outline: 'none', boxSizing: 'border-box' }} />
         </div>
 

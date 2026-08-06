@@ -276,6 +276,14 @@ def is_multipart(event: dict) -> bool:
 def restaurant_logo_key(tenant_id: str, restaurant_id: str, ext: str) -> str:
     return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/logo{ext}"
 
+def restaurant_banner_key(tenant_id: str, restaurant_id: str, ext: str) -> str:
+    """
+    The wide hero image a guest sees above the menu. One per restaurant, so a
+    fixed name — re-uploading replaces the old file rather than piling up
+    orphans in the bucket.
+    """
+    return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/banner{ext}"
+
 def category_image_key(tenant_id: str, restaurant_id: str, category_id: str, ext: str) -> str:
     return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/categories/{category_id}{ext}"
 
@@ -350,6 +358,23 @@ class S3Repository:
             return None, None
         ext    = validate_image(file_info["bytes"], file_info["content_type"])
         s3_key = restaurant_logo_key(tenant_id, restaurant_id, ext)
+        self.upload(file_info["bytes"], s3_key, file_info["content_type"])
+        return s3_key, self.get_read_url(s3_key)
+
+    def upload_restaurant_banner(
+        self, event: dict, restaurant_id: str, tenant_id: str
+    ) -> tuple[Optional[str], Optional[str]]:
+        """
+        Store the guest-facing hero image. Returns (s3Key, readUrl); the key is
+        what the caller saves onto the restaurant.
+        """
+        form      = parse_multipart(event)
+        file_info = form.files.get("file")
+        if not file_info or not file_info["bytes"]:
+            log.info("No banner file in request")
+            return None, None
+        ext    = validate_image(file_info["bytes"], file_info["content_type"])
+        s3_key = restaurant_banner_key(tenant_id, restaurant_id, ext)
         self.upload(file_info["bytes"], s3_key, file_info["content_type"])
         return s3_key, self.get_read_url(s3_key)
 

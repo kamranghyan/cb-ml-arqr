@@ -6,8 +6,13 @@ DynamoDB key pattern:
   SK = METADATA
 
 Image fields:
-  logoKey  -- S3 object key (stored in DynamoDB, never returned raw to clients)
-  logoUrl  -- presigned GET URL injected at read time by the service layer (not stored)
+  logoKey    -- S3 object key (stored in DynamoDB, never returned raw to clients)
+  logoUrl    -- presigned GET URL injected at read time by the service layer (not stored)
+  bannerKey  -- S3 key for the wide hero image a guest sees at the top of the menu
+  bannerUrl  -- presigned GET URL for the banner, injected at read time
+
+The *Key fields are what we own; the *Url fields are generated fresh on every
+read because presigned URLs expire. Neither Url is ever written to DynamoDB.
 """
 from __future__ import annotations
 
@@ -33,8 +38,10 @@ class Restaurant(BaseModel):
     isActive: bool
     createdAt: str
     updatedAt: str
-    logoKey: Optional[str] = None   # S3 key -- stored in DDB, used to generate URL
-    logoUrl: Optional[str] = None   # presigned GET URL -- injected at read, not stored
+    logoKey: Optional[str] = None     # S3 key -- stored in DDB, used to generate URL
+    logoUrl: Optional[str] = None     # presigned GET URL -- injected at read, not stored
+    bannerKey: Optional[str] = None   # S3 key for the guest-facing hero image
+    bannerUrl: Optional[str] = None   # presigned GET URL -- injected at read, not stored
 
     # -- DynamoDB key helpers -----------------------------------------------
 
@@ -104,12 +111,17 @@ class Restaurant(BaseModel):
             data["logoKey"] = self.logoKey
         if self.logoUrl is not None:
             data["logoUrl"] = self.logoUrl
+        if self.bannerKey is not None or not exclude_none:
+            data["bannerKey"] = self.bannerKey
+        if self.bannerUrl is not None:
+            data["bannerUrl"] = self.bannerUrl
         return data
 
     def to_dynamo_item(self) -> dict[str, Any]:
-        """DDB item -- logoUrl intentionally excluded (never persisted)."""
+        """DDB item -- presigned URLs intentionally excluded (never persisted)."""
         item = self.to_dict(exclude_none=True)
         item.pop("logoUrl", None)
+        item.pop("bannerUrl", None)
         item["PK"] = self.pk
         item["SK"] = self.sk
         return item
@@ -134,6 +146,8 @@ class Restaurant(BaseModel):
             updatedAt=data.get("updatedAt", ""),
             logoKey=data.get("logoKey"),
             logoUrl=data.get("logoUrl"),
+            bannerKey=data.get("bannerKey"),
+            bannerUrl=data.get("bannerUrl"),
         )
 
     @classmethod

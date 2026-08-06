@@ -43,6 +43,50 @@ export interface ApiMenuResponse {
   page?:  number
 }
 
+// ── Restaurant Data Types ──────────────────────────────────────────────────────
+export interface RestaurantData {
+  restaurantId: string;
+  tenantId: string;
+  name: string;
+  address?: {
+    street?: string;
+    city?: string;
+    country?: string;
+    postcode?: string;
+  };
+  timezone: string;
+  currencyCode: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  logoKey: string | null;
+  bannerKey: string | null;
+  logoUrl?: string | null;
+}
+
+export interface RestaurantsResponse {
+  items: RestaurantData[];
+  count: number;
+  lastEvaluatedKey?: string | null;
+}
+
+export interface TenantData {
+  tenantId: string;
+  companyName?: string;
+  email?: string;
+  planTier?: string;
+  maxRestaurants?: number;
+  restaurantCount?: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TenantsResponse {
+  tenants: TenantData[];
+  count: number;
+}
+
 // ── Auth-aware fetch — injects token for protected routes ─────────────────────
 async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = await getValidIdToken()
@@ -75,29 +119,16 @@ export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem
 }
 
 // ── Fetch single item + AR model ──────────────────────────────────────────────
-// ── Fetch single item (only fetch AR if item has arModelKey) ────────────────
 export async function fetchMenuItem(itemId: string, restaurantId?: string): Promise<ApiMenuItem> {
   const rid = restaurantId?.trim() || RESTAURANT_ID
-  
-  // Fetch the menu item first
-  const item = await menuFetch<any>(
-    MENU_API.item(itemId, rid),
-    {},
-    rid
-  )
-  
-  // Only try AR if the item has an arModelKey
-  if (item.arModelKey) {
-    try {
-      const arData = await fetchARModel(itemId, rid)
-      if (arData && arData.presignedUrl) {
-        return normaliseItem({ ...item, arModelUrl: arData.presignedUrl, hasArModel: true })
-      }
-    } catch (error) {
-      // Ignore
-    }
+
+  const item = await menuFetch<any>(MENU_API.item(itemId, rid))
+
+  const arData = await fetchARModel(itemId, rid)
+  if (arData && arData.presignedUrl) {
+    return normaliseItem({ ...item, arModelUrl: arData.presignedUrl, hasArModel: true })
   }
-  
+
   return normaliseItem({ ...item, hasArModel: false })
 }
 
@@ -110,6 +141,127 @@ async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
     return await res.json()
   } catch {
     return null
+  }
+}
+
+// ── Restaurant APIs ────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all restaurants for a tenant
+ * GET /api/menu/restaurants
+ */
+export async function fetchRestaurants(restaurantId?: string): Promise<RestaurantsResponse> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+  
+  try {
+    console.log('🏪 Fetching restaurants with rid:', rid);
+    
+    // ✅ Use the proxy endpoint
+    const response = await fetch(`/api/menu/restaurants?rid=${rid}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': rid,
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API Error:', response.status, errorText);
+      throw new Error(`Failed to fetch restaurants: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Restaurants fetched:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error fetching restaurants:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch a single restaurant by ID
+ * GET /api/menu/restaurants/{restaurantId}
+ */
+export async function fetchRestaurantById(restaurantId: string): Promise<RestaurantData | null> {
+  try {
+    console.log(`🔍 Fetching restaurant by ID: ${restaurantId}`);
+    
+    const response = await fetch(`/api/menu/restaurants/${restaurantId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': restaurantId,
+      },
+    });
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn(`⚠️ Restaurant ${restaurantId} not found`);
+        return null;
+      }
+      const errorText = await response.text();
+      console.error('❌ API Error:', response.status, errorText);
+      throw new Error(`Failed to fetch restaurant: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Restaurant fetched:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error fetching restaurant:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch all tenants (for company name lookup)
+ * GET /api/auth-svc/auth/tenants
+ */
+export async function fetchTenants(): Promise<TenantsResponse> {
+  try {
+    console.log('🏢 Fetching tenants...');
+    
+    const response = await fetch(`/api/auth-svc/auth/tenants`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API Error:', response.status, errorText);
+      throw new Error(`Failed to fetch tenants: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Tenants fetched:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error fetching tenants:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch company name by tenant ID
+ */
+export async function fetchCompanyName(tenantId: string): Promise<string | null> {
+  try {
+    console.log(`🏢 Fetching company name for tenant: ${tenantId}`);
+    
+    const response = await fetchTenants();
+    const tenant = response.tenants.find((t: TenantData) => t.tenantId === tenantId);
+    
+    if (!tenant) {
+      console.warn(`⚠️ Tenant with ID ${tenantId} not found`);
+      return null;
+    }
+    
+    console.log(`✅ Company name found: "${tenant.companyName}"`);
+    return tenant.companyName || null;
+  } catch (error) {
+    console.error('❌ Error fetching company name:', error);
+    return null;
   }
 }
 

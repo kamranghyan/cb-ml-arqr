@@ -241,7 +241,7 @@ export default function CartPage() {
             {/* Promo */}
             <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Tag size={16} color={D.muted} />
-              <input value={promo} onChange={e => setPromo(e.target.value)} placeholder="Add promo code"
+              <input className='searchInput' value={promo} onChange={e => setPromo(e.target.value)} placeholder="Add promo code"
                 style={{ flex: 1, background: 'none', border: 'none', fontSize: 14, color: D.text, outline: 'none' }} />
               {promo && <button onClick={applyPromo} style={{ fontSize: 12, fontWeight: 700, color: BRAND, background: 'none', border: 'none', cursor: 'pointer' }}>Apply</button>}
               {promoApplied && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>✓ 10% off</span>}
@@ -249,7 +249,7 @@ export default function CartPage() {
             </div>
 
             {/* Notes */}
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Special instructions for kitchen…" rows={2}
+            <textarea className='searchInput' value={notes} onChange={e => setNotes(e.target.value)} placeholder="Special instructions for kitchen…" rows={2}
               style={{ width: '100%', borderRadius: 14, padding: '12px 14px', fontSize: 13, marginBottom: 20, resize: 'none', background: D.card, border: `1.5px solid ${D.border}`, color: D.text, outline: 'none', fontFamily: "'DM Sans',sans-serif", boxSizing: 'border-box' }} />
 
             {/* Divider */}
@@ -298,7 +298,7 @@ export default function CartPage() {
           boxSizing: 'border-box', 
           zIndex: 10 /* ← Lower z-index so BottomNav can be on top if needed */
         }}>
-          <button onClick={placeOrder} disabled={placing}
+          <button onClick={() => router.push('/guest/checkout')} disabled={placing}
             style={{ width: '100%', height: 58, borderRadius: 16, background: placing ? '#ccc' : BRAND, color: '#fff', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, cursor: placing ? 'not-allowed' : 'pointer', boxShadow: '0 8px 24px rgba(255,87,35,0.35)' }}>
             {placing
               ? <div style={{ width: 20, height: 20, margin: '0 auto', border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />

@@ -51,7 +51,7 @@ export default function FavoritesPage() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 120px' }}>
         {items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+          <div style={{ textAlign: 'center', padding: '80px 0', display:"flex", flexDirection:"column",alignItems:"center" }}>
             <Heart size={48} color={BRAND} strokeWidth={1.5} style={{ opacity: 0.25 }} />
             <p style={{ color: D.muted, fontSize: 14, marginTop: 16 }}>No favorites yet</p>
             <p style={{ color: D.muted, fontSize: 12, marginTop: 4 }}>Tap the heart on any dish to save it here.</p>
