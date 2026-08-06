@@ -85,6 +85,7 @@ class RestaurantService:
         """Serialize without the old PK/SK keys."""
         item = restaurant.to_dict(exclude_none=True)
         item.pop("logoUrl", None)
+        item.pop("bannerUrl", None)
         item.pop("PK", None)
         item.pop("SK", None)
         return item
@@ -114,6 +115,7 @@ class RestaurantService:
             createdAt=now,
             updatedAt=now,
             logoKey=body.get("logoKey"),
+            bannerKey=body.get("bannerKey"),
         )
         restaurant.validate()
 
@@ -137,14 +139,18 @@ class RestaurantService:
                 f"Restaurant {restaurant_id} not found"
             )
         restaurant = Restaurant.from_dict(raw)
-        restaurant.logoUrl = self._s3.generate_read_url(restaurant.logoKey)
+        restaurant.logoUrl   = self._s3.generate_read_url(restaurant.logoKey)
+        restaurant.bannerUrl = self._s3.generate_read_url(restaurant.bannerKey)
         return restaurant
 
     def update(self, tenant_id: str, restaurant_id: str, body: dict) -> Restaurant:
         """Partial update — only present fields change."""
         self.get(tenant_id, restaurant_id)  # 404 guard
 
-        mutable = {"name", "timezone", "currencyCode", "isActive", "logoKey", "tenantId"}
+        mutable = {
+            "name", "timezone", "currencyCode", "isActive",
+            "logoKey", "bannerKey", "tenantId",
+        }
         updates: dict = {k: v for k, v in body.items() if k in mutable}
 
         if "address" in body:
@@ -199,7 +205,8 @@ class RestaurantService:
         restaurants = []
         for raw in items:
             r = Restaurant.from_dict(raw)
-            r.logoUrl = self._s3.generate_read_url(r.logoKey)
+            r.logoUrl   = self._s3.generate_read_url(r.logoKey)
+            r.bannerUrl = self._s3.generate_read_url(r.bannerKey)
             restaurants.append(r)
 
         log.info("Restaurants listed", extra={
