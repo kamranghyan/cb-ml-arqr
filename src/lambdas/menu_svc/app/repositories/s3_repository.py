@@ -348,35 +348,50 @@ class S3Repository:
         except ClientError:
             return None
 
-    def upload_restaurant_logo(
+    def upload_restaurant_images(
         self, event: dict, restaurant_id: str, tenant_id: str
-    ) -> tuple[Optional[str], Optional[str]]:
-        form      = parse_multipart(event)
-        file_info = form.files.get("file")
-        if not file_info or not file_info["bytes"]:
-            log.info("No logo file in request")
-            return None, None
-        ext    = validate_image(file_info["bytes"], file_info["content_type"])
-        s3_key = restaurant_logo_key(tenant_id, restaurant_id, ext)
-        self.upload(file_info["bytes"], s3_key, file_info["content_type"])
-        return s3_key, self.get_read_url(s3_key)
+    ) -> dict[str, Any]:
+        """
+        Take the logo and/or banner from a single multipart request.
 
-    def upload_restaurant_banner(
-        self, event: dict, restaurant_id: str, tenant_id: str
-    ) -> tuple[Optional[str], Optional[str]]:
+        Creating a restaurant and giving it its pictures is one action to the
+        person doing it, so it should be one request. Fields are named `logo`
+        and `banner`; `file` is also accepted for the logo so the older
+        single-image endpoint keeps working.
+
+        Returns only the keys that were actually uploaded — a caller can tell
+        what happened without comparing against what it sent.
         """
-        Store the guest-facing hero image. Returns (s3Key, readUrl); the key is
-        what the caller saves onto the restaurant.
-        """
-        form      = parse_multipart(event)
-        file_info = form.files.get("file")
-        if not file_info or not file_info["bytes"]:
-            log.info("No banner file in request")
-            return None, None
-        ext    = validate_image(file_info["bytes"], file_info["content_type"])
-        s3_key = restaurant_banner_key(tenant_id, restaurant_id, ext)
-        self.upload(file_info["bytes"], s3_key, file_info["content_type"])
-        return s3_key, self.get_read_url(s3_key)
+        form   = parse_multipart(event)
+        result: dict[str, Any] = {}
+
+        logo_info = form.files.get("logo") or form.files.get("file")
+        if logo_info and logo_info["bytes"]:
+            try:
+                ext    = validate_image(logo_info["bytes"], logo_info["content_type"])
+                s3_key = restaurant_logo_key(tenant_id, restaurant_id, ext)
+                self.upload(logo_info["bytes"], s3_key, logo_info["content_type"])
+                result["logoKey"] = s3_key
+                result["logoUrl"] = self.get_read_url(s3_key)
+            except Exception as exc:  # noqa: BLE001
+                # One bad picture should not lose the other one.
+                log.warning("Logo upload failed", extra={"error": str(exc)})
+
+        banner_info = form.files.get("banner")
+        if banner_info and banner_info["bytes"]:
+            try:
+                ext    = validate_image(banner_info["bytes"], banner_info["content_type"])
+                s3_key = restaurant_banner_key(tenant_id, restaurant_id, ext)
+                self.upload(banner_info["bytes"], s3_key, banner_info["content_type"])
+                result["bannerKey"] = s3_key
+                result["bannerUrl"] = self.get_read_url(s3_key)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Banner upload failed", extra={"error": str(exc)})
+
+        if not result:
+            log.info("No restaurant images in request",
+                     extra={"fields": list(form.files.keys())})
+        return result
 
     def upload_category_image(
         self, event: dict, restaurant_id: str, category_id: str, tenant_id: str
