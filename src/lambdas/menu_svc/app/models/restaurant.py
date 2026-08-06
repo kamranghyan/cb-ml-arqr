@@ -16,7 +16,7 @@ read because presigned URLs expire. Neither Url is ever written to DynamoDB.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .base import (
@@ -42,6 +42,17 @@ class Restaurant(BaseModel):
     logoUrl: Optional[str] = None     # presigned GET URL -- injected at read, not stored
     bannerKey: Optional[str] = None   # S3 key for the guest-facing hero image
     bannerUrl: Optional[str] = None   # presigned GET URL -- injected at read, not stored
+
+    # -- What a guest sees on the landing screen ---------------------------
+    # These used to be hardcoded in the guest app, which meant every
+    # restaurant claimed the same hours and the same cuisines. They belong to
+    # the restaurant, so the tenant sets them when creating or editing it.
+    tagline: Optional[str] = None          # "Fine Dining Experience"
+    cuisineTags: list[str] = field(default_factory=list)   # ["BBQ", "Pakistani"]
+    openingHours: Optional[str] = None     # "10:00AM - 11:00PM"
+    deliveryNote: Optional[str] = None     # "Free Delivery", "30 min delivery"
+    ratingValue: Optional[float] = None    # 4.8 -- shown only if set
+    ratingCount: Optional[int] = None      # 120
 
     # -- DynamoDB key helpers -----------------------------------------------
 
@@ -81,6 +92,18 @@ class Restaurant(BaseModel):
         _require(errors, "updatedAt", self.updatedAt)
         _validate_iso8601(errors, "updatedAt", self.updatedAt)
 
+        if self.tagline:
+            _validate_max_len(errors, "tagline", self.tagline, 120)
+
+        if self.ratingValue is not None and not (0 <= self.ratingValue <= 5):
+            errors["ratingValue"] = "must be between 0 and 5"
+
+        if self.ratingCount is not None and self.ratingCount < 0:
+            errors["ratingCount"] = "cannot be negative"
+
+        if len(self.cuisineTags) > 10:
+            errors["cuisineTags"] = "at most 10 tags"
+
         if self.address:
             try:
                 self.address.validate()
@@ -115,6 +138,23 @@ class Restaurant(BaseModel):
             data["bannerKey"] = self.bannerKey
         if self.bannerUrl is not None:
             data["bannerUrl"] = self.bannerUrl
+
+        # Presentation fields: send them when set. A rating that was never
+        # entered stays absent rather than becoming a zero, so the guest app
+        # can simply not draw the stars.
+        for key, value in (
+            ("tagline",      self.tagline),
+            ("openingHours", self.openingHours),
+            ("deliveryNote", self.deliveryNote),
+            ("ratingValue",  self.ratingValue),
+            ("ratingCount",  self.ratingCount),
+        ):
+            if value is not None or not exclude_none:
+                data[key] = value
+
+        if self.cuisineTags or not exclude_none:
+            data["cuisineTags"] = self.cuisineTags
+
         return data
 
     def to_dynamo_item(self) -> dict[str, Any]:
@@ -148,6 +188,16 @@ class Restaurant(BaseModel):
             logoUrl=data.get("logoUrl"),
             bannerKey=data.get("bannerKey"),
             bannerUrl=data.get("bannerUrl"),
+            tagline=data.get("tagline"),
+            cuisineTags=list(data.get("cuisineTags") or []),
+            openingHours=data.get("openingHours"),
+            deliveryNote=data.get("deliveryNote"),
+            ratingValue=(
+                float(data["ratingValue"]) if data.get("ratingValue") is not None else None
+            ),
+            ratingCount=(
+                int(data["ratingCount"]) if data.get("ratingCount") is not None else None
+            ),
         )
 
     @classmethod

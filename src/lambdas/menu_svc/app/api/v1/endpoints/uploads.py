@@ -1,11 +1,9 @@
 """
 app.api.v1.endpoints.uploads
 ============================
-POST /menus/presigned-url                                          → admin/tenant
-POST /menus/upload/restaurants/{rid}/logo                          → admin/tenant
-POST /menus/upload/restaurants/{rid}/banner                        → admin/tenant
-POST /menus/upload/restaurants/{rid}/categories/{cid}/image        → admin/tenant
-POST /menus/upload/restaurants/{rid}/items/{iid}/assets            → admin/tenant
+POST /menus/presigned-url                                   → admin/tenant
+POST /menus/upload/restaurants/{rid}/categories/{cid}/image → admin/tenant
+POST /menus/upload/restaurants/{rid}/items/{iid}/assets     → admin/tenant
 
 Every upload returns `{s3Key, url}`. The caller then saves that key onto the
 record with a PUT — uploading and attaching are deliberately two steps, so a
@@ -95,49 +93,6 @@ async def _gateway_event(request: Request) -> dict:
     return build_gateway_event(
         await request.body(), request.headers.get("content-type", "")
     )
-
-
-@router.post(
-    "/upload/restaurants/{restaurantId}/logo",
-    summary="Upload restaurant logo",
-)
-async def upload_logo(
-    restaurantId: str,
-    request:      Request,
-    scope:        Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)],
-    s3_repo:      Annotated[S3Repository, Depends(get_s3_repo)],
-):
-    _, tenant_id = scope
-    raw_event = await _gateway_event(request)
-    try:
-        s3_key, url = s3_repo.upload_restaurant_logo(raw_event, restaurantId, tenant_id)
-        return _result(s3_key, url, "Logo uploaded. Save s3Key to the restaurant via PUT.")
-    except _UPLOAD_ERRORS as exc:
-        raise BadRequestError(str(exc)) from exc
-
-
-@router.post(
-    "/upload/restaurants/{restaurantId}/banner",
-    summary="Upload restaurant banner",
-)
-async def upload_banner(
-    restaurantId: str,
-    request:      Request,
-    scope:        Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)],
-    s3_repo:      Annotated[S3Repository, Depends(get_s3_repo)],
-):
-    """
-    The wide hero image guests see above the menu after scanning a table's QR
-    code. One per restaurant — uploading again replaces it.
-    """
-    _, tenant_id = scope
-    raw_event = await _gateway_event(request)
-    try:
-        s3_key, url = s3_repo.upload_restaurant_banner(raw_event, restaurantId, tenant_id)
-        return _result(s3_key, url, "Banner uploaded. Save s3Key to the restaurant via PUT.")
-    except _UPLOAD_ERRORS as exc:
-        raise BadRequestError(str(exc)) from exc
-
 
 @router.post(
     "/upload/restaurants/{restaurantId}/categories/{categoryId}/image",
