@@ -54,6 +54,9 @@ class Restaurant(BaseModel):
     ratingValue: Optional[float] = None    # 4.8 -- shown only if set
     ratingCount: Optional[int] = None      # 120
 
+    # -- Social media links -----------------------------------------------
+    socialMedia: dict[str, Optional[str]] = field(default_factory=dict)
+
     # -- DynamoDB key helpers -----------------------------------------------
 
     @property
@@ -101,8 +104,29 @@ class Restaurant(BaseModel):
         if self.ratingCount is not None and self.ratingCount < 0:
             errors["ratingCount"] = "cannot be negative"
 
-        if len(self.cuisineTags) > 10:
-            errors["cuisineTags"] = "at most 10 tags"
+            if len(self.cuisineTags) > 10:
+                errors["cuisineTags"] = "at most 10 tags"
+
+        # -- Social media links --------------------------------------------
+        allowed_socials = {
+            "facebook",
+            "instagram",
+            "tiktok",
+            "x",
+            "linkedin",
+            "youtube",
+        }
+
+        for platform, url in self.socialMedia.items():
+            if platform not in allowed_socials:
+                errors[f"socialMedia.{platform}"] = "unsupported social media platform"
+                continue
+
+            if url is not None:
+                if not isinstance(url, str):
+                    errors[f"socialMedia.{platform}"] = "must be a string"
+                elif len(url) > 500:
+                    errors[f"socialMedia.{platform}"] = "URL is too long"
 
         if self.address:
             try:
@@ -112,9 +136,9 @@ class Restaurant(BaseModel):
                     errors[f"address.{k}"] = v
         else:
             errors["address"] = "required"
-
+            
         if errors:
-            raise ValidationError(errors)
+                raise ValidationError(errors)
 
     # -- Serialisation ------------------------------------------------------
 
@@ -154,6 +178,8 @@ class Restaurant(BaseModel):
 
         if self.cuisineTags or not exclude_none:
             data["cuisineTags"] = self.cuisineTags
+
+        data["socialMedia"] = self.socialMedia
 
         return data
 
@@ -198,6 +224,7 @@ class Restaurant(BaseModel):
             ratingCount=(
                 int(data["ratingCount"]) if data.get("ratingCount") is not None else None
             ),
+            socialMedia=dict(data.get("socialMedia") or {}),
         )
 
     @classmethod
