@@ -7,9 +7,10 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, ChevronRight, Star, Truck, Plus, Loader2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { 
-  fetchMenuItems, 
+import {
+  fetchMenuItems,
   fetchRestaurants,
+  fetchCategories,
   type ApiMenuItem,
   type RestaurantData
 } from '@/lib/menu-api';
@@ -46,7 +47,7 @@ function getCatEmoji(cat: string) {
 function GuestContent() {
   const params = useSearchParams();
   const { isDark } = useTheme();
-
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const qrRid = params.get('rid') || '';
   const tid = params.get('tid') || '';
   const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
@@ -81,15 +82,15 @@ function GuestContent() {
         console.log('🏪 Fetching restaurants for rid:', rid);
         const restaurants = await fetchRestaurants(rid);
         console.log('✅ Restaurants response:', restaurants);
-        
+
         if (restaurants.items && restaurants.items.length > 0) {
           // Find specific restaurant
           const restaurant = restaurants.items.find(r => r.restaurantId === rid);
           console.log('🔍 Found restaurant:', restaurant);
-          
+
           if (restaurant) {
             setRestaurantData(restaurant);
-            
+
             // Set restaurant name
             if (restaurant.name && restaurant.name.trim()) {
               setRestName(restaurant.name);
@@ -102,14 +103,48 @@ function GuestContent() {
       }
     };
 
-    // ✅ Fetch menu items
     const fetchMenuData = async () => {
       try {
         const data = await fetchMenuItems(rid);
+
+        console.log("FULL MENU DATA:", data);
+
+        data.forEach(item => {
+          console.log(
+            "ITEM:",
+            item.name,
+            "categoryId:",
+            item.categoryId,
+            "categoryName:",
+            item.categoryName,
+            "category:",
+            item.category
+          );
+        });
+
         setItems(data);
-        console.log('✅ Menu items fetched:', data.length);
+
+        const categoryList = Array.from(
+          new Map(
+            data.map(item => [
+              item.categoryId,
+              {
+                id: item.categoryId ?? '',
+                name:
+                  item.categoryName ??
+                  item.category ??
+                  'Unknown'
+              }
+            ])
+          ).values()
+        );
+
+        setCategories(categoryList);
+
+        console.log("CATEGORY LIST:", categoryList);
+
       } catch (err) {
-        console.error('❌ Failed to load menu:', err);
+        console.error(err);
       }
     };
 
@@ -125,11 +160,22 @@ function GuestContent() {
   const isQrScan = params.has('rid') && params.has('tid');
   const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
-  // Build categories from items
-  const cats = Array.from(new Set(items.map(i => i.category).filter(Boolean))).map(c => {
-    const isUuid = /^[0-9a-f]{6,}/i.test(c);
-    return isUuid ? 'Dishes' : c.charAt(0).toUpperCase() + c.slice(1);
-  });
+  const cats = Array.from(
+    new Map(
+      items
+        .filter(item => item.categoryId)
+        .map(item => [
+          item.categoryId,
+          {
+            id: item.categoryId!,
+            name: item.categoryName ?? item.category ?? 'Other'
+          }
+        ])
+    ).values()
+  );
+  console.log("FINAL CATEGORIES:", categories);
+  console.log("ITEMS:", items);
+  console.log("CATEGORIES:", categories);
 
   // Popular = first 4 items
   const popular = items.filter(i => i.status !== 'inactive').slice(0, 4);
@@ -209,7 +255,7 @@ function GuestContent() {
             <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontWeight: 800, fontSize: 23, color: '#fff', margin: '0 0 6px' }}>
               {displayName}
             </h1>
-            
+
             {/* ✅ Show address from API if available */}
             {restaurantData?.address && (
               <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
@@ -218,11 +264,11 @@ function GuestContent() {
                 {restaurantData.address.country && `, ${restaurantData.address.country}`}
               </p>
             )}
-            
+
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
               {PLACEHOLDER_CUISINE_TAGS.join(' | ')}
             </p>
-            
+
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: 0 }}>
               Open: {PLACEHOLDER_HOURS}
             </p>
@@ -351,7 +397,9 @@ function GuestContent() {
               {loading ? Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} style={{ flexShrink: 0, width: 76, height: 76, borderRadius: 18, background: D.card2 }} />
               )) : cats.slice(0, 6).map(cat => (
-                <Link key={cat} href={`${menuUrl}&cat=${cat.toLowerCase()}`}
+                <Link
+                  key={cat.id}
+                  href={`${menuUrl}&cat=${encodeURIComponent(cat.name.toLowerCase())}`}
                   style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
                   <div style={{
                     width: 76,
@@ -375,7 +423,7 @@ function GuestContent() {
                       opacity: 3,
                     }} />
                   </div>
-                  <span style={{ fontSize: 14, color: D.sub, textAlign: 'center' }}>{cat}</span>
+                  <span style={{ fontSize: 14, color: D.sub, textAlign: 'center' }}>{cat.name}</span>
                 </Link>
               ))}
             </div>

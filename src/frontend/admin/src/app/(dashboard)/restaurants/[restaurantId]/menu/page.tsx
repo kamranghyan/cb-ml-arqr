@@ -86,36 +86,68 @@ export default function BranchMenuPage() {
   const [form, setForm] = useState({ name: '', description: '', price: '', category: '', prepTime: '', calories: '' });
 
   const loadItems = useCallback(async () => {
-    setLoadState('loading'); setLoadError('');
-    try {
-      const raw = await fetchMenuItems(restaurantId);
-      const categories = await fetchCategories(restaurantId);
 
-      setCats(categories);
-      const normalised = raw.map(normaliseItem);
-      setItems(normalised);
-      const seen = new Map<string, string>();
-      raw.forEach((r: any) => {
-        const id = r.categoryId ?? '';
-        const KNOWN: Record<string, string> = { 'e933848e-0d18-4e3a-b0a8-d70275c2fa54': 'Main Course' };
-        const name = r.categoryName ?? KNOWN[id] ?? (r.category && !r.category.includes('-') ? r.category : `Cat-${id.slice(0, 6)}`);
-        if (id && id.includes('-')) seen.set(id, name);
-      });
-      const DEFAULT_CATS = [
-        { id: 'e933848e-0d18-4e3a-b0a8-d70275c2fa54', name: 'Main Course' },
-        { id: 'bev-cat-0000-0000-000000000001', name: 'Beverages' },
-        { id: 'des-cat-0000-0000-000000000002', name: 'Desserts' },
-        { id: 'str-cat-0000-0000-000000000003', name: 'Starters' },
-      ];
-      const catList = seen.size > 0 ? Array.from(seen.entries()).map(([id, name]) => ({ id, name })) : DEFAULT_CATS;
+    setLoadState("loading");
+
+    try {
+
+      const raw = await fetchMenuItems(restaurantId);
+
+      const categoriesResponse = await fetchCategories(restaurantId);
+
+
+      const catList = categoriesResponse.map(cat => ({
+        id: cat.id,
+        name: cat.name
+      }));
+
       setCats(catList);
-      setForm(prev => prev.category === '' ? { ...prev, category: catList[0]?.id ?? '' } : prev);
-      setLoadState('success');
-    } catch (err: any) { setLoadError(err?.message ?? 'Failed to load'); setLoadState('error'); }
-  }, []);
+
+
+      const categoryMap = new Map(
+        catList.map(cat => [
+          cat.id,
+          cat.name
+        ])
+      );
+
+
+      const updatedItems = raw.map((item: any) => ({
+
+        ...item,
+
+        categoryId:
+          item.categoryId ?? item.category,
+
+        categoryName:
+          categoryMap.get(item.categoryId ?? item.category)
+          ?? item.categoryName
+          ?? item.category
+          ?? "Unknown"
+
+      }));
+
+
+      setItems(
+        updatedItems.map(normaliseItem)
+      );
+
+
+      setLoadState("success");
+
+
+    }
+    catch (err: any) {
+
+      console.log(err);
+      setLoadState("error");
+
+    }
+
+  }, [restaurantId]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
-  
+
 
   const filtered = items.filter(item => {
 
@@ -152,6 +184,9 @@ export default function BranchMenuPage() {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': ct }, body: file });
     if (!res.ok) throw new Error(`S3 upload failed (${res.status})`);
   };
+  console.log("cats", cats);
+  console.log("form", form);
+  console.log("categoryId being sent", form.category);
 
   const saveItem = async () => {
     if (!form.name.trim() || !form.price) { setSaveErr('Name and price are required.'); return; }
@@ -338,7 +373,9 @@ export default function BranchMenuPage() {
                   <p style={{ fontSize: 11, color: C.subtle, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</p>
                 </div>
 
-                <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{item.category}</p>
+                <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>
+                  {item.categoryName || item.category || "—"}
+                </p>
                 <p style={{ fontSize: 13, fontWeight: 700, color: C.red, margin: 0, fontFamily: 'Georgia, serif' }}>{formatPrice(item.price)}</p>
                 <p style={{ fontSize: 12, color: '#d97706', fontWeight: 600, margin: 0 }}>★ {item.rating?.toFixed(1) ?? '—'}</p>
 

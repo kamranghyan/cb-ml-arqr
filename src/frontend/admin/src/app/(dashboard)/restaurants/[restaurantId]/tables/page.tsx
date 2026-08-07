@@ -153,6 +153,13 @@ function TableModal({ restaurantId, edit, onClose, onSaved, say }: {
     finally { setSaving(false); }
   }
 
+  // Input style with black text and #999 placeholder
+  const inputStyle = {
+    ...input,
+    color: '#000000',
+    fontWeight: 500,
+  };
+
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
@@ -170,23 +177,46 @@ function TableModal({ restaurantId, edit, onClose, onSaved, say }: {
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <label style={label}>Table Number</label>
-            <input style={input} value={f.tableNumber} placeholder="T1"
-                   onChange={e => set('tableNumber', e.target.value)} />
+            <input 
+              className='searchInput' 
+              style={inputStyle} 
+              value={f.tableNumber} 
+              placeholder="T1"
+              onChange={e => set('tableNumber', e.target.value)} 
+            />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>Zone</label>
-              <input style={input} value={f.zone} onChange={e => set('zone', e.target.value)} />
+              <input 
+                className='searchInput' 
+                style={inputStyle} 
+                value={f.zone} 
+                placeholder="Enter zone"
+                onChange={e => set('zone', e.target.value)} 
+              />
             </div>
             <div>
               <label style={label}>Outlet</label>
-              <input style={input} value={f.outlet} onChange={e => set('outlet', e.target.value)} />
+              <input 
+                className='searchInput' 
+                style={inputStyle} 
+                value={f.outlet} 
+                placeholder="Enter outlet"
+                onChange={e => set('outlet', e.target.value)} 
+              />
             </div>
           </div>
           <div>
             <label style={label}>Seats</label>
-            <input style={input} type="number" value={f.capacity}
-                   onChange={e => set('capacity', parseInt(e.target.value) || 1)} />
+            <input 
+              className='searchInput' 
+              style={inputStyle} 
+              type="number" 
+              value={f.capacity}
+              placeholder="4"
+              onChange={e => set('capacity', parseInt(e.target.value) || 1)} 
+            />
           </div>
           <button onClick={save} disabled={saving || !f.tableNumber.trim()}
                   style={{ ...primary, justifyContent: 'center',

@@ -153,3 +153,29 @@
 /* ── Safe-area padding for iOS notch / home indicator ── */
 .pt-safe-top  { padding-top: env(safe-area-inset-top, 16px); }
 .pb-safe-bot  { padding-bottom: env(safe-area-inset-bottom, 16px); }
+
+
+.searchInput::placeholder{
+  color: #999;
+  opacity: 1;
+}
+
+/* For placeholder color */
+.searchInput::placeholder {
+  color: #999 !important;
+  opacity: 1;
+}
+
+/* For older browsers */
+.searchInput::-webkit-input-placeholder {
+  color: #999 !important;
+}
+.searchInput::-moz-placeholder {
+  color: #999 !important;
+}
+.searchInput:-ms-input-placeholder {
+  color: #999 !important;
+}
+.searchInput:-moz-placeholder {
+  color: #999 !important;
+}
