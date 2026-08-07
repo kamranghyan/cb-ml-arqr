@@ -277,7 +277,7 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <label style={label}>Company Name</label>
-            <input style={input} value={f.companyName} placeholder="McDonald's Pakistan"
+            <input className='searchInput' style={input} value={f.companyName} placeholder="McDonald's Pakistan"
                    onChange={e => set('companyName', e.target.value)} />
           </div>
 
@@ -285,17 +285,17 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
             <>
               <div>
                 <label style={label}>Owner Email</label>
-                <input style={input} type="email" value={f.email} placeholder="owner@company.com"
+                <input className='searchInput' style={input} type="email" value={f.email} placeholder="owner@company.com"
                        onChange={e => set('email', e.target.value)} />
               </div>
               <div>
                 <label style={label}>Owner Name</label>
-                <input style={input} value={f.name} placeholder="Ali Khan"
+                <input className='searchInput' style={input} value={f.name} placeholder="Ali Khan"
                        onChange={e => set('name', e.target.value)} />
               </div>
               <div>
                 <label style={label}>Temporary Password</label>
-                <input style={input} type="text" value={f.password}
+                <input className='searchInput' style={input} type="text" value={f.password}
                        placeholder="min 8 chars, upper + lower + number + symbol"
                        onChange={e => set('password', e.target.value)} />
                 <p style={{ fontSize: 12, color: C.subtle, margin: '4px 0 0' }}>

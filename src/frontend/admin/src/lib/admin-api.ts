@@ -12,48 +12,66 @@ import { getValidIdToken } from './cognito'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ApiAddress {
-  street:   string
-  city:     string
-  country:  string
+  street: string
+  city: string
+  country: string
   postcode: string
 }
 
 export interface ApiRestaurant {
   restaurantId: string
-  tenantId?:    string
-  name:         string
-  address:      ApiAddress
-  timezone:     string
+  tenantId?: string
+  name: string
+  address: ApiAddress
+  timezone: string
   currencyCode: string
-  isActive:     boolean
-  logoKey?:     string | null
-  logoUrl?:     string | null
-  createdAt?:   string
-  updatedAt?:   string
+  isActive: boolean
+
+  // Images
+  logoKey?: string | null
+  logoUrl?: string | null
+  bannerKey?: string | null
+  bannerUrl?: string | null
+
+  // Rating
+  ratingValue?: number | null
+  ratingCount?: number | null
+
+  // Existing
+  tagline?: string
+  openingHours?: string
+  deliveryNote?: string
+  cuisineTags?: string[]
+
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ApiCategory {
-  categoryId:   string
+  categoryId: string
   restaurantId: string
-  tenantId?:    string
-  name:         string
+  tenantId?: string
+  name: string
   displayOrder: number
-  isActive:     boolean
-  imageKey?:    string | null
-  createdAt?:   string
-  updatedAt?:   string
+  isActive: boolean
+
+  imageKey?: string | null
+  imageUrl?: string | null
+
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ApiTable {
-  tableId:      string
+  tableId: string
   restaurantId: string
-  tenantId?:    string
-  tableNumber:  string
-  zone:         string
-  outlet:       string
-  capacity:     number
-  createdAt?:   string
-  updatedAt?:   string
+  tenantId?: string
+  tableNumber: string
+  zone: string
+  outlet: string
+  capacity: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 interface Paginated<T> {
@@ -109,7 +127,7 @@ export async function createRestaurant(
 ): Promise<ApiRestaurant> {
   return adminFetch<ApiRestaurant>('/restaurants', {
     method: 'POST',
-    body:   JSON.stringify(payload),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -119,7 +137,7 @@ export async function updateRestaurant(
 ): Promise<ApiRestaurant> {
   return adminFetch<ApiRestaurant>(`/restaurants/${restaurantId}`, {
     method: 'PUT',
-    body:   JSON.stringify(payload),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -150,28 +168,117 @@ export async function fetchCategory(
 }
 
 export async function createCategory(
-  payload: { name: string; displayOrder?: number; isActive?: boolean },
-  restaurantId: string = RESTAURANT_ID,
+payload:{
+ name:string;
+ displayOrder?:number;
+ isActive?:boolean;
+},
+restaurantId:string,
+imageFile?:File|null
 ): Promise<ApiCategory> {
-  return adminFetch<ApiCategory>(`/restaurants/${restaurantId}/categories`, {
-    method: 'POST',
-    body:   JSON.stringify({
-      displayOrder: 0,
-      isActive:     true,
-      ...payload,
-    }),
-  })
+
+  const token = await getValidIdToken()
+
+  const form = new FormData()
+
+  form.append('name', payload.name)
+  form.append(
+    'displayOrder',
+    String(payload.displayOrder ?? 0)
+  )
+
+  form.append(
+    'isActive',
+    String(payload.isActive ?? true)
+  )
+
+
+  if (imageFile) {
+    form.append('file', imageFile)
+  }
+
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/categories`,
+    {
+      method: 'POST',
+      headers: token
+        ? { Authorization: token }
+        : {},
+      body: form
+    }
+  )
+
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text)
+  }
+
+
+  return res.json()
 }
 
 export async function updateCategory(
   categoryId: string,
-  payload: Partial<{ name: string; displayOrder: number; isActive: boolean }>,
+  payload: {
+    name?: string
+    displayOrder?: number
+    isActive?: boolean
+  },
   restaurantId: string = RESTAURANT_ID,
+  imageFile?: File | null
 ): Promise<ApiCategory> {
-  return adminFetch<ApiCategory>(
-    `/restaurants/${restaurantId}/categories/${categoryId}`,
-    { method: 'PUT', body: JSON.stringify(payload) },
+
+
+  const token = await getValidIdToken()
+
+
+  const form = new FormData()
+
+
+  if (payload.name)
+    form.append('name', payload.name)
+
+
+  if (payload.displayOrder !== undefined)
+    form.append(
+      'displayOrder',
+      String(payload.displayOrder)
+    )
+
+
+  if (payload.isActive !== undefined)
+    form.append(
+      'isActive',
+      String(payload.isActive)
+    )
+
+
+  if (imageFile)
+    form.append('file', imageFile)
+
+
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/categories/${categoryId}`,
+    {
+      method: 'PUT',
+      headers: token
+        ? { Authorization: token }
+        : {},
+      body: form
+    }
   )
+
+
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+
+
+  return res.json()
+
 }
 
 export async function deleteCategory(
@@ -202,15 +309,15 @@ export async function fetchTables(
 export async function createTable(
   payload: {
     tableNumber: string
-    zone?:       string
-    outlet?:     string
-    capacity?:   number
+    zone?: string
+    outlet?: string
+    capacity?: number
   },
   restaurantId: string = RESTAURANT_ID,
 ): Promise<ApiTable> {
   return adminFetch<ApiTable>(`/restaurants/${restaurantId}/tables`, {
     method: 'POST',
-    body:   JSON.stringify(payload),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -218,9 +325,9 @@ export async function updateTable(
   tableId: string,
   payload: Partial<{
     tableNumber: string
-    zone:        string
-    outlet:      string
-    capacity:    number
+    zone: string
+    outlet: string
+    capacity: number
   }>,
   restaurantId: string = RESTAURANT_ID,
 ): Promise<ApiTable> {
@@ -253,15 +360,15 @@ export async function uploadRestaurantLogo(
   restaurantId: string = RESTAURANT_ID,
 ): Promise<{ s3Key: string; url: string }> {
   const token = await getValidIdToken()
-  const form  = new FormData()
+  const form = new FormData()
   form.append('file', file)
 
   const res = await fetch(
     `/api/menu/upload/restaurants/${restaurantId}/logo`,
     {
-      method:  'POST',
+      method: 'POST',
       headers: token ? { Authorization: token } : {},
-      body:    form,
+      body: form,
     },
   )
   if (!res.ok) {
@@ -280,15 +387,15 @@ export async function uploadCategoryImage(
   restaurantId: string = RESTAURANT_ID,
 ): Promise<{ s3Key: string; url: string }> {
   const token = await getValidIdToken()
-  const form  = new FormData()
+  const form = new FormData()
   form.append('file', file)
 
   const res = await fetch(
     `/api/menu/upload/restaurants/${restaurantId}/categories/${categoryId}/image`,
     {
-      method:  'POST',
+      method: 'POST',
       headers: token ? { Authorization: token } : {},
-      body:    form,
+      body: form,
     },
   )
   if (!res.ok) {

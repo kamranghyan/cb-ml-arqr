@@ -14,6 +14,7 @@ export interface ApiMenuItem {
   price: number
   category: string
   categoryId?: string
+  categoryName?: string;
   status: 'active' | 'inactive' | 'draft'
   imageUrl?: string
   emoji?: string
@@ -118,6 +119,7 @@ export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem
   let items: any[] = []
   if (Array.isArray(data)) items = data
   else if (data && 'items' in data) items = (data as ApiMenuResponse).items
+  console.log("ITEMS BEFORE NORMALIZE:", items);
   return items.map(normaliseItem)
 }
 
@@ -128,6 +130,7 @@ export async function fetchMenuItem(itemId: string, restaurantId?: string): Prom
   const item = await menuFetch<any>(MENU_API.item(itemId, rid))
 
   const arData = await fetchARModel(itemId, rid)
+
   if (arData && arData.presignedUrl) {
     return normaliseItem({ ...item, arModelUrl: arData.presignedUrl, hasArModel: true })
   }
@@ -308,6 +311,7 @@ export async function deleteMenuItem(itemId: string): Promise<void> {
 
 // ── Normalise raw API response ────────────────────────────────────────────────
 export function normaliseItem(raw: any): ApiMenuItem {
+  console.log("RAW ITEM:", raw);
   const id = raw.id ?? raw.itemId ?? raw.item_id ?? raw._id ?? crypto.randomUUID()
 
   const price = raw.priceMinorUnits != null
@@ -344,12 +348,17 @@ export function normaliseItem(raw: any): ApiMenuItem {
     raw.category?.id ??
     '';
 
-  const categoryDisplay =
+  const categoryName =
     raw.categoryName ??
+    raw.category?.name ??
     CATEGORY_MAP[categoryId] ??
-    raw.category ??
-    "Other";
-    
+    'Other';
+
+  console.log("CATEGORY DEBUG:", {
+    rawCategory: raw.category,
+    categoryId,
+    categoryName
+  });
 
   return {
     ...raw,
@@ -366,8 +375,9 @@ export function normaliseItem(raw: any): ApiMenuItem {
     subtitle: raw.subtitle ?? raw.subTitle ?? '',
     name: raw.name ?? raw.itemName ?? 'Unnamed Item',
     description: raw.description ?? raw.desc ?? '',
-    category: categoryDisplay,
-    categoryId: raw.categoryId ?? raw.category ?? '',
+    categoryId,
+    categoryName,
+    category: categoryName,
     imageUrl: raw.imageUrl ?? null,
     arModelUrl: raw.arModelUrl ?? null,
     arModelKey: raw.arModelKey ?? null,
@@ -376,7 +386,12 @@ export function normaliseItem(raw: any): ApiMenuItem {
   }
 }
 
-export interface ApiCategory { id: string; name: string; slug?: string }
+export interface ApiCategory {
+  id?: string;
+  categoryId?: string;
+  name: string;
+  slug?: string;
+}
 
 export async function fetchCategories(restaurantId: string): Promise<ApiCategory[]> {
 

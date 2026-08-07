@@ -47,20 +47,21 @@ function getCatEmoji(cat: string) {
 function GuestContent() {
   const params = useSearchParams();
   const { isDark } = useTheme();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const qrRid = params.get('rid') || '';
   const tid = params.get('tid') || '';
   const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
 
   // ✅ State with static fallback values
+  const [restaurantImage, setRestaurantImage] = useState('');
   const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
   const [zone, setZone] = useState('Main Hall');
   const [items, setItems] = useState<ApiMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [restaurantImage, setRestaurantImage] = useState<string | null>(null);
   const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const { addItem } = useCartStore();
   const [search, setSearch] = useState('');
+
 
   useEffect(() => {
     const n = parseInt(tableNum, 10);
@@ -95,6 +96,9 @@ function GuestContent() {
             if (restaurant.name && restaurant.name.trim()) {
               setRestName(restaurant.name);
             }
+            if (restaurant.imageUrl) {
+              setRestaurantImage(restaurant.imageUrl);
+            }
           }
         }
       } catch (err) {
@@ -105,48 +109,24 @@ function GuestContent() {
 
     const fetchMenuData = async () => {
       try {
-        const data = await fetchMenuItems(rid);
 
-        console.log("FULL MENU DATA:", data);
+        const [itemsData, categoriesData] = await Promise.all([
+          fetchMenuItems(rid),
+          fetchCategories(rid)
+        ]);
 
-        data.forEach(item => {
-          console.log(
-            "ITEM:",
-            item.name,
-            "categoryId:",
-            item.categoryId,
-            "categoryName:",
-            item.categoryName,
-            "category:",
-            item.category
-          );
-        });
 
-        setItems(data);
+        setItems(itemsData);
+        setCategories(categoriesData);
 
-        const categoryList = Array.from(
-          new Map(
-            data.map(item => [
-              item.categoryId,
-              {
-                id: item.categoryId ?? '',
-                name:
-                  item.categoryName ??
-                  item.category ??
-                  'Unknown'
-              }
-            ])
-          ).values()
-        );
 
-        setCategories(categoryList);
-
-        console.log("CATEGORY LIST:", categoryList);
+        console.log("ITEMS:", itemsData);
+        console.log("CATEGORIES FROM API:", categoriesData);
 
       } catch (err) {
-        console.error(err);
+        console.log(err)
       }
-    };
+    }
 
     // ✅ Fetch both in parallel
     Promise.all([fetchRestaurantData(), fetchMenuData()])
@@ -160,25 +140,18 @@ function GuestContent() {
   const isQrScan = params.has('rid') && params.has('tid');
   const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
-  const cats = Array.from(
-    new Map(
-      items
-        .filter(item => item.categoryId)
-        .map(item => [
-          item.categoryId,
-          {
-            id: item.categoryId!,
-            name: item.categoryName ?? item.category ?? 'Other'
-          }
-        ])
-    ).values()
-  );
+  const cats = categories.map(c => ({
+    id: c.categoryId,
+    name: c.name,
+    imageUrl: c.imageUrl,
+  }));
+
   console.log("FINAL CATEGORIES:", categories);
   console.log("ITEMS:", items);
   console.log("CATEGORIES:", categories);
 
   // Popular = first 4 items
-  const popular = items.filter(i => i.status !== 'inactive').slice(0, 4);
+  const popular = items.filter(i => i.status !== 'inactive').slice(0, 7);
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
@@ -199,6 +172,8 @@ function GuestContent() {
 
   // ✅ Display name: Restaurant Name or Static
   const displayName = restName || STATIC_RESTAURANT_NAME;
+
+
 
   return (
     <div style={{
@@ -265,22 +240,42 @@ function GuestContent() {
               </p>
             )}
 
-            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
-              {PLACEHOLDER_CUISINE_TAGS.join(' | ')}
+            <p style={{
+              fontSize: 12.5,
+              color: 'rgba(255,255,255,0.92)',
+              margin: '0 0 4px'
+            }}>
+              {
+                restaurantData?.cuisineTags?.length
+                  ? restaurantData.cuisineTags.join(' | ')
+                  : PLACEHOLDER_CUISINE_TAGS.join(' | ')
+              }
             </p>
 
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: 0 }}>
-              Open: {PLACEHOLDER_HOURS}
+              Open: {
+                restaurantData?.openingHours || PLACEHOLDER_HOURS
+              }
             </p>
           </div>
           <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 7, paddingTop: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Star size={13} fill="#fff" color="#fff" />
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{PLACEHOLDER_RATING}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}><span>
+                {
+                  restaurantData?.ratingValue
+                    ?
+                    `${restaurantData.ratingValue}/5 (${restaurantData.ratingCount ?? 0}+)`
+                    :
+                    PLACEHOLDER_RATING
+                }
+              </span></span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Truck size={13} color="#fff" />
-              <span style={{ fontSize: 12.5, color: '#fff' }}>{PLACEHOLDER_DELIVERY}</span>
+              <span style={{ fontSize: 12.5, color: '#fff' }}>{
+                restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY
+              }</span>
             </div>
           </div>
         </div>
@@ -391,41 +386,121 @@ function GuestContent() {
           </div>
 
           {/* Categories */}
-          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: D.text, margin: '0 0 16px' }}>Categories</h2>
+          {/* Categories */}
+          <h2
+            style={{
+              fontFamily: "'Baloo 2', sans-serif",
+              fontSize: 22,
+              fontWeight: 700,
+              color: D.text,
+              margin: '0 0 16px',
+            }}
+          >
+            Categories
+          </h2>
+
           <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', gap: 14, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4 }}>
-              {loading ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ flexShrink: 0, width: 76, height: 76, borderRadius: 18, background: D.card2 }} />
-              )) : cats.slice(0, 6).map(cat => (
-                <Link
-                  key={cat.id}
-                  href={`${menuUrl}&cat=${encodeURIComponent(cat.name.toLowerCase())}`}
-                  style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                  <div style={{
-                    width: 76,
-                    height: 76,
-                    borderRadius: 18,
-                    background: isDark ? D.card2 : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 32,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    border: `2px solid ${BRAND}`,
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundImage: `url('/Images/menu/burger.jpg')`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      opacity: 3,
-                    }} />
-                  </div>
-                  <span style={{ fontSize: 14, color: D.sub, textAlign: 'center' }}>{cat.name}</span>
-                </Link>
-              ))}
+            <div
+              style={{
+                display: 'flex',
+                gap: 14,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                paddingBottom: 4,
+              }}
+            >
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      flexShrink: 0,
+                      width: 76,
+                      height: 76,
+                      borderRadius: 18,
+                      background: D.card2,
+                    }}
+                  />
+                ))
+              ) : (
+                categories.slice(0, 6).map((cat) => (
+                  <Link
+                    key={cat.categoryId}
+                    href={`${menuUrl}&cat=${encodeURIComponent(
+                      cat.name.toLowerCase()
+                    )}`}
+                    style={{
+                      flexShrink: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 8,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 76,
+                        height: 76,
+                        borderRadius: 18,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        border: `2px solid ${BRAND}`,
+                        background: isDark
+                          ? D.card2
+                          : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
+                      }}
+                    >
+                      {cat.imageUrl ? (
+                        <img
+                          src={cat.imageUrl}
+                          alt={cat.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                          onError={(e) => {
+                            console.error(
+                              '❌ Category image failed:',
+                              cat.imageUrl
+                            );
+
+                            e.currentTarget.src =
+                              '/Images/menu/burger.jpg';
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src="/Images/menu/burger.jpg"
+                          alt={cat.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 14,
+                        color: D.text,
+                        textAlign: 'center',
+                        maxWidth: 76,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {cat.name}
+                    </span>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
 

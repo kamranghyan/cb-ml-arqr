@@ -56,7 +56,7 @@ function MenuContent() {
   const categories = [
     { id: 'all', name: 'All', emoji: '🍽️' },
     ...Array.from(new Set(items.map(i => i.category).filter(Boolean))).map(cat => {
-      const isUuid = /^[0-9a-f]{6,}/i.test(cat);
+      const isUuid = /^[0-9a-f]{10,}/i.test(cat);
       const name   = isUuid ? 'Dishes' : cat.charAt(0).toUpperCase() + cat.slice(1);
       return { id: cat, name, emoji: getCatEmoji(cat) };
     }),

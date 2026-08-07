@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Tags, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Tags, AlertCircle, CloudUpload } from 'lucide-react';
 import {
   fetchCategories, createCategory, updateCategory, deleteCategory,
   type ApiCategory,
@@ -16,13 +16,13 @@ const C = {
 export default function CategoriesPage() {
   const restaurantId = String(useParams().restaurantId ?? '');
 
-  const [rows, setRows]       = useState<ApiCategory[]>([]);
+  const [rows, setRows] = useState<ApiCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-  const [toast, setToast]     = useState<{ msg: string; kind: 'ok'|'err' } | null>(null);
-  const [modal, setModal]     = useState<{ open: boolean; edit?: ApiCategory }>({ open: false });
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
+  const [modal, setModal] = useState<{ open: boolean; edit?: ApiCategory }>({ open: false });
 
-  const say = (msg: string, kind: 'ok'|'err' = 'ok') => {
+  const say = (msg: string, kind: 'ok' | 'err' = 'ok') => {
     setToast({ msg, kind }); setTimeout(() => setToast(null), 3500);
   };
 
@@ -79,10 +79,10 @@ export default function CategoriesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: C.bg }}>
               <tr><th style={th}>Name</th><th style={th}>Order</th>
-                  <th style={th}>Visible</th><th style={th}></th></tr>
+                <th style={th}>Visible</th><th style={th}></th></tr>
             </thead>
             <tbody>
-              {[...rows].sort((a,b) => a.displayOrder - b.displayOrder).map(c => (
+              {[...rows].sort((a, b) => a.displayOrder - b.displayOrder).map(c => (
                 <tr key={c.categoryId} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td style={{ ...cell, fontWeight: 600 }}>{c.name}</td>
                   <td style={cell}>{c.displayOrder}</td>
@@ -93,7 +93,7 @@ export default function CategoriesPage() {
                   </td>
                   <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => setModal({ open: true, edit: c })}
-                            style={{ ...ghost, marginRight: 6 }}><Edit2 size={14} /></button>
+                      style={{ ...ghost, marginRight: 6 }}><Edit2 size={14} /></button>
                     <button onClick={() => onDelete(c)} style={{ ...ghost, color: C.red }}>
                       <Trash2 size={14} /></button>
                   </td>
@@ -106,8 +106,8 @@ export default function CategoriesPage() {
 
       {modal.open && (
         <CategoryModal restaurantId={restaurantId} edit={modal.edit}
-                       onClose={() => setModal({ open: false })}
-                       onSaved={() => { setModal({ open: false }); load(); }} say={say} />
+          onClose={() => setModal({ open: false })}
+          onSaved={() => { setModal({ open: false }); load(); }} say={say} />
       )}
 
       {toast && (
@@ -126,24 +126,59 @@ function CategoryModal({ restaurantId, edit, onClose, onSaved, say }: {
   edit?: ApiCategory;
   onClose: () => void;
   onSaved: () => void;
-  say: (m: string, k?: 'ok'|'err') => void;
+  say: (m: string, k?: 'ok' | 'err') => void;
 }) {
   const [f, setF] = useState({
-    name: edit?.name ?? '', displayOrder: edit?.displayOrder ?? 0,
+    name: edit?.name ?? '',
+    displayOrder: edit?.displayOrder ?? 0,
     isActive: edit?.isActive ?? true,
   });
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState(
+    edit?.imageUrl ?? ''
+  );
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
 
-  async function save() {
-    setSaving(true);
-    try {
-      if (edit) { await updateCategory(edit.categoryId, f, restaurantId); say('Category updated'); }
-      else      { await createCategory(f, restaurantId); say('Category created'); }
-      onSaved();
-    } catch (e: any) { say(e.message, 'err'); }
-    finally { setSaving(false); }
+async function save() {
+  setSaving(true);
+
+  try {
+    if (edit) {
+      await updateCategory(
+        edit.categoryId,
+        {
+          name: f.name,
+          displayOrder: f.displayOrder,
+          isActive: f.isActive,
+        },
+        restaurantId,
+        imageFile
+      );
+
+      say("Category updated");
+    } else {
+      await createCategory(
+        {
+          name: f.name,
+          displayOrder: f.displayOrder,
+          isActive: f.isActive,
+        },
+        restaurantId,
+        imageFile
+      );
+
+      say("Category created");
+    }
+
+    onSaved();
+  } catch (e: any) {
+    say(e.message ?? "Something went wrong", "err");
+  } finally {
+    setSaving(false);
   }
+}
 
   return (
     <div onClick={onClose} style={{
@@ -163,23 +198,99 @@ function CategoryModal({ restaurantId, edit, onClose, onSaved, say }: {
           <div>
             <label style={label}>Name</label>
             <input style={input} value={f.name} placeholder="Burgers"
-                   onChange={e => set('name', e.target.value)} />
+              onChange={e => set('name', e.target.value)} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={label}>
+              Category Image
+            </label>
+
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 20,
+                borderRadius: 16,
+                border: `2px dashed ${imageFile ? '#FED7AA' : C.border}`,
+                background: imageFile ? '#FFF8F1' : C.bg,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+
+                  if (file) {
+                    setImageFile(file);
+                    setImagePreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+
+              <CloudUpload
+                size={24}
+                color={imageFile ? C.dark : C.subtle}
+              />
+
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: imageFile ? C.dark : C.subtle,
+                }}
+              >
+                {imageFile
+                  ? `✓ ${imageFile.name}`
+                  : 'Click to upload · PNG, JPG'}
+              </span>
+            </label>
+
+
+            {imagePreview && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: 'flex',
+                  justifyContent: 'center'
+                }}
+              >
+                <img
+                  src={imagePreview}
+                  alt="category"
+                  style={{
+                    width: 90,
+                    height: 90,
+                    objectFit: 'cover',
+                    borderRadius: 12,
+                    border: `1px solid ${C.border}`,
+                  }}
+                />
+              </div>
+            )}
           </div>
           <div>
             <label style={label}>Display Order</label>
             <input style={input} type="number" value={f.displayOrder}
-                   onChange={e => set('displayOrder', parseInt(e.target.value) || 0)} />
+              onChange={e => set('displayOrder', parseInt(e.target.value) || 0)} />
             <p style={{ fontSize: 12, color: C.subtle, margin: '4px 0 0' }}>
               Lower numbers appear first on the guest menu.
             </p>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
             <input type="checkbox" checked={f.isActive}
-                   onChange={e => set('isActive', e.target.checked)} /> Show to guests
+              onChange={e => set('isActive', e.target.checked)} /> Show to guests
           </label>
           <button onClick={save} disabled={saving || !f.name.trim()}
-                  style={{ ...primary, justifyContent: 'center',
-                           opacity: saving || !f.name.trim() ? 0.6 : 1 }}>
+            style={{
+              ...primary, justifyContent: 'center',
+              opacity: saving || !f.name.trim() ? 0.6 : 1
+            }}>
             {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
             {edit ? 'Save Changes' : 'Create'}
           </button>

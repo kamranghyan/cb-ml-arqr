@@ -129,11 +129,11 @@ export async function deleteMenuItem(itemId: string): Promise<void> {
 // ── Normalise raw API response ────────────────────────────────────────────────
 export function normaliseItem(raw: any): ApiMenuItem {
   const id =
-  raw.id ??
-  raw.itemId ??
-  raw.item_id ??
-  raw._id ??
-  `item-${Date.now()}-${Math.random()}`;
+    raw.id ??
+    raw.itemId ??
+    raw.item_id ??
+    raw._id ??
+    `item-${Date.now()}-${Math.random()}`;
 
   const price = raw.priceMinorUnits != null
     ? Number(raw.priceMinorUnits) / 100
@@ -154,22 +154,22 @@ export function normaliseItem(raw: any): ApiMenuItem {
   const hasArModel = !!(raw.arModelUrl || raw.arModelKey)
 
   const CATEGORY_MAP: Record<string, string> = {
-  "c840f14d-fa93-40af-9f16-f4f35fc3f27a": "Fast Food",
-  "567d9886-3c01-4ba9-9946-c3607f80091e": "Starter",
-  "e933848e-0d18-4e3a-b0a8-d70275c2fa54": "Main Course",
-};
+    "c840f14d-fa93-40af-9f16-f4f35fc3f27a": "Fast Food",
+    "567d9886-3c01-4ba9-9946-c3607f80091e": "Starter",
+    "e933848e-0d18-4e3a-b0a8-d70275c2fa54": "Main Course",
+  };
 
-const categoryId =
-  raw.categoryId ||
-  raw.category?.id ||
-  '';
+  const categoryId =
+    raw.categoryId ||
+    raw.category?.id ||
+    '';
 
-const categoryDisplay =
-  CATEGORY_MAP[categoryId] ||
-  raw.categoryName ||
-  (typeof raw.category === "string" && !raw.category.includes("-")
-    ? raw.category
-    : "Other");
+  const categoryDisplay =
+    CATEGORY_MAP[categoryId] ||
+    raw.categoryName ||
+    (typeof raw.category === "string" && !raw.category.includes("-")
+      ? raw.category
+      : "Other");
 
   return {
     ...raw,
@@ -187,37 +187,40 @@ const categoryDisplay =
     name: raw.name ?? raw.itemName ?? 'Unnamed Item',
     description: raw.description ?? raw.desc ?? '',
     category: categoryDisplay,
-    categoryId: raw.categoryId ?? raw.category ?? '',
-    categoryName: raw.categoryName ?? categoryDisplay,
+    categoryId:
+      raw.categoryId ??
+      raw.category?.id ??
+      '', categoryName: raw.categoryName ?? categoryDisplay,
     imageUrl: raw.imageUrl ?? null,
     arModelUrl: raw.arModelUrl ?? null,
     arModelKey: raw.arModelKey ?? null,
     imageKey: raw.imageKey ?? null,
     version: raw.version ?? 1,
+    
   }
 }
 
 export interface ApiCategory { id: string; name: string; slug?: string }
 
 export async function fetchCategories(
- restaurantId?: string
+  restaurantId?: string
 ): Promise<ApiCategory[]> {
 
- const rid = restaurantId?.trim() || RESTAURANT_ID;
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
 
- const data:any = await menuFetch(
-   MENU_API.categories(rid)
- );
+  const data: any = await menuFetch(
+    MENU_API.categories(rid)
+  );
 
- if(Array.isArray(data)){
-   return data;
- }
+  if (Array.isArray(data)) {
+    return data;
+  }
 
- if(data?.items){
-   return data.items;
- }
+  if (data?.items) {
+    return data.items;
+  }
 
- return [];
+  return [];
 }
 
 export function extractCategoriesFromItems(items: ApiMenuItem[]): ApiCategory[] {

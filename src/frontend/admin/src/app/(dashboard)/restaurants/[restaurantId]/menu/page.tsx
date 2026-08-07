@@ -96,9 +96,9 @@ export default function BranchMenuPage() {
       const categoriesResponse = await fetchCategories(restaurantId);
 
 
-      const catList = categoriesResponse.map(cat => ({
-        id: cat.id,
-        name: cat.name
+      const catList = categoriesResponse.map((cat: any) => ({
+        id: cat.id ?? cat.categoryId,
+        name: cat.name ?? cat.categoryName
       }));
 
       setCats(catList);
@@ -117,7 +117,7 @@ export default function BranchMenuPage() {
         ...item,
 
         categoryId:
-          item.categoryId ?? item.category,
+          item.categoryId ?? item.category?.id ?? '',
 
         categoryName:
           categoryMap.get(item.categoryId ?? item.category)
@@ -177,7 +177,19 @@ export default function BranchMenuPage() {
     setIsChef(item ? (item.tags ?? []).includes('chef') : false);
     setUploadFile(null); setUploadName(null); setGlbFile(null); setGlbName(null);
     setGlbStatus('idle'); setGlbError(''); setSaveMsg(''); setSaveErr('');
-    setForm({ name: item?.name ?? '', description: item?.description ?? '', price: item?.price ? String(item.price) : '', category: (item as any)?.categoryId ?? item?.category ?? cats[0]?.id ?? '', prepTime: item?.prepTime ?? '', calories: item?.calories ? String(item.calories) : '' });
+    setForm({
+      name: item?.name ?? '',
+      description: item?.description ?? '',
+      price: item?.price ? String(item.price) : '',
+      category:
+        item?.categoryId ??
+        cats.find(
+          c => c.name.toLowerCase() === item?.category?.toLowerCase()
+        )?.id ??
+        '',
+      prepTime: item?.prepTime ?? '',
+      calories: item?.calories ? String(item.calories) : ''
+    });
   };
 
   const uploadToS3 = async (url: string, file: File, ct: string) => {
@@ -192,6 +204,10 @@ export default function BranchMenuPage() {
     if (!form.name.trim() || !form.price) { setSaveErr('Name and price are required.'); return; }
     if (cats.length === 0) { setSaveErr('Categories are still loading. Please wait a moment and try again.'); return; }
     if (!form.category) { setSaveErr('Please select a category.'); return; }
+    if (!/^[0-9a-fA-F-]{36}$/.test(form.category)) {
+      setSaveErr('Invalid category selected.');
+      return;
+    }
     setSaving(true); setSaveMsg(''); setSaveErr('');
     try {
       if (modal.item?.id) {
@@ -240,7 +256,8 @@ export default function BranchMenuPage() {
     } catch (err: any) { setSaveErr(err?.message ?? 'Recreate failed.'); if (glbStatus === 'uploading') { setGlbStatus('error'); setGlbError(err?.message ?? 'Failed'); } }
     finally { setSaving(false); }
   };
-
+  console.log("categoryId being sent", form.category);
+  console.log("cats", cats)
   const inputStyle = (focus = false): React.CSSProperties => ({ width: '100%', height: 42, borderRadius: 10, padding: '0 12px', background: C.bg, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, outline: 'none', boxSizing: 'border-box', fontFamily: 'sans-serif', transition: 'border-color 0.2s' });
 
   return (

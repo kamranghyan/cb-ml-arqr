@@ -10,6 +10,7 @@ import {
   type ApiRestaurant,
 } from '@/lib/admin-api';
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
+// import { uploadRestaurantLogo } from '@/lib/admin-api';
 
 const C = {
   red: '#E1251B', dark: '#891C1C', gold: '#FFC72C', bg: '#FFF8F1',
@@ -20,12 +21,12 @@ const C = {
 type Toast = { msg: string; kind: 'ok' | 'err' } | null;
 
 export default function RestaurantsView() {
-  const [rows, setRows]       = useState<ApiRestaurant[]>([]);
-  const [tenant, setTenant]   = useState<ApiTenant | null>(null);
+  const [rows, setRows] = useState<ApiRestaurant[]>([]);
+  const [tenant, setTenant] = useState<ApiTenant | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-  const [toast, setToast]     = useState<Toast>(null);
-  const [modal, setModal]     = useState<{ open: boolean; edit?: ApiRestaurant }>({ open: false });
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState<Toast>(null);
+  const [modal, setModal] = useState<{ open: boolean; edit?: ApiRestaurant }>({ open: false });
 
   const showToast = (msg: string, kind: 'ok' | 'err' = 'ok') => {
     setToast({ msg, kind });
@@ -207,31 +208,115 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   showToast: (m: string, k?: 'ok' | 'err') => void;
 }) {
   const [f, setF] = useState({
-    name:         edit?.name ?? '',
-    street:       edit?.address?.street ?? '',
-    city:         edit?.address?.city ?? '',
-    country:      edit?.address?.country ?? 'Pakistan',
-    postcode:     edit?.address?.postcode ?? '',
-    timezone:     edit?.timezone ?? 'Asia/Karachi',
+    name: edit?.name ?? '',
+
+    street: edit?.address?.street ?? '',
+    city: edit?.address?.city ?? '',
+    country: edit?.address?.country ?? 'Pakistan',
+    postcode: edit?.address?.postcode ?? '',
+
+    timezone: edit?.timezone ?? 'Asia/Karachi',
     currencyCode: edit?.currencyCode ?? 'PKR',
-    isActive:     edit?.isActive ?? true,
+    isActive: edit?.isActive ?? true,
+
+    tagline: edit?.tagline ?? '',
+    openingHours: edit?.openingHours ?? '',
+    deliveryNote: edit?.deliveryNote ?? '',
+    cuisineTags: edit?.cuisineTags?.join(', ') ?? '',
+
+    logoKey: edit?.logoKey ?? '',
+    bannerKey: edit?.bannerKey ?? '',
+
+    ratingValue: edit?.ratingValue ?? '',
+    ratingCount: edit?.ratingCount ?? '',
   });
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+
+  const [logoPreview, setLogoPreview] = useState<string>(
+    edit?.logoUrl ?? ''
+  );
+
+  const [bannerPreview, setBannerPreview] = useState<string>(
+    edit?.bannerUrl ?? ''
+  );
 
   async function save() {
     setSaving(true);
     const payload = {
       name: f.name,
-      address: { street: f.street, city: f.city, country: f.country, postcode: f.postcode },
+
+      logoKey: f.logoKey,
+      bannerKey: f.bannerKey,
+
+      ratingValue: f.ratingValue
+        ? Number(f.ratingValue)
+        : null,
+
+      ratingCount: f.ratingCount
+        ? Number(f.ratingCount)
+        : null,
+
+      address: {
+        street: f.street,
+        city: f.city,
+        country: f.country,
+        postcode: f.postcode,
+      },
+
       timezone: f.timezone,
       currencyCode: f.currencyCode,
       isActive: f.isActive,
+
+      tagline: f.tagline,
+      openingHours: f.openingHours,
+      deliveryNote: f.deliveryNote,
+
+      cuisineTags: f.cuisineTags
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean),
+      timezone: f.timezone,
+      currencyCode: f.currencyCode,
+      isActive: f.isActive,
+
+      tagline: f.tagline,
+      openingHours: f.openingHours,
+      deliveryNote: f.deliveryNote,
+
+      cuisineTags: f.cuisineTags
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean),
     };
     try {
       if (edit) {
-        await updateRestaurant(edit.restaurantId, payload);
+
+        let updatedPayload: any = { ...payload };
+
+
+        // if (logoFile) {
+
+        //   const uploadedLogo = await uploadRestaurantLogo(
+        //     logoFile,
+        //     edit.restaurantId
+        //   );
+
+        //   updatedPayload.logoKey = uploadedLogo.s3Key;
+        // }
+
+
+        await updateRestaurant(
+          edit.restaurantId,
+          updatedPayload
+        );
+
+
         showToast('Restaurant updated');
+
+
       } else {
         await createRestaurant(payload as any);
         showToast('Restaurant created');
@@ -262,47 +347,202 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
 
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
-            <label style={label}>Branch Name</label>
-            <input style={input} value={f.name} placeholder="Islamabad F-7"
-                   onChange={e => set('name', e.target.value)} />
+            <label style={label}>Restaurant Name</label>
+            <input className='searchInput' style={input} value={f.name} placeholder="Islamabad F-7"
+              onChange={e => set('name', e.target.value)} />
           </div>
           <div>
             <label style={label}>Street</label>
-            <input style={input} value={f.street} onChange={e => set('street', e.target.value)} />
+            <input className='searchInput' style={input} value={f.street} onChange={e => set('street', e.target.value)} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>City</label>
-              <input style={input} value={f.city} onChange={e => set('city', e.target.value)} />
+              <input className='searchInput' style={input} value={f.city} onChange={e => set('city', e.target.value)} />
             </div>
             <div>
               <label style={label}>Postcode</label>
-              <input style={input} value={f.postcode} onChange={e => set('postcode', e.target.value)} />
+              <input className='searchInput' style={input} value={f.postcode} onChange={e => set('postcode', e.target.value)} />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>Country</label>
-              <input style={input} value={f.country} onChange={e => set('country', e.target.value)} />
+              <input className='searchInput' style={input} value={f.country} onChange={e => set('country', e.target.value)} />
             </div>
             <div>
               <label style={label}>Currency</label>
-              <input style={input} value={f.currencyCode} maxLength={3}
-                     onChange={e => set('currencyCode', e.target.value.toUpperCase())} />
+              <input className='searchInput' style={input} value={f.currencyCode} maxLength={3}
+                onChange={e => set('currencyCode', e.target.value.toUpperCase())} />
             </div>
           </div>
           <div>
             <label style={label}>Timezone</label>
-            <input style={input} value={f.timezone} onChange={e => set('timezone', e.target.value)} />
+            <input className='searchInput' style={input} value={f.timezone} onChange={e => set('timezone', e.target.value)} />
+          </div>
+          <div>
+            <label style={label}>Tagline</label>
+            <input
+              className="searchInput"
+              style={input}
+              value={f.tagline}
+              placeholder="Fine Dining Experience"
+              onChange={e => set('tagline', e.target.value)}
+            />
+          </div>
+
+
+          <div>
+            <label style={label}>Opening Hours</label>
+            <input
+              className="searchInput"
+              style={input}
+              value={f.openingHours}
+              placeholder="10:00AM - 11:00PM"
+              onChange={e => set('openingHours', e.target.value)}
+            />
+          </div>
+
+
+          <div>
+            <label style={label}>Delivery Note</label>
+            <input
+              className="searchInput"
+              style={input}
+              value={f.deliveryNote}
+              placeholder="Free Delivery"
+              onChange={e => set('deliveryNote', e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label style={label}>Restaurant Logo</label>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+
+                const file = e.target.files?.[0];
+
+                if (file) {
+                  setLogoFile(file);
+                  setLogoPreview(URL.createObjectURL(file));
+                }
+
+              }}
+            />
+
+
+            {
+              <img
+                src={
+                  logoPreview ||
+                  "/Images/default-restaurant-logo.png"
+                }
+                alt="logo"
+                style={{
+                  marginTop: 10,
+                  width: 80,
+                  height: 80,
+                  objectFit: "cover",
+                  borderRadius: 12,
+                  border: "1px solid #ddd"
+                }}
+              />
+            }
+
+          </div>
+
+
+          <div>
+            <label style={label}>Restaurant Banner</label>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+
+                const file = e.target.files?.[0];
+
+                if (file) {
+                  setBannerFile(file);
+                  setBannerPreview(URL.createObjectURL(file));
+                }
+
+              }}
+            />
+
+
+            {
+             <img
+  src={
+    bannerPreview ||
+    "/Images/default-banner.jpg"
+  }
+  alt="banner"
+  style={{
+    marginTop: 10,
+    width: "100%",
+    height: 120,
+    objectFit: "cover",
+    borderRadius: 12,
+    border: "1px solid #ddd"
+  }}
+/>
+            }
+
+          </div>
+
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+
+            <div>
+              <label style={label}>Rating</label>
+              <input
+                className="searchInput"
+                style={input}
+                type="number"
+                value={f.ratingValue}
+                placeholder="4.8"
+                onChange={e => set('ratingValue', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>Rating Count</label>
+              <input
+                className="searchInput"
+                style={input}
+                type="number"
+                value={f.ratingCount}
+                placeholder="100"
+                onChange={e => set('ratingCount', e.target.value)}
+              />
+            </div>
+
+          </div>
+          <div>
+            <label style={label}>Cuisine Tags</label>
+            <input
+              className="searchInput"
+              style={input}
+              value={f.cuisineTags}
+              placeholder="Fast Food, Pizza, BBQ"
+              onChange={e => set('cuisineTags', e.target.value)}
+            />
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: C.text }}>
-            <input type="checkbox" checked={f.isActive}
-                   onChange={e => set('isActive', e.target.checked)} /> Open for orders
+            <input className='searchInput' type="checkbox" checked={f.isActive}
+              onChange={e => set('isActive', e.target.checked)} /> Open for orders
           </label>
 
           <button onClick={save} disabled={saving || !f.name.trim()}
-                  style={{ ...btn(C.red), justifyContent: 'center',
-                           opacity: saving || !f.name.trim() ? 0.6 : 1 }}>
+            style={{
+              ...btn(C.red), justifyContent: 'center',
+              opacity: saving || !f.name.trim() ? 0.6 : 1
+            }}>
             {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
             {edit ? 'Save Changes' : 'Create Restaurant'}
           </button>
@@ -333,8 +573,13 @@ const iconBtn: React.CSSProperties = {
 };
 
 const input: React.CSSProperties = {
-  width: '100%', padding: '9px 11px', border: `1px solid ${C.border}`,
-  borderRadius: 8, fontSize: 14, boxSizing: 'border-box',
+  width: '100%',
+  padding: '9px 11px',
+  border: `1px solid ${C.border}`,
+  borderRadius: 8,
+  fontSize: 14,
+  boxSizing: 'border-box',
+  color: '#000',
 };
 
 const label: React.CSSProperties = {

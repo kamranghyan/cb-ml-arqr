@@ -159,6 +159,9 @@
   color: #999;
   opacity: 1;
 }
+.searchInput{
+  color: #000;
+}
 
 /* For placeholder color */
 .searchInput::placeholder {
