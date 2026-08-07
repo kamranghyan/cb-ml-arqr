@@ -36,7 +36,11 @@ async def parse_body(request: Request) -> dict:
         if isinstance(body.get("cuisineTags"), str):
             body["cuisineTags"] = json.loads(body["cuisineTags"])
 
+        if isinstance(body.get("socialMedia"), str):
+            body["socialMedia"] = json.loads(body["socialMedia"])
+
         # Convert primitive form values
+        coerce_bool(body, "isActive")
         coerce_float(body, "ratingValue")
         coerce_int(body, "ratingCount")
 

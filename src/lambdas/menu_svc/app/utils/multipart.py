@@ -81,8 +81,10 @@ def parse_form_text_fields(event: dict, ct_header: str) -> dict[str, Any]:
 
         field_name = name_m.group(1).strip()
 
-        # Skip file fields
-        if fname_m or "content-type" in part_headers:
+        # Skip actual file fields only.
+        # Text fields may also contain a Content-Type header,
+        # so Content-Type alone must NOT identify a file.
+        if fname_m:
             continue
 
         try:

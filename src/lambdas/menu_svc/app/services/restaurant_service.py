@@ -141,6 +141,7 @@ class RestaurantService:
             deliveryNote=body.get("deliveryNote"),
             ratingValue=body.get("ratingValue"),
             ratingCount=body.get("ratingCount"),
+            socialMedia=dict(body.get("socialMedia") or {}),
         )
         restaurant.validate()
 
@@ -178,6 +179,7 @@ class RestaurantService:
             # What the guest landing screen shows
             "tagline", "cuisineTags", "openingHours",
             "deliveryNote", "ratingValue", "ratingCount",
+            "socialMedia",
         }
         updates: dict = {k: v for k, v in body.items() if k in mutable}
 
