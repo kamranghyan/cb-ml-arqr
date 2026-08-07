@@ -15,6 +15,7 @@ Notes for the new model:
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 from typing import Optional
 
 import boto3
@@ -67,6 +68,7 @@ class RestaurantService:
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
     def _ddb_update(self, restaurant_id: str, updates: dict) -> dict:
+        updates = self._floats_to_decimal(updates)
         expr, names, values = build_update_expression(updates)
         resp = self._table.update_item(
             Key={"restaurantId": restaurant_id},
@@ -81,11 +83,28 @@ class RestaurantService:
     def _ddb_delete(self, restaurant_id: str) -> None:
         self._table.delete_item(Key={"restaurantId": restaurant_id})
 
+    @staticmethod
+    def _floats_to_decimal(value):
+        """
+        DynamoDB stores numbers as Decimal and refuses Python floats outright.
+        A rating like 4.8 is the only float we hold, but converting the whole
+        structure means the next float someone adds does not blow up on write.
+        """
+        if isinstance(value, float):
+            # via str, so 4.8 stays 4.8 rather than 4.7999999999999998
+            return Decimal(str(value))
+        if isinstance(value, dict):
+            return {k: RestaurantService._floats_to_decimal(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [RestaurantService._floats_to_decimal(v) for v in value]
+        return value
+
     def _to_item(self, restaurant: Restaurant) -> dict:
         """Serialize without the old PK/SK keys."""
         item = restaurant.to_dict(exclude_none=True)
         item.pop("logoUrl", None)
         item.pop("bannerUrl", None)
+        item = self._floats_to_decimal(item)
         item.pop("PK", None)
         item.pop("SK", None)
         return item
@@ -116,6 +135,12 @@ class RestaurantService:
             updatedAt=now,
             logoKey=body.get("logoKey"),
             bannerKey=body.get("bannerKey"),
+            tagline=body.get("tagline"),
+            cuisineTags=list(body.get("cuisineTags") or []),
+            openingHours=body.get("openingHours"),
+            deliveryNote=body.get("deliveryNote"),
+            ratingValue=body.get("ratingValue"),
+            ratingCount=body.get("ratingCount"),
         )
         restaurant.validate()
 
@@ -150,6 +175,9 @@ class RestaurantService:
         mutable = {
             "name", "timezone", "currencyCode", "isActive",
             "logoKey", "bannerKey", "tenantId",
+            # What the guest landing screen shows
+            "tagline", "cuisineTags", "openingHours",
+            "deliveryNote", "ratingValue", "ratingCount",
         }
         updates: dict = {k: v for k, v in body.items() if k in mutable}
 

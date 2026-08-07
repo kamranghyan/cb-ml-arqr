@@ -18,19 +18,35 @@ from fastapi import Request
 from app.utils.multipart import parse_form_text_fields
 
 
+import json
+
 async def parse_body(request: Request) -> dict:
     """Parse the request body: JSON or multipart text fields."""
     ct = request.headers.get("content-type", "")
+
     if "multipart/form-data" in ct:
         body_bytes = await request.body()
         raw_event = build_gateway_event(body_bytes, ct)
-        return parse_form_text_fields(raw_event, ct)
+        body = parse_form_text_fields(raw_event, ct)
+
+        # Convert JSON strings into Python objects
+        if isinstance(body.get("address"), str):
+            body["address"] = json.loads(body["address"])
+
+        if isinstance(body.get("cuisineTags"), str):
+            body["cuisineTags"] = json.loads(body["cuisineTags"])
+
+        # Convert primitive form values
+        coerce_float(body, "ratingValue")
+        coerce_int(body, "ratingCount")
+
+        return body
+
     try:
         body = await request.json()
         return body if isinstance(body, dict) else {}
     except Exception:
         return {}
-
 
 def build_gateway_event(body_bytes: bytes, content_type: str) -> dict:
     """Build a minimal API Gateway-like event dict for the S3 repository."""
@@ -50,5 +66,12 @@ def coerce_int(body: dict, field: str) -> None:
     if field in body and isinstance(body[field], str):
         try:
             body[field] = int(body[field])
+        except ValueError:
+            pass
+
+def coerce_float(body: dict, field: str) -> None:
+    if field in body and isinstance(body[field], str):
+        try:
+            body[field] = float(body[field])
         except ValueError:
             pass

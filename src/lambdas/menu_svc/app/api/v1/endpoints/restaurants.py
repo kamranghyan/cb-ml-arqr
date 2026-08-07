@@ -44,6 +44,54 @@ from app.utils.request_helpers import build_gateway_event, parse_body
 log = get_logger("api.restaurants")
 router = APIRouter()
 
+# Instead of having the same upload logic copied into: create_restaurant() and update_restaurant() we will use this helper function to handle the multipart request and update the restaurant with the uploaded images.
+
+async def _attach_images(
+    request: Request,
+    restaurant_id: str,
+    tenant_id: str,
+    svc: RestaurantService,
+    s3_repo: S3Repository,
+):
+    """
+    Upload logo/banner from a multipart request and update the restaurant.
+    """
+    ct = request.headers.get("content-type", "")
+    if "multipart/form-data" not in ct:
+        return None
+
+    raw_event = build_gateway_event(await request.body(), ct)
+
+    images = s3_repo.upload_restaurant_images(
+        raw_event,
+        restaurant_id,
+        tenant_id,
+    )
+
+    if not images:
+        return None
+
+    update_body = {}
+
+    if images.get("logoKey"):
+        update_body["logoKey"] = images["logoKey"]
+
+    if images.get("bannerKey"):
+        update_body["bannerKey"] = images["bannerKey"]
+
+    if not update_body:
+        return None
+
+    restaurant = svc.update(
+        tenant_id,
+        restaurant_id,
+        update_body,
+    )
+
+    restaurant.logoUrl = images.get("logoUrl")
+    restaurant.bannerUrl = images.get("bannerUrl")
+
+    return restaurant
 
 # ── Reads ─────────────────────────────────────────────────────────────
 
@@ -156,27 +204,21 @@ async def create_restaurant(
 
     limits.adjust_count(tenant_id, +1)
 
+    restaurant = (
+        await _attach_images(
+            request,
+            restaurant.restaurantId,
+            tenant_id,
+            svc,
+            s3_repo,
+        )
+        or restaurant
+    )
+
     if user.is_admin():
         log.info("restaurant.created.by_admin",
                  admin=user.email, tenant_id=tenant_id,
                  restaurant_id=restaurant.restaurantId)
-
-    # Optional multipart logo in the same request.
-    ct = request.headers.get("content-type", "")
-    if "multipart/form-data" in ct:
-        try:
-            raw_event = build_gateway_event(await request.body(), ct)
-            s3_key, logo_url = s3_repo.upload_restaurant_logo(
-                raw_event, restaurant.restaurantId, tenant_id,
-            )
-            if s3_key:
-                restaurant = svc.update(
-                    tenant_id, restaurant.restaurantId, {"logoKey": s3_key}
-                )
-                restaurant.logoUrl = logo_url
-        except Exception as exc:  # noqa: BLE001
-            log.warning("logo.upload.failed",
-                        restaurant_id=restaurant.restaurantId, exc=str(exc))
 
     return restaurant.to_dict()
 
@@ -187,6 +229,7 @@ async def update_restaurant(
     request:      Request,
     user:         Annotated[UserContext,       Depends(require_restaurant_manager)],
     svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+    s3_repo:      Annotated[S3Repository,      Depends(get_s3_repo)],
 ):
     body = await parse_body(request)
     tenant_id = resolve_write_tenant(user, body.get("tenantId"))
@@ -204,7 +247,21 @@ async def update_restaurant(
         raise ForbiddenError("This restaurant belongs to another tenant.")
 
     try:
-        return svc.update(tenant_id, restaurantId, body).to_dict()
+        restaurant = svc.update(tenant_id, restaurantId, body)
+
+        restaurant = (
+            await _attach_images(
+                request,
+                restaurant.restaurantId,
+                tenant_id,
+                svc,
+                s3_repo,
+            )
+            or restaurant
+        )
+
+        return restaurant.to_dict() 
+    
     except ValidationError as exc:
         raise BadRequestError(str(exc.errors)) from exc
 
