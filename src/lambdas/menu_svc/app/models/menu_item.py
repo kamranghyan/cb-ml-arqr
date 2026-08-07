@@ -32,6 +32,7 @@ class MenuItem(BaseModel):
     tenantId: str
     restaurantId: str
     categoryId: str
+    categoryName: str
     name: str
     description: str
     priceMinorUnits: int
@@ -107,6 +108,7 @@ class MenuItem(BaseModel):
             "tenantId": self.tenantId,
             "restaurantId": self.restaurantId,
             "categoryId": self.categoryId,
+            "categoryName": self.categoryName,
             "name": self.name,
             "description": self.description,
             "priceMinorUnits": self.priceMinorUnits,
@@ -138,11 +140,13 @@ class MenuItem(BaseModel):
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MenuItem":
         return cls(
-            itemId=data.get("itemId", ""),
-            tenantId=data.get("tenantId", ""),
-            restaurantId=data.get("restaurantId", ""),
-            categoryId=data.get("categoryId", ""),
-            name=data.get("name", ""),
+    itemId=data.get("itemId", ""),
+    tenantId=data.get("tenantId", ""),
+    restaurantId=data.get("restaurantId", ""),
+    categoryId=data.get("categoryId", ""),
+    categoryName=data.get("categoryName", ""),
+    name=data.get("name", ""),
+
             description=data.get("description", ""),
             priceMinorUnits=int(data.get("priceMinorUnits", 0)),
             isActive=bool(data.get("isActive", True)),

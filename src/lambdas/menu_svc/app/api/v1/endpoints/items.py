@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
+from app.services.category_service import CategoryService
 
 from shared.cognito_auth import UserContext
 from shared.exceptions import BadRequestError, ResourceNotFoundError
@@ -19,6 +20,7 @@ from shared.structured_logger import get_logger
 
 from app.core.dependencies import (
     get_item_service,
+    get_category_service,
     get_menu_tenant,
     get_s3_repo,
     restaurant_write_scope,
@@ -73,17 +75,20 @@ async def get_item(
         raise ResourceNotFoundError("MenuItem", itemId) from exc
 
 
+
 @router.post(
     "/restaurants/{restaurantId}/items",
     status_code=201,
     summary="Create a menu item",
 )
+
 async def create_item(
     restaurantId: str,
-    request:      Request,
-    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
-    svc:          Annotated[MenuItemService, Depends(get_item_service)],
-    s3_repo:      Annotated[S3Repository,    Depends(get_s3_repo)],
+    request: Request,
+    scope: Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)],
+    svc: Annotated[MenuItemService, Depends(get_item_service)],
+    category_svc: Annotated[CategoryService, Depends(get_category_service)],
+    s3_repo: Annotated[S3Repository, Depends(get_s3_repo)],
 ):
     user, tenant_id = scope
     body = await parse_body(request)
@@ -96,6 +101,8 @@ async def create_item(
         )
 
     try:
+        category = category_svc.get(tenant_id, restaurantId, body["categoryId"])
+        body["categoryName"] = category.name
         item = svc.create(tenant_id, restaurantId, body)
         ct = request.headers.get("content-type", "")
         if "multipart/form-data" in ct:
@@ -127,15 +134,20 @@ async def create_item(
 @router.put("/restaurants/{restaurantId}/items/{itemId}", summary="Update a menu item")
 async def update_item(
     restaurantId: str,
-    itemId:       str,
-    request:      Request,
-    scope:         Annotated[tuple[UserContext, str],     Depends(restaurant_write_scope)],
-    svc:          Annotated[MenuItemService, Depends(get_item_service)],
-):
+    itemId: str,
+    request: Request,
+    scope: Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)],
+    svc: Annotated[MenuItemService, Depends(get_item_service)],
+    category_svc: Annotated[CategoryService, Depends(get_category_service)],
+    ):
     user, tenant_id = scope
     body = await parse_body(request)
     try:
-        return svc.update(tenant_id, restaurantId, itemId, body).to_dict()
+        if "categoryId" in body:
+          category = category_svc.get(tenant_id,restaurantId,body["categoryId"])
+          body["categoryName"] = category.name
+
+        return svc.update(tenant_id,restaurantId,itemId,body).to_dict()
     except MenuItemNotFoundError as exc:
         raise ResourceNotFoundError("MenuItem", itemId) from exc
     except MenuItemConflictError as exc:

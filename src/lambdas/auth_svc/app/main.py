@@ -8,6 +8,33 @@ Routes: /auth/*  +  /health
 """
 from __future__ import annotations
 
+# ========== FIX: Add all required paths ==========
+import sys
+import os
+
+# Get directories
+current_dir = os.path.dirname(os.path.abspath(__file__))  # app/
+auth_svc_dir = os.path.dirname(current_dir)  # auth_svc/
+lambdas_dir = os.path.dirname(auth_svc_dir)  # lambdas/
+
+# Add paths
+paths_to_add = [
+    lambdas_dir,  # C:\cb-projects\cb-ml-arqr\src\lambdas
+    auth_svc_dir,  # C:\cb-projects\cb-ml-arqr\src\lambdas\auth_svc
+    os.path.join(lambdas_dir, 'layers', 'shared_layer', 'python'),  # shared layer
+]
+
+for path in paths_to_add:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+        print(f"✅ Added to path: {path}")
+
+# Now imports will work
+from shared.structured_logger import bind_correlation_id, get_logger
+from app.api.v1 import api_router
+from app.core.exception_handlers import register_exception_handlers
+# ======================================================
+
 import time
 import uuid
 

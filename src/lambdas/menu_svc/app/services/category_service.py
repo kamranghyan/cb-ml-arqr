@@ -141,7 +141,7 @@ class CategoryService:
         self,
         tenant_id: str,
         restaurant_id: str,
-        encoded_lek: Optional[str] = None,
+        encoded_lek = None,
     ) -> tuple[list[MenuCategory], Optional[str]]:
         """List all categories for a restaurant via GSI, ordered by displayOrder."""
         cache_key = CacheService.categories_list_key(tenant_id, restaurant_id)

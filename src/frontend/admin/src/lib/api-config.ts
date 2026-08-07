@@ -26,10 +26,16 @@ if (typeof window !== 'undefined') {
 
 // ── MENU_API — ALL calls go through /api/menu proxy (NOT direct to AWS) ───────
 export const MENU_API = {
-  items: (rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/items`,
-  item: (itemId: string, rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/items/${itemId}`,
+
+ items:(rid:string)=>
+ `/api/menu/restaurants/${rid}/items`,
+
+ item:(id:string,rid:string)=>
+ `/api/menu/restaurants/${rid}/items/${id}`,
+
+ categories:(rid:string)=>
+ `/api/menu/restaurants/${rid}/categories`
+
 }
 
 // ── AR_API — proxied through /api/ar ─────────────────────────────────────────

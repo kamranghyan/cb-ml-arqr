@@ -153,6 +153,7 @@ class MenuItemService:
             tenantId=tenant_id,
             restaurantId=restaurant_id,
             categoryId=body.get("categoryId", ""),
+            categoryName=body.get("categoryName", ""),
             name=body.get("name", ""),
             description=body.get("description", ""),
             priceMinorUnits=int(body.get("priceMinorUnits", 0)),
@@ -243,10 +244,16 @@ class MenuItemService:
         expected_version = int(expected_version)
 
         mutable = {
-            "name", "description", "priceMinorUnits",
-            "isActive", "imageKey", "allergens",
-            "arModelKey", "categoryId",
-        }
+    "name",
+    "description",
+    "priceMinorUnits",
+    "isActive",
+    "imageKey",
+    "allergens",
+    "arModelKey",
+    "categoryId",
+    "categoryName",
+}
         updates = {k: v for k, v in body.items() if k in mutable}
         updates["updatedAt"] = utc_now()
 

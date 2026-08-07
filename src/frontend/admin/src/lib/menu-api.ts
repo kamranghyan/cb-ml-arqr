@@ -14,6 +14,7 @@ export interface ApiMenuItem {
   price:       number
   category:    string
   categoryId?: string
+  categoryName?: string
   status:      'active' | 'inactive' | 'draft'
   imageUrl?:   string
   emoji?:      string
@@ -170,8 +171,9 @@ export function normaliseItem(raw: any): ApiMenuItem {
     subtitle:    raw.subtitle    ?? raw.subTitle ?? '',
     name:        raw.name        ?? raw.itemName ?? 'Unnamed Item',
     description: raw.description ?? raw.desc     ?? '',
-    category:    categoryDisplay,
-    categoryId:  raw.categoryId  ?? raw.category  ?? '',
+    category: categoryDisplay,
+    categoryId: raw.categoryId ?? raw.category ?? '',
+    categoryName: raw.categoryName ?? categoryDisplay,
     imageUrl:    raw.imageUrl    ?? null,
     arModelUrl:  raw.arModelUrl  ?? null,
     arModelKey:  raw.arModelKey  ?? null,
@@ -182,8 +184,20 @@ export function normaliseItem(raw: any): ApiMenuItem {
 
 export interface ApiCategory { id: string; name: string; slug?: string }
 
-export async function fetchCategories(): Promise<ApiCategory[]> {
-  return []
+export async function fetchCategories(
+ restaurantId?:string
+):Promise<ApiCategory[]>{
+
+ const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+
+ const data = await menuFetch<ApiCategory[]>(
+   MENU_API.categories(rid)
+ );
+
+
+ return data;
+
 }
 
 export function extractCategoriesFromItems(items: ApiMenuItem[]): ApiCategory[] {

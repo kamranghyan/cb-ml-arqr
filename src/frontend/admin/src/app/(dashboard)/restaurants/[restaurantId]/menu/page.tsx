@@ -10,13 +10,18 @@ import {
 import { formatPrice } from '@/lib/data';
 import { Toggle, StatusChip } from '@/components/ui';
 import {
-  fetchMenuItems, fetchMenuItem, updateMenuItem, normaliseItem, type ApiMenuItem,
+  fetchMenuItems,
+  fetchMenuItem,
+  updateMenuItem,
+  fetchCategories,
+  normaliseItem,
+  type ApiMenuItem,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
 
 type ModalState = { open: boolean; item?: ApiMenuItem };
-type LoadState  = 'idle' | 'loading' | 'success' | 'error';
-type GlbStatus  = 'idle' | 'uploading' | 'approved' | 'error';
+type LoadState = 'idle' | 'loading' | 'success' | 'error';
+type GlbStatus = 'idle' | 'uploading' | 'approved' | 'error';
 
 // The branch is whichever restaurant the tenant opened.
 const MENU_BASE_URL = '/api/menu';
@@ -29,17 +34,17 @@ async function createMenuItemWithFiles(
   imageFile?: File | null, glbFile?: File | null,
 ): Promise<any> {
   const fd = new FormData();
-  fd.append('name',            payload.name);
-  fd.append('description',     payload.description);
+  fd.append('name', payload.name);
+  fd.append('description', payload.description);
   fd.append('priceMinorUnits', String(Math.round(payload.price * 100)));
-  fd.append('categoryId',      payload.categoryId);
-  fd.append('isActive',        String(payload.isActive));
-  fd.append('restaurantId',    restaurantId);
+  fd.append('categoryId', payload.categoryId);
+  fd.append('isActive', String(payload.isActive));
+  fd.append('restaurantId', restaurantId);
   if (payload.allergens?.length) fd.append('allergens', payload.allergens.join(','));
-  if (payload.prepTime)  fd.append('prepTime', payload.prepTime);
-  if (payload.calories)  fd.append('calories',  String(payload.calories));
-  if (imageFile)         fd.append('file',      imageFile);
-  if (glbFile)           fd.append('arFile',    glbFile);
+  if (payload.prepTime) fd.append('prepTime', payload.prepTime);
+  if (payload.calories) fd.append('calories', String(payload.calories));
+  if (imageFile) fd.append('file', imageFile);
+  if (glbFile) fd.append('arFile', glbFile);
   const { getValidIdToken } = await import('@/lib/cognito');
   const token = await getValidIdToken();
   const headers: Record<string, string> = {};
@@ -59,38 +64,41 @@ function FieldLabel({ children, extra }: { children: React.ReactNode; extra?: Re
 
 export default function BranchMenuPage() {
   const restaurantId = String(useParams().restaurantId ?? '');
-  const [items,      setItems]      = useState<ApiMenuItem[]>([]);
-  const [cats,       setCats]       = useState<{id:string; name:string}[]>([]);
-  const [loadState,  setLoadState]  = useState<LoadState>('idle');
-  const [loadError,  setLoadError]  = useState('');
-  const [search,     setSearch]     = useState('');
-  const [category,   setCategory]   = useState('all');
-  const [modal,      setModal]      = useState<ModalState>({ open: false });
-  const [isActive,   setIsActive]   = useState(true);
-  const [isChef,     setIsChef]     = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [saveMsg,    setSaveMsg]    = useState('');
-  const [saveErr,    setSaveErr]    = useState('');
-  const [deleting,   setDeleting]   = useState<string | null>(null);
+  const [items, setItems] = useState<ApiMenuItem[]>([]);
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>('idle');
+  const [loadError, setLoadError] = useState('');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+  const [modal, setModal] = useState<ModalState>({ open: false });
+  const [isActive, setIsActive] = useState(true);
+  const [isChef, setIsChef] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [saveErr, setSaveErr] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState<string | null>(null);
-  const [glbFile,    setGlbFile]    = useState<File | null>(null);
-  const [glbName,    setGlbName]    = useState<string | null>(null);
-  const [glbStatus,  setGlbStatus]  = useState<GlbStatus>('idle');
-  const [glbError,   setGlbError]   = useState('');
+  const [glbFile, setGlbFile] = useState<File | null>(null);
+  const [glbName, setGlbName] = useState<string | null>(null);
+  const [glbStatus, setGlbStatus] = useState<GlbStatus>('idle');
+  const [glbError, setGlbError] = useState('');
   const [form, setForm] = useState({ name: '', description: '', price: '', category: '', prepTime: '', calories: '' });
 
   const loadItems = useCallback(async () => {
     setLoadState('loading'); setLoadError('');
     try {
-      const raw        = await fetchMenuItems(restaurantId);
+      const raw = await fetchMenuItems(restaurantId);
+      const categories = await fetchCategories(restaurantId);
+
+      setCats(categories);
       const normalised = raw.map(normaliseItem);
       setItems(normalised);
       const seen = new Map<string, string>();
       raw.forEach((r: any) => {
-        const id   = r.categoryId ?? '';
-        const KNOWN: Record<string,string> = { 'e933848e-0d18-4e3a-b0a8-d70275c2fa54': 'Main Course' };
-        const name = r.categoryName ?? KNOWN[id] ?? (r.category && !r.category.includes('-') ? r.category : `Cat-${id.slice(0,6)}`);
+        const id = r.categoryId ?? '';
+        const KNOWN: Record<string, string> = { 'e933848e-0d18-4e3a-b0a8-d70275c2fa54': 'Main Course' };
+        const name = r.categoryName ?? KNOWN[id] ?? (r.category && !r.category.includes('-') ? r.category : `Cat-${id.slice(0, 6)}`);
         if (id && id.includes('-')) seen.set(id, name);
       });
       const DEFAULT_CATS = [
@@ -107,8 +115,28 @@ export default function BranchMenuPage() {
   }, []);
 
   useEffect(() => { loadItems(); }, [loadItems]);
+  
 
-  const filtered    = items.filter(item => { if (item.status === 'inactive') return false; const mc = category === 'all' || (item as any).categoryId === category || item.category === category; return mc && item.name.toLowerCase().includes(search.toLowerCase()); });
+  const filtered = items.filter(item => {
+
+    if (item.status === 'inactive')
+      return false;
+
+
+    const matchCategory =
+      category === 'all' ||
+      item.categoryId === category;
+
+
+    const matchSearch =
+      item.name
+        .toLowerCase()
+        .includes(search.toLowerCase());
+
+
+    return matchCategory && matchSearch;
+
+  });
   const activeItems = items.filter(i => i.status === 'active');
 
   const openModal = (item?: ApiMenuItem) => {
@@ -195,7 +223,7 @@ export default function BranchMenuPage() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items…"
               style={{ height: 36, paddingLeft: 36, paddingRight: 14, borderRadius: 10, width: 200, fontSize: 13, background: C.bg, border: `1.5px solid ${C.border}`, color: C.text, outline: 'none' }}
               onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
-              onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.border}
+              onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border}
             />
           </div>
           <button onClick={loadItems} title="Refresh"
@@ -229,8 +257,8 @@ export default function BranchMenuPage() {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, maxWidth: 360 }}>
           {[
-            { label: 'Total Items', val: activeItems.length, color: C.text   },
-            { label: 'Active',      val: activeItems.length, color: C.red    },
+            { label: 'Total Items', val: activeItems.length, color: C.text },
+            { label: 'Active', val: activeItems.length, color: C.red },
           ].map(s => (
             <div key={s.label} style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: 16, padding: '16px' }}>
               <p style={{ fontSize: 10, color: C.subtle, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>{s.label}</p>
@@ -315,10 +343,11 @@ export default function BranchMenuPage() {
                 <p style={{ fontSize: 12, color: '#d97706', fontWeight: 600, margin: 0 }}>★ {item.rating?.toFixed(1) ?? '—'}</p>
 
                 {/* Status */}
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
                   background: item.status === 'active' ? '#F0FFF4' : '#F9FAFB',
-                  color:      item.status === 'active' ? '#16a34a' : C.subtle,
-                  border:     `1px solid ${item.status === 'active' ? '#BBF7D0' : C.border}`,
+                  color: item.status === 'active' ? '#16a34a' : C.subtle,
+                  border: `1px solid ${item.status === 'active' ? '#BBF7D0' : C.border}`,
                 }}>
                   <span style={{ width: 5, height: 5, borderRadius: '50%', background: item.status === 'active' ? '#22c55e' : C.border, display: 'inline-block' }} />
                   {item.status}
@@ -361,7 +390,7 @@ export default function BranchMenuPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
                 <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: 0, fontFamily: 'Georgia, serif' }}>{modal.item ? 'Edit Menu Item' : 'Add Menu Item'}</h2>
-                <p style={{ fontSize: 11, color: C.subtle, margin: '2px 0 0' }}>{modal.item ? `ID: ${modal.item.id?.slice(0,8)}…` : 'POST to AWS API Gateway'}</p>
+                <p style={{ fontSize: 11, color: C.subtle, margin: '2px 0 0' }}>{modal.item ? `ID: ${modal.item.id?.slice(0, 8)}…` : 'POST to AWS API Gateway'}</p>
               </div>
               <button onClick={() => setModal({ open: false })}
                 style={{ width: 32, height: 32, borderRadius: 10, background: C.bg, border: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -378,7 +407,7 @@ export default function BranchMenuPage() {
               <FieldLabel>Item Name *</FieldLabel>
               <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Chicken Karahi" style={inputStyle()}
                 onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
-                onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.border} />
+                onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
             </div>
 
             {/* Category + Price */}
@@ -388,7 +417,7 @@ export default function BranchMenuPage() {
                 <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
                   style={{ ...inputStyle(), appearance: 'none' as any }}
                   onFocus={e => (e.target as HTMLSelectElement).style.borderColor = C.red}
-                  onBlur={e  => (e.target as HTMLSelectElement).style.borderColor = C.border}>
+                  onBlur={e => (e.target as HTMLSelectElement).style.borderColor = C.border}>
                   {cats.length === 0 && <option value="">⚠ Loading…</option>}
                   {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -397,7 +426,7 @@ export default function BranchMenuPage() {
                 <FieldLabel>Price (Rs) *</FieldLabel>
                 <input type="number" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
-                  onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.border} />
+                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
             </div>
 
@@ -407,7 +436,7 @@ export default function BranchMenuPage() {
               <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Short description…" rows={2}
                 style={{ ...inputStyle(), height: 'auto', padding: '10px 12px', resize: 'none', fontFamily: 'sans-serif' } as React.CSSProperties}
                 onFocus={e => (e.target as HTMLTextAreaElement).style.borderColor = C.red}
-                onBlur={e  => (e.target as HTMLTextAreaElement).style.borderColor = C.border} />
+                onBlur={e => (e.target as HTMLTextAreaElement).style.borderColor = C.border} />
             </div>
 
             {/* Prep + Calories */}
@@ -416,13 +445,13 @@ export default function BranchMenuPage() {
                 <FieldLabel>Prep Time</FieldLabel>
                 <input value={form.prepTime} onChange={e => setForm(p => ({ ...p, prepTime: e.target.value }))} placeholder="e.g. 25 min" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
-                  onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.border} />
+                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
               <div>
                 <FieldLabel>Calories</FieldLabel>
                 <input type="number" value={form.calories} onChange={e => setForm(p => ({ ...p, calories: e.target.value }))} placeholder="e.g. 680" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
-                  onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.border} />
+                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
             </div>
 
@@ -447,7 +476,7 @@ export default function BranchMenuPage() {
                   <span style={{ fontSize: 24 }}>🫙</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: glbName ? '#7c3aed' : C.subtle }}>{glbName ? `✓ ${glbName}` : 'Click to upload · .glb / .gltf'}</span>
                   {glbName && !modal.item && <span style={{ fontSize: 11, color: '#7c3aed', opacity: 0.7 }}>Will upload with item on Save</span>}
-                  {glbName && modal.item  && <span style={{ fontSize: 11, color: '#d97706', opacity: 0.8 }}>Use Recreate button below to attach GLB</span>}
+                  {glbName && modal.item && <span style={{ fontSize: 11, color: '#d97706', opacity: 0.8 }}>Use Recreate button below to attach GLB</span>}
                 </label>
               )}
               {glbStatus === 'uploading' && <div style={{ padding: '14px 16px', borderRadius: 16, border: '2px dashed #DDD6FE', background: '#FAF5FF', display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 size={13} color="#7c3aed" className="animate-spin" /><span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>{saveMsg || 'Uploading 3D model…'}</span></div>}
@@ -489,7 +518,7 @@ export default function BranchMenuPage() {
                 {saving || glbStatus === 'uploading'
                   ? <><Loader2 size={14} className="animate-spin" /> {saveMsg || 'Saving…'}</>
                   : cats.length === 0 && !modal.item ? '⏳ Loading categories…'
-                  : modal.item ? '✓ Update Item' : '✓ Create Item'}
+                    : modal.item ? '✓ Update Item' : '✓ Create Item'}
               </button>
             </div>
           </div>

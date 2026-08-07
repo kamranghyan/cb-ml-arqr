@@ -2,15 +2,15 @@ import type { MenuItem, MenuCategory, KdsOrder, AdminUser, QrTable } from './typ
 
 // ─── Categories ──────────────────────────────────────────────────────────────
 
-export const CATEGORIES: MenuCategory[] = [
-  { id: 'all',     name: 'All',      emoji: '🍽️', itemCount: 84 },
-  { id: 'starter', name: 'Starters', emoji: '🥗',  itemCount: 18 },
-  { id: 'mains',   name: 'Mains',    emoji: '🍖',  itemCount: 22 },
-  { id: 'pasta',   name: 'Pasta',    emoji: '🍝',  itemCount: 10 },
-  { id: 'seafood', name: 'Seafood',  emoji: '🐟',  itemCount: 14 },
-  { id: 'desserts',name: 'Desserts', emoji: '🍰',  itemCount: 12 },
-  { id: 'drinks',  name: 'Drinks',   emoji: '🥤',  itemCount: 8  },
-];
+// export const CATEGORIES: MenuCategory[] = [
+//   { id: 'all',     name: 'All',      emoji: '🍽️', itemCount: 84 },
+//   { id: 'starter', name: 'Starters', emoji: '🥗',  itemCount: 18 },
+//   { id: 'mains',   name: 'Mains',    emoji: '🍖',  itemCount: 22 },
+//   { id: 'pasta',   name: 'Pasta',    emoji: '🍝',  itemCount: 10 },
+//   { id: 'seafood', name: 'Seafood',  emoji: '🐟',  itemCount: 14 },
+//   { id: 'desserts',name: 'Desserts', emoji: '🍰',  itemCount: 12 },
+//   { id: 'drinks',  name: 'Drinks',   emoji: '🥤',  itemCount: 8  },
+// ];
 
 // ─── Menu Items ──────────────────────────────────────────────────────────────
 

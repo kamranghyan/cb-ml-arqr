@@ -9,6 +9,24 @@ Routes: /menus/*  +  /health
 """
 from __future__ import annotations
 
+import sys
+import os
+
+# Get the absolute path of the current file's directory
+current_dir = os.path.dirname(os.path.abspath(__file__))  # app/
+parent_dir = os.path.dirname(current_dir)  # menu_svc/
+grandparent_dir = os.path.dirname(parent_dir)  # lambdas/
+
+# Add the grandparent directory (lambdas) to Python path
+if grandparent_dir not in sys.path:
+    sys.path.insert(0, grandparent_dir)
+    print(f"✅ Added to path: {grandparent_dir}")
+
+# Now import shared
+from shared.structured_logger import bind_correlation_id, get_logger
+# =========================================================
+
+
 import time
 import uuid
 

@@ -76,7 +76,7 @@ export default function ProfilePage() {
         <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
           <ChevronLeft size={28} strokeWidth={2.5} />
         </button>
-        <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: '8px 0 0' }}>Profile</h1>
+        <h1 style={{ fontFamily: "'Baloo 2', sans-serif",textAlign:"center", fontSize: 26, fontWeight: 700, color: BRAND, margin: '8px 0 0' }}>Profile</h1>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 120px' }}>
