@@ -150,7 +150,7 @@ async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
   }
 }
 
-// ── Restaurant APIs ────────────────────────────────────────────────────────────
+// ── Restaurant APIs ───────────────────────────────────
 
 /**
  * Fetch all restaurants for a tenant
