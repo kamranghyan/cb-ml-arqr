@@ -112,7 +112,14 @@ async def create_item(
                     updates["arModelKey"] = assets["arModelKey"]
                     item.arModelUrl = assets.get("arModelUrl")
                 if updates:
-                    item = svc.update(tenant_id, restaurantId, item.itemId, updates)
+                    updates["version"] = item.version
+
+                    item = svc.update(
+                        tenant_id,
+                        restaurantId,
+                        item.itemId,
+                        updates,
+                    )
                     if assets.get("imageUrl"):
                         item.imageUrl = assets["imageUrl"]
                     if assets.get("arModelUrl"):
