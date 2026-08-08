@@ -18,30 +18,49 @@ export interface ApiAddress {
   postcode: string
 }
 
+export interface ApiSocialMedia {
+  x?: string | null
+  youtube?: string | null
+  instagram?: string | null
+  linkedin?: string | null
+  tiktok?: string | null
+  facebook?: string | null
+}
+
 export interface ApiRestaurant {
+
   restaurantId: string
   tenantId?: string
+
   name: string
+
   address: ApiAddress
+
   timezone: string
   currencyCode: string
   isActive: boolean
 
-  // Images
+
   logoKey?: string | null
   logoUrl?: string | null
+
   bannerKey?: string | null
   bannerUrl?: string | null
 
-  // Rating
+
   ratingValue?: number | null
   ratingCount?: number | null
 
-  // Existing
+
   tagline?: string
   openingHours?: string
   deliveryNote?: string
   cuisineTags?: string[]
+
+
+  // ADD
+  socialMedia?: ApiSocialMedia
+
 
   createdAt?: string
   updatedAt?: string
@@ -377,7 +396,33 @@ export async function uploadRestaurantLogo(
   }
   return res.json()
 }
+export async function uploadRestaurantBanner(
+  file: File,
+  restaurantId: string,
+): Promise<{ s3Key: string; url: string }> {
+  const token = await getValidIdToken();
 
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(
+    `/api/menu/upload/restaurants/${restaurantId}/banner`,
+    {
+      method: 'POST',
+      headers: token
+        ? { Authorization: token }
+        : {},
+      body: form,
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Banner upload ${res.status}: ${text}`);
+  }
+
+  return res.json();
+}
 /**
  * Upload a category image. Field name must be `file`.
  */

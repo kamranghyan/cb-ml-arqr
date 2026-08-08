@@ -36,8 +36,8 @@ async function forward(req: NextRequest, path: string[]) {
   if (!auth) return NO_TENANT
   if (!auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
 
-  const claims   = parseJwt(auth.slice(7))
-  const groups   = (claims['cognito:groups'] as string[]) ?? []
+  const claims = parseJwt(auth.slice(7))
+  const groups = (claims['cognito:groups'] as string[]) ?? []
   const ownTenant = (claims['custom:tenant_id'] as string) ?? ''
 
   // A company owner always works inside their own tenant. A platform admin
@@ -50,7 +50,11 @@ async function forward(req: NextRequest, path: string[]) {
     if (!tenantId) return ADMIN_NEEDS_TENANT
   }
 
-  const upstream = `${API_BASE}/menus/${path.join('/')}${req.nextUrl.search}`
+  const pathString = path.join('/')
+
+  const upstream = pathString.startsWith('upload/')
+    ? `${API_BASE}/${pathString}${req.nextUrl.search}`
+    : `${API_BASE}/menus/${pathString}${req.nextUrl.search}`
   const ct = req.headers.get('content-type') ?? ''
 
   const headers: Record<string, string> = {
@@ -73,7 +77,7 @@ async function forward(req: NextRequest, path: string[]) {
     }
   }
 
-  const res  = await fetch(upstream, init)
+  const res = await fetch(upstream, init)
   const text = await res.text()
 
   try {

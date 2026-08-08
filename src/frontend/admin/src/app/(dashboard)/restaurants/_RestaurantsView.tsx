@@ -4,10 +4,17 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Plus, Edit2, Trash2, X, Loader2, RefreshCw, Store, AlertCircle, Lock, ChevronRight,
+  CloudUpload,
 } from 'lucide-react';
 import {
-  fetchRestaurants, createRestaurant, updateRestaurant, deleteRestaurant,
+  fetchRestaurants,
+  fetchRestaurant,
+  createRestaurant,
+  updateRestaurant,
+  deleteRestaurant,
   type ApiRestaurant,
+  uploadRestaurantLogo,
+  uploadRestaurantBanner,
 } from '@/lib/admin-api';
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
 // import { uploadRestaurantLogo } from '@/lib/admin-api';
@@ -164,8 +171,26 @@ export default function RestaurantsView() {
               </Link>
 
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <button onClick={() => setModal({ open: true, edit: r })} style={{ ...iconBtn, flex: 1 }}>
-                  <Edit2 size={14} /> Edit details
+                <button
+                  onClick={async () => {
+                    try {
+                      const fullRestaurant = await fetchRestaurant(r.restaurantId);
+
+                      setModal({
+                        open: true,
+                        edit: fullRestaurant,
+                      });
+                    } catch (e: any) {
+                      showToast(
+                        e?.message ?? 'Could not load restaurant details',
+                        'err'
+                      );
+                    }
+                  }}
+                  style={{ ...iconBtn, flex: 1 }}
+                >
+                  <Edit2 size={14} />
+                  Edit details
                 </button>
                 <button onClick={() => onDelete(r)} style={{ ...iconBtn, color: C.red }}>
                   <Trash2 size={14} />
@@ -223,6 +248,12 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
     openingHours: edit?.openingHours ?? '',
     deliveryNote: edit?.deliveryNote ?? '',
     cuisineTags: edit?.cuisineTags?.join(', ') ?? '',
+    socialX: edit?.socialMedia?.x ?? '',
+    socialInstagram: edit?.socialMedia?.instagram ?? '',
+    socialFacebook: edit?.socialMedia?.facebook ?? '',
+    socialYoutube: edit?.socialMedia?.youtube ?? '',
+    socialLinkedin: edit?.socialMedia?.linkedin ?? '',
+    socialTiktok: edit?.socialMedia?.tiktok ?? '',
 
     logoKey: edit?.logoKey ?? '',
     bannerKey: edit?.bannerKey ?? '',
@@ -230,6 +261,7 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
     ratingValue: edit?.ratingValue ?? '',
     ratingCount: edit?.ratingCount ?? '',
   });
+
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -248,8 +280,8 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
     const payload = {
       name: f.name,
 
-      logoKey: f.logoKey,
-      bannerKey: f.bannerKey,
+      logoKey: f.logoKey || null,
+      bannerKey: f.bannerKey || null,
 
       ratingValue: f.ratingValue
         ? Number(f.ratingValue)
@@ -278,18 +310,15 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
         .split(',')
         .map(x => x.trim())
         .filter(Boolean),
-      timezone: f.timezone,
-      currencyCode: f.currencyCode,
-      isActive: f.isActive,
 
-      tagline: f.tagline,
-      openingHours: f.openingHours,
-      deliveryNote: f.deliveryNote,
-
-      cuisineTags: f.cuisineTags
-        .split(',')
-        .map(x => x.trim())
-        .filter(Boolean),
+      socialMedia: {
+        x: f.socialX || null,
+        instagram: f.socialInstagram || null,
+        facebook: f.socialFacebook || null,
+        youtube: f.socialYoutube || null,
+        linkedin: f.socialLinkedin || null,
+        tiktok: f.socialTiktok || null,
+      },
     };
     try {
       if (edit) {
@@ -297,15 +326,24 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
         let updatedPayload: any = { ...payload };
 
 
-        // if (logoFile) {
+        if (logoFile) {
 
-        //   const uploadedLogo = await uploadRestaurantLogo(
-        //     logoFile,
-        //     edit.restaurantId
-        //   );
+          const uploadedLogo = await uploadRestaurantLogo(
+            logoFile,
+            edit.restaurantId
+          );
 
-        //   updatedPayload.logoKey = uploadedLogo.s3Key;
-        // }
+          updatedPayload.logoKey = uploadedLogo.s3Key;
+        }
+
+        if (bannerFile) {
+          const uploadedBanner = await uploadRestaurantBanner(
+            bannerFile,
+            edit.restaurantId
+          );
+
+          updatedPayload.bannerKey = uploadedBanner.s3Key;
+        }
 
 
         await updateRestaurant(
@@ -415,82 +453,162 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
             />
           </div>
 
-          <div>
-            <label style={label}>Restaurant Logo</label>
+          {/* Restaurant Logo */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={label}>
+              Restaurant Logo
+            </label>
 
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-
-                const file = e.target.files?.[0];
-
-                if (file) {
-                  setLogoFile(file);
-                  setLogoPreview(URL.createObjectURL(file));
-                }
-
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 20,
+                borderRadius: 16,
+                border: `2px dashed ${logoFile ? '#FED7AA' : C.border}`,
+                background: logoFile ? '#FFF8F1' : C.bg,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
               }}
-            />
+            >
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
 
-
-            {
-              <img
-                src={
-                  logoPreview ||
-                  "/Images/default-restaurant-logo.png"
-                }
-                alt="logo"
-                style={{
-                  marginTop: 10,
-                  width: 80,
-                  height: 80,
-                  objectFit: "cover",
-                  borderRadius: 12,
-                  border: "1px solid #ddd"
+                  if (file) {
+                    setLogoFile(file);
+                    setLogoPreview(URL.createObjectURL(file));
+                  }
                 }}
               />
-            }
 
+              <CloudUpload
+                size={24}
+                color={logoFile ? C.dark : C.subtle}
+              />
+
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: logoFile ? C.dark : C.subtle,
+                }}
+              >
+                {logoFile
+                  ? `✓ ${logoFile.name}`
+                  : 'Click to upload logo · PNG, JPG'}
+              </span>
+            </label>
+
+
+            {logoPreview && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
+                <img
+                  src={logoPreview}
+                  alt="restaurant logo"
+                  style={{
+                    width: 90,
+                    height: 90,
+                    objectFit: 'cover',
+                    borderRadius: 12,
+                    border: `1px solid ${C.border}`,
+                  }}
+                />
+              </div>
+            )}
           </div>
 
 
-          <div>
-            <label style={label}>Restaurant Banner</label>
 
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
+          {/* Restaurant Banner */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={label}>
+              Restaurant Banner
+            </label>
 
-                const file = e.target.files?.[0];
 
-                if (file) {
-                  setBannerFile(file);
-                  setBannerPreview(URL.createObjectURL(file));
-                }
-
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 20,
+                borderRadius: 16,
+                border: `2px dashed ${bannerFile ? '#FED7AA' : C.border}`,
+                background: bannerFile ? '#FFF8F1' : C.bg,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
               }}
-            />
+            >
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+
+                  if (file) {
+                    setBannerFile(file);
+                    setBannerPreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
 
 
-            {
-             <img
-  src={
-    bannerPreview ||
-    "/Images/default-banner.jpg"
-  }
-  alt="banner"
-  style={{
-    marginTop: 10,
-    width: "100%",
-    height: 120,
-    objectFit: "cover",
-    borderRadius: 12,
-    border: "1px solid #ddd"
-  }}
-/>
-            }
+              <CloudUpload
+                size={24}
+                color={bannerFile ? C.dark : C.subtle}
+              />
+
+
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: bannerFile ? C.dark : C.subtle,
+                }}
+              >
+                {bannerFile
+                  ? `✓ ${bannerFile.name}`
+                  : 'Click to upload banner · PNG, JPG'}
+              </span>
+
+            </label>
+
+
+            {bannerPreview && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
+                <img
+                  src={bannerPreview}
+                  alt="restaurant banner"
+                  style={{
+                    width: '100%',
+                    height: 120,
+                    objectFit: 'cover',
+                    borderRadius: 12,
+                    border: `1px solid ${C.border}`,
+                  }}
+                />
+              </div>
+            )}
 
           </div>
 
@@ -532,6 +650,93 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
               placeholder="Fast Food, Pizza, BBQ"
               onChange={e => set('cuisineTags', e.target.value)}
             />
+          </div>
+          <div style={{
+            marginTop: 8,
+            paddingTop: 14,
+            borderTop: `1px solid ${C.border}`
+          }}>
+            <h4 style={{
+              margin: '0 0 12px',
+              fontSize: 15,
+              fontWeight: 800,
+              color: C.text
+            }}>
+              Social Media
+            </h4>
+
+
+            <div>
+              <label style={label}>X / Twitter</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialX}
+                placeholder="https://x.com/kfc_pk"
+                onChange={e => set('socialX', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>Instagram</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialInstagram}
+                placeholder="https://instagram.com/kfcpakistanofficial"
+                onChange={e => set('socialInstagram', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>Facebook</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialFacebook}
+                placeholder="https://facebook.com/KFCPakistan"
+                onChange={e => set('socialFacebook', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>Youtube</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialYoutube}
+                placeholder="https://youtube.com/@kfcpakistan6047"
+                onChange={e => set('socialYoutube', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>LinkedIn</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialLinkedin}
+                placeholder="https://linkedin.com/company/kfcpakistan"
+                onChange={e => set('socialLinkedin', e.target.value)}
+              />
+            </div>
+
+
+            <div>
+              <label style={label}>TikTok</label>
+              <input
+                className="searchInput"
+                style={input}
+                value={f.socialTiktok}
+                placeholder="https://tiktok.com/@kfcpakistanofficial"
+                onChange={e => set('socialTiktok', e.target.value)}
+              />
+            </div>
+
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: C.text }}>
             <input className='searchInput' type="checkbox" checked={f.isActive}

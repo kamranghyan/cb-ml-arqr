@@ -48,20 +48,43 @@ export interface RestaurantData {
   restaurantId: string;
   tenantId: string;
   name: string;
+
   address?: {
     street?: string;
     city?: string;
     country?: string;
     postcode?: string;
   };
-  timezone: string;
-  currencyCode: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  logoKey: string | null;
-  bannerKey: string | null;
+
+  timezone?: string;
+  currencyCode?: string;
+  isActive?: boolean;
+
+  createdAt?: string;
+  updatedAt?: string;
+
+  logoKey?: string | null;
+  bannerKey?: string | null;
+
   logoUrl?: string | null;
+  bannerUrl?: string | null;
+
+  cuisineTags?: string[];
+  openingHours?: string;
+
+  ratingValue?: number;
+  ratingCount?: number;
+
+  deliveryNote?: string;
+
+  socialMedia?: {
+    instagram?: string | null;
+    facebook?: string | null;
+    youtube?: string | null;
+    linkedin?: string | null;
+    tiktok?: string | null;
+    x?: string | null;
+  };
 }
 
 export interface RestaurantsResponse {
@@ -183,32 +206,23 @@ export async function fetchRestaurants(restaurantId?: string): Promise<Restauran
  * Fetch a single restaurant by ID
  * GET /api/menu/restaurants/{restaurantId}
  */
-export async function fetchRestaurantById(restaurantId: string): Promise<RestaurantData | null> {
+export async function fetchRestaurantById(
+  restaurantId: string
+): Promise<RestaurantData | null> {
   try {
-    console.log(`🔍 Fetching restaurant by ID: ${restaurantId}`);
-    
-    const response = await fetch(`/api/menu/restaurants/${restaurantId}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-tenant-id': restaurantId,
-      },
-    });
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.warn(`⚠️ Restaurant ${restaurantId} not found`);
-        return null;
-      }
-      const errorText = await response.text();
-      console.error('❌ API Error:', response.status, errorText);
-      throw new Error(`Failed to fetch restaurant: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log('✅ Restaurant fetched:', data);
+    const rid = restaurantId.trim();
+
+    if (!rid) return null;
+
+    const data = await menuFetch<RestaurantData>(
+      `/api/menu/restaurants/${rid}`
+    );
+
+    console.log('🏪 Restaurant by ID:', data);
+
     return data;
   } catch (error) {
-    console.error('❌ Error fetching restaurant:', error);
+    console.error('❌ Failed to fetch restaurant by ID:', error);
     return null;
   }
 }
@@ -358,7 +372,13 @@ export function normaliseItem(raw: any): ApiMenuItem {
   }
 }
 
-export interface ApiCategory { id: string; name: string; slug?: string }
+export interface ApiCategory {
+  id?: string;
+  categoryId?: string;
+  name: string;
+  slug?: string;
+  imageUrl?: string | null;
+}
 
 export async function fetchCategories(): Promise<ApiCategory[]> {
   return []
