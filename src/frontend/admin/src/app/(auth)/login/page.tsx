@@ -111,7 +111,7 @@ function TenantLoginContent() {
     new_password:  { icon: <CheckCircle size={32} color={C.gold} />,title: 'Set New Password',     sub: 'First login — permanent password' },
     forgot:        { icon: <KeyRound size={32} color={C.gold} />,   title: 'Reset Password',       sub: 'Enter email to receive a code'  },
     reset_confirm: { icon: <KeyRound size={32} color={C.gold} />,   title: 'Enter Reset Code',     sub: 'Check your email for the code'  },
-    register:      { icon: <Store size={32} color={C.gold} />,      title: 'Register Restaurant',  sub: 'Create your admin account'      },
+    register:      { icon: <Store size={32} color={C.gold} />,      title: 'Register Restaurant',  sub: 'Create your account'      },
     verify:        { icon: <Mail size={32} color={C.gold} />,       title: 'Verify Email',         sub: `Code sent to ${email}`          },
   }
   const meta = stepMeta[step]

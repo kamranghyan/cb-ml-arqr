@@ -7,6 +7,8 @@
 import { MENU_API, AR_API, RESTAURANT_ID, ADMIN_RESTAURANT_ID } from './api-config'
 import { getValidIdToken } from './cognito'
 
+
+
 export interface ApiMenuItem {
   id: string
   name: string

@@ -12,7 +12,9 @@ import {
   fetchRestaurants,
   fetchCategories,
   type ApiMenuItem,
-  type RestaurantData
+  type RestaurantData,
+  fetchRestaurantById,
+  ApiCategory
 } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
 import GuestTopBar from '@/components/guest/GuestTopBar';
@@ -80,30 +82,22 @@ function GuestContent() {
     // ✅ Fetch Restaurant Data
     const fetchRestaurantData = async () => {
       try {
-        console.log('🏪 Fetching restaurants for rid:', rid);
-        const restaurants = await fetchRestaurants(rid);
-        console.log('✅ Restaurants response:', restaurants);
+        console.log('🏪 Fetching restaurant by ID:', rid);
 
-        if (restaurants.items && restaurants.items.length > 0) {
-          // Find specific restaurant
-          const restaurant = restaurants.items.find(r => r.restaurantId === rid);
-          console.log('🔍 Found restaurant:', restaurant);
+        const restaurant = await fetchRestaurantById(rid);
 
-          if (restaurant) {
-            setRestaurantData(restaurant);
+        console.log('✅ Restaurant response:', restaurant);
 
-            // Set restaurant name
-            if (restaurant.name && restaurant.name.trim()) {
-              setRestName(restaurant.name);
-            }
-            if (restaurant.imageUrl) {
-              setRestaurantImage(restaurant.imageUrl);
-            }
+        if (restaurant) {
+          setRestaurantData(restaurant);
+
+          // ✅ Restaurant hero image comes from bannerUrl
+          if (restaurant.bannerUrl?.trim()) {
+            setRestaurantImage(restaurant.bannerUrl);
           }
         }
       } catch (err) {
         console.error('❌ Failed to fetch restaurant:', err);
-        // Keep static values
       }
     };
 
@@ -137,6 +131,8 @@ function GuestContent() {
 
   }, [qrRid, tid, tableNum]);
 
+
+
   const isQrScan = params.has('rid') && params.has('tid');
   const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
@@ -167,13 +163,82 @@ function GuestContent() {
       (i.description ?? '').toLowerCase().includes(search.toLowerCase()))
   );
 
-  // ✅ Check if restaurant image exists and is valid
-  const hasRestaurantImage = restaurantImage && restaurantImage.trim() !== '';
 
   // ✅ Display name: Restaurant Name or Static
   const displayName = restName || STATIC_RESTAURANT_NAME;
 
+  function getSocialUrl(url?: string | null) {
+    if (!url?.trim()) return null;
 
+    const value = url.trim();
+
+    return /^https?:\/\//i.test(value)
+      ? value
+      : `https://${value}`;
+  }
+  function SocialIcon({
+    platform,
+    url,
+  }: {
+    platform: string;
+    url?: string | null;
+  }) {
+    const socialUrl = getSocialUrl(url);
+
+    if (!socialUrl) return null;
+
+    const icons: Record<string, string> = {
+      instagram: '/images/social/instagram.png',
+      facebook: '/images/social/facebook.png',
+      youtube: '/images/social/X.png',
+      linkedin: '/images/social/linkedIn.png',
+      tiktok: '/images/social/X.png',
+      x: '/images/social/x.png',
+    };
+
+    const icon = icons[platform];
+
+    if (!icon) return null;
+
+    return (
+      <a
+        href={socialUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={platform}
+        style={{
+          width: 32,
+          height: 32,
+          minWidth: 32,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textDecoration: 'none',
+          transition: 'transform 0.2s ease, opacity 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.08)';
+          e.currentTarget.style.opacity = '0.85';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.opacity = '1';
+        }}
+      >
+        <img
+          src={icon}
+          alt={platform}
+          style={{
+            width: 26,
+            height: 26,
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+      </a>
+    );
+  }
 
   return (
     <div style={{
@@ -199,9 +264,8 @@ function GuestContent() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundImage: hasRestaurantImage
-            ? `url(${restaurantImage})`
-            : `url(${STATIC_IMAGE})`,
+          backgroundImage: `url(${restaurantData?.bannerUrl?.trim() || STATIC_IMAGE
+            })`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
@@ -257,7 +321,50 @@ function GuestContent() {
                 restaurantData?.openingHours || PLACEHOLDER_HOURS
               }
             </p>
+            {restaurantData?.socialMedia && (
+              <div
+                style={{
+                  marginTop: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  maxWidth: '100%',
+                }}
+              >
+                <SocialIcon
+                  platform="instagram"
+                  url={restaurantData.socialMedia.instagram}
+                />
+
+                <SocialIcon
+                  platform="facebook"
+                  url={restaurantData.socialMedia.facebook}
+                />
+
+                <SocialIcon
+                  platform="youtube"
+                  url={restaurantData.socialMedia.youtube}
+                />
+
+                <SocialIcon
+                  platform="linkedin"
+                  url={restaurantData.socialMedia.linkedin}
+                />
+
+                <SocialIcon
+                  platform="tiktok"
+                  url={restaurantData.socialMedia.tiktok}
+                />
+
+                <SocialIcon
+                  platform="x"
+                  url={restaurantData.socialMedia.x}
+                />
+              </div>
+            )}
           </div>
+
           <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 7, paddingTop: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Star size={13} fill="#fff" color="#fff" />
@@ -272,12 +379,13 @@ function GuestContent() {
               </span></span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
-              <Truck size={13} color="#fff" />
+              <img src="/Images/menu/delivery.png" className='w-[30px] h-[30px]' color="#fff" />
               <span style={{ fontSize: 12.5, color: '#fff' }}>{
                 restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY
               }</span>
             </div>
           </div>
+
         </div>
 
         {/* ── Padded content ── */}
@@ -423,7 +531,7 @@ function GuestContent() {
                   />
                 ))
               ) : (
-                categories.slice(0, 6).map((cat) => (
+                categories.map((cat) => (
                   <Link
                     key={cat.categoryId}
                     href={`${menuUrl}&cat=${encodeURIComponent(
