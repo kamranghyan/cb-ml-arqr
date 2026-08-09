@@ -29,6 +29,7 @@ from app.repositories.s3_repository import S3Repository
 from app.services.cache_service import CacheService
 from app.services.category_service import CategoryService
 from app.services.menu_item_service import MenuItemService
+from app.services.addon_service import AddOnService
 from app.services.restaurant_service import RestaurantService
 from app.services.tenant_limits import TenantLimits
 from app.services.s3_service import S3Service
@@ -271,6 +272,11 @@ def get_category_service() -> CategoryService:
 @lru_cache
 def get_item_service() -> MenuItemService:
     return MenuItemService(cache=_cache, s3_svc=_s3_svc)
+
+
+@lru_cache
+def get_addon_service() -> AddOnService:
+    return AddOnService(cache=_cache)
 
 
 @lru_cache
