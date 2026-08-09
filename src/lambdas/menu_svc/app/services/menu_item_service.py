@@ -188,6 +188,12 @@ class MenuItemService:
         )
         if raw is None:
             raise MenuItemNotFoundError(f"Item {item_id} not found")
+        if (
+            raw.get("tenantId") != tenant_id
+            or raw.get("restaurantId") != restaurant_id
+        ):
+            raise MenuItemNotFoundError(f"Item {item_id} not found")
+        
         item = MenuItem.from_dict(raw)
         item.imageUrl = self._s3.generate_read_url(item.imageKey)
         item.arModelUrl = self._s3.generate_read_url(item.arModelKey)

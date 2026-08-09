@@ -122,3 +122,20 @@ class CacheService:
     @staticmethod
     def items_list_key(tenant_id: str, restaurant_id: str) -> str:
         return f"menu:items:{tenant_id}:{restaurant_id}"
+
+    @staticmethod
+    def addon_key(
+        tenant_id: str,
+        restaurant_id: str,
+        add_on_id: str,
+    ) -> str:
+        return f"menu:addon:{tenant_id}:{restaurant_id}:{add_on_id}"
+
+
+    @staticmethod
+    def addons_list_key(
+        tenant_id: str,
+        restaurant_id: str,
+        menu_item_id: str,
+    ) -> str:
+        return f"menu:addons:{tenant_id}:{restaurant_id}:{menu_item_id}"
