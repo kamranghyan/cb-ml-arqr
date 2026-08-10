@@ -66,7 +66,7 @@ async function menuFetch<T = any>(
   };
 
   if (token) {
-    headers['Authorization'] = token;
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   headers['x-tenant-id'] = TENANT_ID;

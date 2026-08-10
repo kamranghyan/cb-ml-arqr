@@ -155,12 +155,8 @@
 .pb-safe-bot  { padding-bottom: env(safe-area-inset-bottom, 16px); }
 
 
-.searchInput::placeholder{
-  color: #999;
-  opacity: 1;
-}
 .searchInput{
-  color: #000;
+  color: #000 !important;
 }
 
 /* For placeholder color */

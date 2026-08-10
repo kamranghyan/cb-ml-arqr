@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Tags, AlertCircle, CloudUpload } from 'lucide-react';
 import {
-  fetchCategories, createCategory, updateCategory, deleteCategory,uploadCategoryImage,
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  uploadCategoryImage,
   type ApiCategory,
 } from '@/lib/admin-api';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
@@ -306,71 +310,54 @@ function CategoryModal({
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
 
 
-async function save() {
-  setSaving(true);
+  async function save() {
+    setSaving(true);
 
-  try {
-    if (edit) {
-      if (!edit.categoryId) {
-        throw new Error('Category ID is missing.');
-      }
+    try {
+      if (edit) {
+        if (!edit.categoryId) {
+          throw new Error('Category ID is missing.');
+        }
 
-      // 1. Update category data
-      await updateCategory(
-        edit.categoryId,
-        {
-          name: f.name,
-          displayOrder: f.displayOrder,
-          isActive: f.isActive,
-        },
-        restaurantId
-      );
-
-      // 2. Upload image separately if a new image was selected
-      if (imageFile) {
-        await uploadCategoryImage(
-          imageFile,
+        await updateCategory(
           edit.categoryId,
-          restaurantId
+          {
+            name: f.name,
+            displayOrder: f.displayOrder,
+            isActive: f.isActive,
+          },
+          restaurantId,
+          imageFile
         );
+
+        say('Category updated');
+      } else {
+        await createCategory(
+          {
+            name: f.name,
+            displayOrder: f.displayOrder,
+            isActive: f.isActive,
+          },
+          restaurantId,
+          imageFile
+        );
+
+        say('Category created');
       }
 
-      say('Category updated');
-    } else {
-      // Create category first
-      const created = await createCategory(
-        {
-          name: f.name,
-          displayOrder: f.displayOrder,
-          isActive: f.isActive,
-        },
-        restaurantId
+      onSaved();
+
+    } catch (e: any) {
+      console.error('CATEGORY SAVE ERROR:', e);
+
+      say(
+        e?.message ?? 'Something went wrong',
+        'err'
       );
-
-      // Then upload image using newly created category ID
-      if (imageFile && created?.categoryId) {
-        await uploadCategoryImage(
-          imageFile,
-          created.categoryId,
-          restaurantId
-        );
-      }
-
-      say('Category created');
+    } finally {
+      setSaving(false);
     }
-
-    onSaved();
-
-  } catch (e: any) {
-    console.error('CATEGORY SAVE ERROR:', e);
-    say(
-      e?.message ?? 'Something went wrong',
-      'err'
-    );
-  } finally {
-    setSaving(false);
   }
-}
 
   return (
     <div onClick={onClose} style={{
