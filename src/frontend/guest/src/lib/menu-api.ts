@@ -444,3 +444,4 @@ export function extractCategoriesFromItems(items: ApiMenuItem[]): ApiCategory[] 
   }
   return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
 }
+//
