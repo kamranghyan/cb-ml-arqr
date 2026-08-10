@@ -386,7 +386,7 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <label style={label}>Restaurant Name</label>
-            <input className='searchInput' style={input} value={f.name} placeholder="Islamabad F-7"
+            <input className='searchInput' style={input} value={f.name} placeholder="Cheezious"
               onChange={e => set('name', e.target.value)} />
           </div>
           <div>
