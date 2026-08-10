@@ -401,20 +401,38 @@ export function normaliseItem(raw: any): ApiMenuItem {
 }
 
 export interface ApiCategory {
-  id?: string;
-  categoryId?: string;
+  categoryId: string;
   name: string;
   slug?: string;
   imageUrl?: string | null;
 }
 
-export async function fetchCategories(restaurantId: string): Promise<ApiCategory[]> {
-
-  const res = await menuFetch<any>(
+export async function fetchCategories(
+  restaurantId: string
+): Promise<ApiCategory[]> {
+  const res = await menuFetch(
     `/api/menu/restaurants/${restaurantId}/categories`
   );
 
-  return res.items ?? res;
+  const categories = Array.isArray(res)
+    ? res
+    : res?.items ?? [];
+
+  return categories
+    .map((category: any) => ({
+      categoryId:
+        category.categoryId ??
+        category.id ??
+        '',
+      name: category.name ?? '',
+      slug: category.slug,
+      imageUrl: category.imageUrl ?? null,
+    }))
+    .filter(
+      (category: ApiCategory) =>
+        Boolean(category.categoryId) &&
+        Boolean(category.name)
+    );
 }
 
 export function extractCategoriesFromItems(items: ApiMenuItem[]): ApiCategory[] {

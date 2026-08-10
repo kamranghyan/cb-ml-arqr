@@ -187,13 +187,13 @@ export async function fetchCategory(
 }
 
 export async function createCategory(
-payload:{
- name:string;
- displayOrder?:number;
- isActive?:boolean;
-},
-restaurantId:string,
-imageFile?:File|null
+  payload: {
+    name: string;
+    displayOrder?: number;
+    isActive?: boolean;
+  },
+  restaurantId: string,
+  imageFile?: File | null
 ): Promise<ApiCategory> {
 
   const token = await getValidIdToken()
@@ -237,7 +237,6 @@ imageFile?:File|null
 
   return res.json()
 }
-
 export async function updateCategory(
   categoryId: string,
   payload: {
@@ -248,56 +247,52 @@ export async function updateCategory(
   restaurantId: string = RESTAURANT_ID,
   imageFile?: File | null
 ): Promise<ApiCategory> {
-
-
   const token = await getValidIdToken()
-
 
   const form = new FormData()
 
-
-  if (payload.name)
+  if (payload.name !== undefined) {
     form.append('name', payload.name)
+  }
 
-
-  if (payload.displayOrder !== undefined)
+  if (payload.displayOrder !== undefined) {
     form.append(
       'displayOrder',
       String(payload.displayOrder)
     )
+  }
 
-
-  if (payload.isActive !== undefined)
+  if (payload.isActive !== undefined) {
     form.append(
       'isActive',
       String(payload.isActive)
     )
+  }
 
-
-  if (imageFile)
+  if (imageFile) {
     form.append('file', imageFile)
-
-
+  }
 
   const res = await fetch(
     `/api/menu/restaurants/${restaurantId}/categories/${categoryId}`,
     {
       method: 'PUT',
       headers: token
-        ? { Authorization: token }
+        ? { Authorization: `Bearer ${token}` }
         : {},
-      body: form
+      body: form,
     }
   )
 
-
   if (!res.ok) {
-    throw new Error(await res.text())
+    const text = await res.text().catch(() => '')
+
+    throw new Error(
+      `Category update ${res.status}: ${text || res.statusText}`
+    )
   }
 
-
   return res.json()
-
 }
 
 export async function deleteCategory(
@@ -431,7 +426,9 @@ export async function uploadCategoryImage(
   categoryId: string,
   restaurantId: string = RESTAURANT_ID,
 ): Promise<{ s3Key: string; url: string }> {
+
   const token = await getValidIdToken()
+
   const form = new FormData()
   form.append('file', file)
 
@@ -439,13 +436,19 @@ export async function uploadCategoryImage(
     `/api/menu/upload/restaurants/${restaurantId}/categories/${categoryId}/image`,
     {
       method: 'POST',
-      headers: token ? { Authorization: token } : {},
+      headers: token
+        ? { Authorization: token }
+        : {},
       body: form,
-    },
+    }
   )
+
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Category image upload ${res.status}: ${text}`)
+    throw new Error(
+      `Category image upload ${res.status}: ${text}`
+    )
   }
+
   return res.json()
 }

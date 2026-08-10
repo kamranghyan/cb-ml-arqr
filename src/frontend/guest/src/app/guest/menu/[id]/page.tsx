@@ -44,6 +44,7 @@ export default function ItemDetailPage() {
   const { addItem } = useCartStore();
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const liked = item ? isFavorite(item.id) : false;
+  
 
   // ── Image carousel — structurally real (scroll-snap + dots), but
   // ApiMenuItem only has one imageUrl field today, so it renders as a single

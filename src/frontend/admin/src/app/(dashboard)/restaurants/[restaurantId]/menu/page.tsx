@@ -16,8 +16,10 @@ import {
   fetchCategories,
   normaliseItem,
   type ApiMenuItem,
+  deleteMenuItem,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 
 type ModalState = { open: boolean; item?: ApiMenuItem };
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
@@ -47,8 +49,11 @@ async function createMenuItemWithFiles(
   if (glbFile) fd.append('arFile', glbFile);
   const { getValidIdToken } = await import('@/lib/cognito');
   const token = await getValidIdToken();
+
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = token;
+  headers['x-tenant-id'] = TENANT_ID;
+
   const res = await fetch(`${MENU_BASE_URL}/restaurants/${restaurantId}/items`, { method: 'POST', headers, body: fd });
   if (!res.ok) { const txt = await res.text().catch(() => res.statusText); throw new Error(`Create failed (${res.status}): ${txt}`); }
   return res.json();
@@ -84,6 +89,12 @@ export default function BranchMenuPage() {
   const [glbStatus, setGlbStatus] = useState<GlbStatus>('idle');
   const [glbError, setGlbError] = useState('');
   const [form, setForm] = useState({ name: '', description: '', price: '', category: '', prepTime: '', calories: '' });
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    item?: ApiMenuItem;
+  }>({
+    open: false,
+  });
 
   const loadItems = useCallback(async () => {
 
@@ -112,36 +123,36 @@ export default function BranchMenuPage() {
       );
 
 
-      const updatedItems = raw.map((item: any) => ({
+      const updatedItems = raw.map((item: any) => {
+        const categoryId =
+          item.categoryId ??
+          item.category?.id ??
+          '';
 
-        ...item,
+        const categoryName =
+          categoryMap.get(categoryId) ??
+          item.categoryName ??
+          item.category?.name ??
+          (typeof item.category === 'string' ? item.category : '') ??
+          'Unknown';
 
-        categoryId:
-          item.categoryId ?? item.category?.id ?? '',
+        return normaliseItem({
+          ...item,
+          categoryId,
+          categoryName,
+        });
+      });
 
-        categoryName:
-          categoryMap.get(item.categoryId ?? item.category)
-          ?? item.categoryName
-          ?? item.category
-          ?? "Unknown"
-
-      }));
-
-
-      setItems(
-        updatedItems.map(normaliseItem)
-      );
-
+      setItems(updatedItems);
 
       setLoadState("success");
 
 
     }
     catch (err: any) {
-
-      console.log(err);
-      setLoadState("error");
-
+      console.error(err);
+      setLoadError(err?.message ?? 'Failed to load menu items.');
+      setLoadState('error');
     }
 
   }, [restaurantId]);
@@ -173,22 +184,88 @@ export default function BranchMenuPage() {
 
   const openModal = (item?: ApiMenuItem) => {
     setModal({ open: true, item });
-    setIsActive(item ? item.status === 'active' : true);
-    setIsChef(item ? (item.tags ?? []).includes('chef') : false);
-    setUploadFile(null); setUploadName(null); setGlbFile(null); setGlbName(null);
-    setGlbStatus('idle'); setGlbError(''); setSaveMsg(''); setSaveErr('');
+
+    setIsActive(
+      item
+        ? item.status === 'active'
+        : true
+    );
+
+    setIsChef(
+      item
+        ? (item.tags ?? []).includes('chef')
+        : false
+    );
+
+    setUploadFile(null);
+    setUploadName(null);
+    setGlbFile(null);
+    setGlbName(null);
+    setGlbStatus('idle');
+    setGlbError('');
+    setSaveMsg('');
+    setSaveErr('');
+
+    let selectedCategory = '';
+
+    if (item) {
+      const itemCategoryId = String(
+        item.categoryId ??
+        (item as any).category?.id ??
+        ''
+      );
+
+      const itemCategoryName = String(
+        item.categoryName ??
+        (item as any).category?.name ??
+        (typeof (item as any).category === 'string'
+          ? (item as any).category
+          : '') ??
+        ''
+      ).trim().toLowerCase();
+
+      // First priority: category ID
+      const categoryById = cats.find(
+        c => String(c.id) === itemCategoryId
+      );
+
+      // Second priority: category name
+      const categoryByName = cats.find(
+        c =>
+          c.name.trim().toLowerCase() ===
+          itemCategoryName
+      );
+
+      selectedCategory =
+        categoryById?.id ??
+        categoryByName?.id ??
+        '';
+
+      console.log('EDIT CATEGORY DEBUG', {
+        itemCategoryId,
+        itemCategoryName,
+        categoryById,
+        categoryByName,
+        selectedCategory,
+      });
+    } else {
+      selectedCategory = cats[0]?.id ?? '';
+    }
+
     setForm({
       name: item?.name ?? '',
       description: item?.description ?? '',
-      price: item?.price ? String(item.price) : '',
-      category:
-        item?.categoryId ??
-        cats.find(
-          c => c.name.toLowerCase() === item?.category?.toLowerCase()
-        )?.id ??
-        '',
+      price:
+        item?.price !== undefined && item?.price !== null
+          ? String(item.price)
+          : '',
+      category: selectedCategory,
       prepTime: item?.prepTime ?? '',
-      calories: item?.calories ? String(item.calories) : ''
+      calories:
+        item?.calories !== undefined &&
+          item?.calories !== null
+          ? String(item.calories)
+          : '',
     });
   };
 
@@ -220,8 +297,22 @@ export default function BranchMenuPage() {
       } else {
         setSaveMsg('Creating item…');
         if (glbFile) { setGlbStatus('uploading'); setSaveMsg('Uploading item + 3D model…'); }
-        const raw = await createMenuItemWithFiles(restaurantId, { name: form.name.trim(), description: form.description.trim(), price: parseFloat(form.price), categoryId: form.category, isActive, prepTime: form.prepTime || undefined, calories: form.calories ? parseInt(form.calories) : undefined }, uploadFile, glbFile);
-        setItems(prev => [...prev, normaliseItem(raw)]);
+        const raw = await createMenuItemWithFiles(
+          restaurantId,
+          {
+            name: form.name.trim(),
+            description: form.description.trim(),
+            price: parseFloat(form.price),
+            categoryId: form.category,
+            isActive: true,
+            prepTime: form.prepTime || undefined,
+            calories: form.calories
+              ? parseInt(form.calories)
+              : undefined,
+          },
+          uploadFile,
+          glbFile
+        ); setItems(prev => [...prev, normaliseItem(raw)]);
         if (raw.arModelKey) { setGlbStatus('approved'); setSaveMsg('Item created with 3D model! ✓'); }
         else setSaveMsg('Item created!');
       }
@@ -230,13 +321,27 @@ export default function BranchMenuPage() {
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Remove this item from the menu?')) return;
-    setDeleting(id);
-    try { const latest = await fetchMenuItem(id, restaurantId) as any; await updateMenuItem(id, { name: latest.name, description: latest.description ?? '', categoryId: latest.categoryId, price: (latest.priceMinorUnits ?? 0) / 100, status: 'inactive' }, latest.version ?? 1); setItems(prev => prev.filter(i => i.id !== id)); }
-    catch (err: any) { alert(`Failed: ${err?.message}`); }
-    finally { setDeleting(null); }
+  const handleDelete = async () => {
+    const item = deleteModal.item;
+
+    if (!item?.id) return;
+
+    setDeleting(item.id);
+
+    try {
+      await deleteMenuItem(item.id, restaurantId);
+
+      setItems(prev => prev.filter(i => i.id !== item.id));
+
+      setDeleteModal({ open: false });
+    } catch (err: any) {
+      console.error('DELETE ITEM ERROR:', err);
+      setSaveErr(err?.message ?? 'Unable to delete item');
+    } finally {
+      setDeleting(null);
+    }
   };
+
 
   const handleRecreate = async () => {
     if (!modal.item) return;
@@ -248,8 +353,22 @@ export default function BranchMenuPage() {
       setItems(prev => prev.filter(i => i.id !== modal.item!.id));
       setSaveMsg('Creating fresh item with files…');
       if (glbFile) setGlbStatus('uploading');
-      const raw = await createMenuItemWithFiles(restaurantId, { name: form.name.trim(), description: form.description.trim(), price: parseFloat(form.price), categoryId: form.category, isActive: true, prepTime: form.prepTime || undefined, calories: form.calories ? parseInt(form.calories) : undefined }, uploadFile, glbFile);
-      setItems(prev => [...prev, normaliseItem(raw)]);
+      const raw = await createMenuItemWithFiles(
+        restaurantId,
+        {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          price: parseFloat(form.price),
+          categoryId: form.category,
+          isActive: true,
+          prepTime: form.prepTime || undefined,
+          calories: form.calories
+            ? parseInt(form.calories)
+            : undefined,
+        },
+        uploadFile,
+        glbFile
+      ); setItems(prev => [...prev, normaliseItem(raw)]);
       if (raw.arModelKey) { setGlbStatus('approved'); setSaveMsg('Recreated with 3D model! ✓'); }
       else setSaveMsg('Recreated! ✓');
       setTimeout(() => { setModal({ open: false }); loadItems(); }, 1500);
@@ -272,7 +391,7 @@ export default function BranchMenuPage() {
           {/* Search */}
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.subtle, pointerEvents: 'none' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items…"
+            <input className="searchInput" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items…"
               style={{ height: 36, paddingLeft: 36, paddingRight: 14, borderRadius: 10, width: 200, fontSize: 13, background: C.bg, border: `1.5px solid ${C.border}`, color: C.text, outline: 'none' }}
               onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
               onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border}
@@ -415,7 +534,9 @@ export default function BranchMenuPage() {
                     onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#FFF3E0'; b.style.borderColor = '#FED7AA'; }}>
                     <Edit2 size={12} color={C.dark} />
                   </button>
-                  <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id}
+                  <button
+                    onClick={() => setDeleteModal({ open: true, item })}
+                    disabled={deleting === item.id}
                     style={{ width: 28, height: 28, borderRadius: 8, background: '#FFF0F0', border: '1px solid #FFD0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: deleting === item.id ? 0.4 : 1, transition: 'all 0.2s' }}>
                     {deleting === item.id ? <Loader2 size={12} color={C.subtle} className="animate-spin" /> : <Trash2 size={12} color={C.red} />}
                   </button>
@@ -459,7 +580,7 @@ export default function BranchMenuPage() {
             {/* Item Name */}
             <div style={{ marginBottom: 14 }}>
               <FieldLabel>Item Name *</FieldLabel>
-              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Chicken Karahi" style={inputStyle()}
+              <input className="searchInput" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Chicken Karahi" style={inputStyle()}
                 onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
                 onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
             </div>
@@ -468,17 +589,40 @@ export default function BranchMenuPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <FieldLabel>{!form.category ? <span style={{ color: '#d97706' }}>Category ⚠</span> : 'Category'}</FieldLabel>
-                <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                <select
+                  value={form.category}
+                  onChange={e =>
+                    setForm(p => ({
+                      ...p,
+                      category: e.target.value,
+                    }))
+                  }
                   style={{ ...inputStyle(), appearance: 'none' as any }}
-                  onFocus={e => (e.target as HTMLSelectElement).style.borderColor = C.red}
-                  onBlur={e => (e.target as HTMLSelectElement).style.borderColor = C.border}>
-                  {cats.length === 0 && <option value="">⚠ Loading…</option>}
-                  {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  onFocus={e =>
+                    (e.target as HTMLSelectElement).style.borderColor = C.red
+                  }
+                  onBlur={e =>
+                    (e.target as HTMLSelectElement).style.borderColor = C.border
+                  }
+                >
+                  {cats.length === 0 ? (
+                    <option value="">Loading categories...</option>
+                  ) : (
+                    <>
+                      <option value="">Select category</option>
+
+                      {cats.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
               <div>
                 <FieldLabel>Price (Rs) *</FieldLabel>
-                <input type="number" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0" style={inputStyle()}
+                <input className="searchInput" type="number" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
                   onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
@@ -487,7 +631,7 @@ export default function BranchMenuPage() {
             {/* Description */}
             <div style={{ marginBottom: 14 }}>
               <FieldLabel>Description</FieldLabel>
-              <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Short description…" rows={2}
+              <textarea className="searchInput" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Short description…" rows={2}
                 style={{ ...inputStyle(), height: 'auto', padding: '10px 12px', resize: 'none', fontFamily: 'sans-serif' } as React.CSSProperties}
                 onFocus={e => (e.target as HTMLTextAreaElement).style.borderColor = C.red}
                 onBlur={e => (e.target as HTMLTextAreaElement).style.borderColor = C.border} />
@@ -497,13 +641,13 @@ export default function BranchMenuPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <FieldLabel>Prep Time</FieldLabel>
-                <input value={form.prepTime} onChange={e => setForm(p => ({ ...p, prepTime: e.target.value }))} placeholder="e.g. 25 min" style={inputStyle()}
+                <input className="searchInput" value={form.prepTime} onChange={e => setForm(p => ({ ...p, prepTime: e.target.value }))} placeholder="e.g. 25 min" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
                   onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
               <div>
                 <FieldLabel>Calories</FieldLabel>
-                <input type="number" value={form.calories} onChange={e => setForm(p => ({ ...p, calories: e.target.value }))} placeholder="e.g. 680" style={inputStyle()}
+                <input className="searchInput" type="number" value={form.calories} onChange={e => setForm(p => ({ ...p, calories: e.target.value }))} placeholder="e.g. 680" style={inputStyle()}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.red}
                   onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border} />
               </div>
@@ -513,7 +657,7 @@ export default function BranchMenuPage() {
             <div style={{ marginBottom: 14 }}>
               <FieldLabel extra={modal.item && !(modal.item as any).imageKey ? <span style={{ color: '#d97706', fontSize: 11 }}>— no image yet</span> : modal.item && (modal.item as any).imageKey ? <span style={{ color: '#16a34a', fontSize: 11 }}>✓ uploaded</span> : null}>Item Image</FieldLabel>
               <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 20, borderRadius: 16, border: `2px dashed ${uploadName ? '#FED7AA' : C.border}`, background: uploadName ? '#FFF8F1' : C.bg, cursor: 'pointer', transition: 'all 0.2s' }}>
-                <input type="file" accept="image/*" style={{ display: 'none' }}
+                <input className="searchInput" type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0] ?? null; setUploadFile(f); setUploadName(f?.name ?? null); }} />
                 <CloudUpload size={24} color={uploadName ? C.dark : C.subtle} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: uploadName ? C.dark : C.subtle }}>{uploadName ? `✓ ${uploadName}` : 'Click to upload · PNG, JPG'}</span>
@@ -525,7 +669,7 @@ export default function BranchMenuPage() {
               <FieldLabel extra={modal.item && !(modal.item as any).arModelKey ? <span style={{ color: '#d97706', fontSize: 11 }}>— no model yet</span> : modal.item && (modal.item as any).arModelKey ? <span style={{ color: '#16a34a', fontSize: 11 }}>✓ uploaded</span> : null}>3D AR Model (.glb)</FieldLabel>
               {glbStatus === 'idle' && (
                 <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 20, borderRadius: 16, border: `2px dashed ${glbName ? '#DDD6FE' : C.border}`, background: glbName ? '#FAF5FF' : C.bg, cursor: 'pointer', transition: 'all 0.2s' }}>
-                  <input type="file" accept=".glb,.gltf" style={{ display: 'none' }}
+                  <input className="searchInput" type="file" accept=".glb,.gltf" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0] ?? null; setGlbFile(f); setGlbName(f?.name ?? null); setGlbError(''); }} />
                   <span style={{ fontSize: 24 }}>🫙</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: glbName ? '#7c3aed' : C.subtle }}>{glbName ? `✓ ${glbName}` : 'Click to upload · .glb / .gltf'}</span>
@@ -578,7 +722,18 @@ export default function BranchMenuPage() {
           </div>
         </div>
       )}
-
+      <ConfirmDeleteModal
+        open={deleteModal.open}
+        title="Delete Menu Item"
+        message="Are you sure you want to delete this menu item?"
+        itemName={deleteModal.item?.name}
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteModal({ open: false });
+          }
+        }}
+        onConfirm={handleDelete}
+      />
       <style>{`.animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );

@@ -103,24 +103,59 @@ function GuestContent() {
 
     const fetchMenuData = async () => {
       try {
-
         const [itemsData, categoriesData] = await Promise.all([
           fetchMenuItems(rid),
-          fetchCategories(rid)
+          fetchCategories(rid),
         ]);
 
+        // Only active items should make a category visible
+        const activeItems = itemsData.filter(
+          (item) => item.status !== 'inactive'
+        );
+
+        // Get category IDs/names that actually contain items
+        const usedCategoryIds = new Set(
+          activeItems
+            .map((item) => item.categoryId?.trim())
+            .filter(Boolean)
+        );
+
+        const usedCategoryNames = new Set(
+          activeItems
+            .map((item) => item.categoryName?.trim().toLowerCase())
+            .filter(Boolean)
+        );
+
+        // Only keep categories that have at least one item
+        const visibleCategories = categoriesData.filter((category) => {
+          const categoryId = (
+            category.categoryId ||
+            category.id ||
+            ''
+          ).trim();
+
+          const categoryName = category.name?.trim().toLowerCase();
+
+          return (
+            (categoryId && usedCategoryIds.has(categoryId)) ||
+            (categoryName && usedCategoryNames.has(categoryName))
+          );
+        });
 
         setItems(itemsData);
-        setCategories(categoriesData);
+        setCategories(visibleCategories);
 
-
-        console.log("ITEMS:", itemsData);
-        console.log("CATEGORIES FROM API:", categoriesData);
+        console.log('🍔 ALL ITEMS:', itemsData);
+        console.log('📂 ALL CATEGORIES:', categoriesData);
+        console.log('✅ VISIBLE CATEGORIES:', visibleCategories);
 
       } catch (err) {
-        console.log(err)
+        console.error('❌ Failed to fetch menu data:', err);
+
+        setItems([]);
+        setCategories([]);
       }
-    }
+    };
 
     // ✅ Fetch both in parallel
     Promise.all([fetchRestaurantData(), fetchMenuData()])
@@ -162,7 +197,7 @@ function GuestContent() {
     (i.name.toLowerCase().includes(search.toLowerCase()) ||
       (i.description ?? '').toLowerCase().includes(search.toLowerCase()))
   );
-
+  const guestUrl = `/guest?rid=${qrRid}&tid=${tid}`;
 
   // ✅ Display name: Restaurant Name or Static
   const displayName = restName || STATIC_RESTAURANT_NAME;
@@ -494,7 +529,6 @@ function GuestContent() {
           </div>
 
           {/* Categories */}
-          {/* Categories */}
           <h2
             style={{
               fontFamily: "'Baloo 2', sans-serif",
@@ -530,84 +564,102 @@ function GuestContent() {
                     }}
                   />
                 ))
-              ) : (
-                categories.map((cat) => (
-                  <Link
-                    key={cat.categoryId}
-                    href={`${menuUrl}&cat=${encodeURIComponent(
-                      cat.name.toLowerCase()
-                    )}`}
+              ) : categories.length === 0 ? (
+                <div
+                  style={{
+                    width: '100%',
+                    padding: '20px 0',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p
                     style={{
-                      flexShrink: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 8,
-                      textDecoration: 'none',
+                      margin: 0,
+                      fontSize: 13,
+                      color: D.muted,
                     }}
                   >
-                    <div
+                    No menu categories available
+                  </p>
+                </div>
+              ) : (
+                categories.map((cat) => {
+                  const categoryId = cat.categoryId || cat.id || '';
+
+                  return (
+                    <Link
+                      key={categoryId || cat.name}
+                      href={`${menuUrl}&cat=${encodeURIComponent(
+                        cat.name.toLowerCase()
+                      )}`}
                       style={{
-                        width: 76,
-                        height: 76,
-                        borderRadius: 18,
-                        overflow: 'hidden',
-                        position: 'relative',
-                        border: `2px solid ${BRAND}`,
-                        background: isDark
-                          ? D.card2
-                          : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
+                        flexShrink: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 8,
+                        textDecoration: 'none',
                       }}
                     >
-                      {cat.imageUrl ? (
-                        <img
-                          src={cat.imageUrl}
-                          alt={cat.name}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            display: 'block',
-                          }}
-                          onError={(e) => {
-                            console.error(
-                              '❌ Category image failed:',
-                              cat.imageUrl
-                            );
+                      <div
+                        style={{
+                          width: 76,
+                          height: 76,
+                          borderRadius: 18,
+                          overflow: 'hidden',
+                          position: 'relative',
+                          border: `2px solid ${BRAND}`,
+                          background: isDark
+                            ? D.card2
+                            : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
+                        }}
+                      >
+                        {cat.imageUrl ? (
+                          <img
+                            src={cat.imageUrl}
+                            alt={cat.name}
+                            loading="lazy"
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                            onError={(e) => {
+                              e.currentTarget.src = '/Images/menu/burger.jpg';
+                            }}
+                          />
+                        ) : (
+                          <img
+                            src="/Images/menu/burger.jpg"
+                            alt={cat.name}
+                            loading="lazy"
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                          />
+                        )}
+                      </div>
 
-                            e.currentTarget.src =
-                              '/Images/menu/burger.jpg';
-                          }}
-                        />
-                      ) : (
-                        <img
-                          src="/Images/menu/burger.jpg"
-                          alt={cat.name}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            display: 'block',
-                          }}
-                        />
-                      )}
-                    </div>
-
-                    <span
-                      style={{
-                        fontSize: 14,
-                        color: D.text,
-                        textAlign: 'center',
-                        maxWidth: 76,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {cat.name}
-                    </span>
-                  </Link>
-                ))
+                      <span
+                        style={{
+                          fontSize: 14,
+                          color: D.text,
+                          textAlign: 'center',
+                          maxWidth: 76,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {cat.name}
+                      </span>
+                    </Link>
+                  );
+                })
               )}
             </div>
           </div>

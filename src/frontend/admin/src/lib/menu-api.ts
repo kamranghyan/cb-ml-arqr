@@ -4,7 +4,12 @@
  * Authorization token injected client-side before proxying.
  */
 
-import { MENU_API, AR_API, RESTAURANT_ID, ADMIN_RESTAURANT_ID } from './api-config'
+import {
+  MENU_API,
+  AR_API,
+  RESTAURANT_ID,
+  TENANT_ID,
+} from './api-config'
 import { getValidIdToken } from './cognito'
 
 
@@ -47,40 +52,68 @@ export interface ApiMenuResponse {
 }
 
 // ── Auth-aware fetch — injects token for protected routes ─────────────────────
-async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = await getValidIdToken()
+async function menuFetch<T = any>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = await getValidIdToken();
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(options.body instanceof FormData
+      ? {}
+      : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> ?? {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = token;
   }
 
-  if (token) headers['Authorization'] = token
+  headers['x-tenant-id'] = TENANT_ID;
 
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`API ${res.status}: ${text || res.statusText}`)
+    const text = await res.text().catch(() => '');
+
+    throw new Error(
+      `API ${res.status}: ${text || res.statusText}`
+    );
   }
 
-  return res.json() as Promise<T>
+  return res.json() as Promise<T>;
 }
 
 // ── Fetch all menu items ───────────────────────────────────────────────────────
-export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem[]> {
-  const rid = restaurantId?.trim() || RESTAURANT_ID
-  const data = await menuFetch<ApiMenuResponse | ApiMenuItem[]>(MENU_API.items(rid))
-  let items: any[] = []
-  if (Array.isArray(data)) items = data
-  else if (data && 'items' in data) items = (data as ApiMenuResponse).items
-  return items.map(normaliseItem)
+export async function fetchMenuItems(
+  restaurantId?: string
+): Promise<ApiMenuItem[]> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+  const data = await menuFetch<ApiMenuResponse | ApiMenuItem[]>(
+    MENU_API.items(rid)
+  );
+
+  const items = Array.isArray(data)
+    ? data
+    : data?.items ?? [];
+
+  return items.map(normaliseItem);
 }
 
 // ── Fetch single item + AR model ──────────────────────────────────────────────
-export async function fetchMenuItem(itemId: string, restaurantId?: string): Promise<ApiMenuItem> {
-  const rid = restaurantId?.trim() || RESTAURANT_ID
-  const item = await menuFetch<any>(MENU_API.item(itemId, rid))
+export async function fetchMenuItem(
+  itemId: string,
+  restaurantId?: string
+): Promise<any> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+  const item = await menuFetch(
+    MENU_API.item(itemId, rid)
+  );
 
   try {
     const arData = await menuFetch<any>(AR_API.model(itemId, rid))
@@ -109,97 +142,79 @@ export async function updateMenuItem(
   itemId: string,
   payload: Partial<ApiMenuItem>,
   version?: number,
-): Promise<ApiMenuItem> {
-  const { price, status, ...rest } = payload as any
+  restaurantId?: string,
+): Promise<any> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+  const { price, status, ...rest } = payload as any;
+
   const apiPayload = {
     ...rest,
-    priceMinorUnits: Math.round((price ?? 0) * 100),
-    ...(status != null && { isActive: status === 'active' }),
-    ...(version != null && { version }),
-  }
-  return menuFetch<ApiMenuItem>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), {
-    method: 'PUT',
-    body: JSON.stringify(apiPayload),
-  })
+
+    ...(price != null && {
+      priceMinorUnits: Math.round(Number(price) * 100),
+    }),
+
+    ...(status != null && {
+      isActive: status === 'active',
+    }),
+
+    ...(version != null && {
+      version,
+    }),
+  };
+
+  return menuFetch(
+    MENU_API.item(itemId, rid),
+    {
+      method: 'PUT',
+      body: JSON.stringify(apiPayload),
+    }
+  );
 }
 
 // ── Delete menu item ──────────────────────────────────────────────────────────
-export async function deleteMenuItem(itemId: string): Promise<void> {
-  await menuFetch<void>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), { method: 'DELETE' })
+export async function deleteMenuItem(
+  itemId: string,
+  restaurantId?: string,
+): Promise<void> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+  await menuFetch(
+    MENU_API.item(itemId, rid),
+    {
+      method: 'DELETE',
+    }
+  );
 }
 
 // ── Normalise raw API response ────────────────────────────────────────────────
-export function normaliseItem(raw: any): ApiMenuItem {
-  const id =
-    raw.id ??
-    raw.itemId ??
-    raw.item_id ??
-    raw._id ??
-    `item-${Date.now()}-${Math.random()}`;
-
-  const price = raw.priceMinorUnits != null
-    ? Number(raw.priceMinorUnits) / 100
-    : Number(raw.price ?? raw.unitPrice ?? 0)
-
-  const status: 'active' | 'inactive' | 'draft' =
-    raw.status ?? (raw.isActive === true ? 'active' : raw.isActive === false ? 'inactive' : 'active')
-
-  const rawAllergens = raw.allergens ?? []
-  const allergens = Array.isArray(rawAllergens) && typeof rawAllergens[0] === 'string'
-    ? rawAllergens.map((a: string) => ({
-      name: a.charAt(0) + a.slice(1).toLowerCase(),
-      emoji: a === 'GLUTEN' ? '🌾' : a === 'DAIRY' ? '🥛' : a === 'NUTS' ? '🥜' : a === 'EGG' ? '🥚' : a === 'FISH' ? '🐟' : '⚠️',
-      status: 'present' as const,
-    }))
-    : rawAllergens
-
-  const hasArModel = !!(raw.arModelUrl || raw.arModelKey)
-
-  const CATEGORY_MAP: Record<string, string> = {
-    "c840f14d-fa93-40af-9f16-f4f35fc3f27a": "Fast Food",
-    "567d9886-3c01-4ba9-9946-c3607f80091e": "Starter",
-    "e933848e-0d18-4e3a-b0a8-d70275c2fa54": "Main Course",
-  };
-
-  const categoryId =
-    raw.categoryId ||
-    raw.category?.id ||
-    '';
-
-  const categoryDisplay =
-    CATEGORY_MAP[categoryId] ||
-    raw.categoryName ||
-    (typeof raw.category === "string" && !raw.category.includes("-")
-      ? raw.category
-      : "Other");
-
+export function normaliseItem(item: any): ApiMenuItem {
   return {
-    ...raw,
-    id, price, status, allergens, hasArModel,
-    emoji: raw.emoji ?? '🍽️',
-    tags: raw.tags ?? [],
-    rating: raw.rating ?? 4.5,
-    reviewCount: raw.reviewCount ?? 0,
-    prepTime: raw.prepTime ?? raw.prep_time ?? '20 min',
-    calories: raw.calories ?? 0,
-    protein: raw.protein ?? 0,
-    fat: raw.fat ?? 0,
-    carbs: raw.carbs ?? 0,
-    subtitle: raw.subtitle ?? raw.subTitle ?? '',
-    name: raw.name ?? raw.itemName ?? 'Unnamed Item',
-    description: raw.description ?? raw.desc ?? '',
-    category: categoryDisplay,
+    ...item,
+
+    id: item.id ?? item.itemId,
+
     categoryId:
-      raw.categoryId ??
-      raw.category?.id ??
-      '', categoryName: raw.categoryName ?? categoryDisplay,
-    imageUrl: raw.imageUrl ?? null,
-    arModelUrl: raw.arModelUrl ?? null,
-    arModelKey: raw.arModelKey ?? null,
-    imageKey: raw.imageKey ?? null,
-    version: raw.version ?? 1,
-    
-  }
+      item.categoryId ??
+      item.category?.id ??
+      '',
+
+    categoryName:
+      item.categoryName ??
+      item.category?.name ??
+      '',
+
+    name: item.name ?? '',
+    description: item.description ?? '',
+    price:
+      item.price ??
+      ((item.priceMinorUnits ?? 0) / 100),
+
+    status:
+      item.status ??
+      (item.isActive ? 'active' : 'inactive'),
+  };
 }
 
 export interface ApiCategory { id: string; name: string; slug?: string }

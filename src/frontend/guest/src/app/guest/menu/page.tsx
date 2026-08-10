@@ -11,26 +11,26 @@ import BottomNav from '@/components/guest/BottomNav';
 
 const BRAND = '#ff5723';
 
-const CAT_EMOJI: Record<string, string> = { all:'🍽️', starters:'🥗', mains:'🍽️', desserts:'🍰', beverages:'🥤', drinks:'🥤', coffee:'☕', hot:'☕', iced:'🧊', pizza:'🍕', burgers:'🍔', pasta:'🍝', seafood:'🐟', grill:'🔥', other:'🍽️' };
-function getCatEmoji(cat: string) { const c = cat.toLowerCase(); for (const [k,v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v; return '🍽️'; }
+const CAT_EMOJI: Record<string, string> = { all: '🍽️', starters: '🥗', mains: '🍽️', desserts: '🍰', beverages: '🥤', drinks: '🥤', coffee: '☕', hot: '☕', iced: '🧊', pizza: '🍕', burgers: '🍔', pasta: '🍝', seafood: '🐟', grill: '🔥', other: '🍽️' };
+function getCatEmoji(cat: string) { const c = cat.toLowerCase(); for (const [k, v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v; return '🍽️'; }
 
 function MenuContent() {
   const params = useSearchParams();
   const router = useRouter();
   const { isDark } = useTheme();
 
-  const [items,          setItems]          = useState<ApiMenuItem[]>([]);
-  const [loading,        setLoading]        = useState(true);
+  const [items, setItems] = useState<ApiMenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [search,         setSearch]         = useState('');
-  const [added,          setAdded]          = useState<Record<string, boolean>>({});
-  const [restName,       setRestName]       = useState('Coffee Menu');
+  const [search, setSearch] = useState('');
+  const [added, setAdded] = useState<Record<string, boolean>>({});
+  const [restName, setRestName] = useState('Menu Items');
   const { addItem, itemCount } = useCartStore();
   const cartCount = itemCount();
 
   useEffect(() => {
-    const urlRid    = params.get('rid') || '';
-    const urlTid    = params.get('tid') || '';
+    const urlRid = params.get('rid') || '';
+    const urlTid = params.get('tid') || '';
     const storedRid = sessionStorage.getItem('lm_rid') || '';
     const storedTid = sessionStorage.getItem('lm_tid') || '';
     if (!urlRid && !urlTid && !storedRid && !storedTid) { window.location.href = '/guest'; return; }
@@ -57,13 +57,13 @@ function MenuContent() {
     { id: 'all', name: 'All', emoji: '🍽️' },
     ...Array.from(new Set(items.map(i => i.category).filter(Boolean))).map(cat => {
       const isUuid = /^[0-9a-f]{10,}/i.test(cat);
-      const name   = isUuid ? 'Dishes' : cat.charAt(0).toUpperCase() + cat.slice(1);
+      const name = isUuid ? 'Dishes' : cat.charAt(0).toUpperCase() + cat.slice(1);
       return { id: cat, name, emoji: getCatEmoji(cat) };
     }),
   ];
 
   const filtered = items.filter(item => {
-    const matchCat    = activeCategory === 'all' || item.category === activeCategory;
+    const matchCat = activeCategory === 'all' || item.category === activeCategory;
     const matchSearch = item.name.toLowerCase().includes(search.toLowerCase()) || (item.description ?? '').toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch && item.status !== 'inactive';
   });
@@ -82,6 +82,10 @@ function MenuContent() {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
     text: '#000000', muted: '#9D9D9D', sub: '#C4C4C4', input: '#FFFFFF',
   };
+  
+  const activeCategoryName =
+    categories.find(cat => cat.id === activeCategory)?.name ?? 'All';
+
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans', sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
@@ -94,7 +98,9 @@ function MenuContent() {
           </button>
           <div style={{ textAlign: 'center' }}>
             <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: D.text, margin: 0 }}>{restName}</h1>
-            <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>{filtered.length} drinks available</p>
+            <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>
+              {filtered.length} {activeCategoryName.toLowerCase()} available
+            </p>
           </div>
           <button onClick={() => router.push('/guest/cart')} style={{ width: 40, height: 40, borderRadius: 12, background: BRAND, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
             <ShoppingCart size={17} color="#fff" />
