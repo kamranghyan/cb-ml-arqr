@@ -208,7 +208,7 @@ export async function fetchCategory(
     `/restaurants/${restaurantId}/categories/${categoryId}`,
   )
 }
-
+//
 export async function createCategory(
   payload: {
     name: string;
