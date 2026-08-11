@@ -226,7 +226,7 @@ function GuestContent() {
       tiktok: '/images/social/x.png',
       x: '/images/social/x.png',
     };
-
+//
     const icon = icons[platform];
 
     if (!icon) return null;
