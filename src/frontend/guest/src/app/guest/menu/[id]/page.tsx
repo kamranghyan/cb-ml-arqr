@@ -40,7 +40,7 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [size, setSize] = useState(1); // index — Medium default (see note below)
   const [qty, setQty] = useState(1);
-  const [toppings, setToppings] = useState<string[]>(['Extra cheese']); // matches Figma's shown default
+  const [toppings, setToppings] = useState<string[]>([]);
   const [added, setAdded] = useState(false);
   const { addItem } = useCartStore();
   const { isFavorite, toggleFavorite } = useFavoritesStore();
