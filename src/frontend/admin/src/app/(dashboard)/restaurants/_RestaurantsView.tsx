@@ -17,6 +17,7 @@ import {
   uploadRestaurantBanner,
 } from '@/lib/admin-api';
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 // import { uploadRestaurantLogo } from '@/lib/admin-api';
 
 const C = {
@@ -34,7 +35,12 @@ export default function RestaurantsView() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast>(null);
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiRestaurant }>({ open: false });
-
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    restaurant?: ApiRestaurant;
+  }>({
+    open: false,
+  });
   const showToast = (msg: string, kind: 'ok' | 'err' = 'ok') => {
     setToast({ msg, kind });
     setTimeout(() => setToast(null), 4500);
@@ -61,15 +67,36 @@ export default function RestaurantsView() {
   const atLimit = tenant ? isAtPlanLimit(tenant) : false;
 
   async function onDelete(r: ApiRestaurant) {
-    if (!confirm(
-      `Delete "${r.name}"?\n\nIts menu, tables and QR codes go with it. ` +
-      `This cannot be undone.`
-    )) return;
+    setDeleteModal({
+      open: true,
+      restaurant: r,
+    });
+  }
+
+  async function confirmDelete() {
+    const restaurant = deleteModal.restaurant;
+
+    if (!restaurant?.restaurantId) {
+      showToast('Restaurant ID is missing.', 'err');
+      return;
+    }
+
     try {
-      await deleteRestaurant(r.restaurantId);
+      await deleteRestaurant(restaurant.restaurantId);
+
       showToast('Restaurant deleted');
-      load();
-    } catch (e: any) { showToast(e.message, 'err'); }
+
+      setDeleteModal({
+        open: false,
+      });
+
+      await load();
+    } catch (e: any) {
+      showToast(
+        e?.message ?? 'Could not delete restaurant',
+        'err'
+      );
+    }
   }
 
   return (
@@ -192,7 +219,10 @@ export default function RestaurantsView() {
                   <Edit2 size={14} />
                   Edit details
                 </button>
-                <button onClick={() => onDelete(r)} style={{ ...iconBtn, color: C.red }}>
+                <button
+                  onClick={() => onDelete(r)}
+                  style={{ ...iconBtn, color: C.red }}
+                >
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -220,6 +250,18 @@ export default function RestaurantsView() {
           {toast.msg}
         </div>
       )}
+      <ConfirmDeleteModal
+        open={deleteModal.open}
+        title="Delete Restaurant"
+        message="Its menu, tables and QR codes will also be affected. This action cannot be undone."
+        itemName={deleteModal.restaurant?.name}
+        onCancel={() =>
+          setDeleteModal({
+            open: false,
+          })
+        }
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -266,7 +308,12 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
-
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    restaurant?: ApiRestaurant;
+  }>({
+    open: false,
+  });
   const [logoPreview, setLogoPreview] = useState<string>(
     edit?.logoUrl ?? ''
   );
@@ -325,9 +372,7 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
 
         let updatedPayload: any = { ...payload };
 
-
         if (logoFile) {
-
           const uploadedLogo = await uploadRestaurantLogo(
             logoFile,
             edit.restaurantId
@@ -345,18 +390,46 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
           updatedPayload.bannerKey = uploadedBanner.s3Key;
         }
 
+        console.log('FINAL UPDATE PAYLOAD:', updatedPayload);
 
         await updateRestaurant(
           edit.restaurantId,
           updatedPayload
         );
 
-
         showToast('Restaurant updated');
-
-
       } else {
-        await createRestaurant(payload as any);
+        const created = await createRestaurant(payload as any);
+
+        let logoKey: string | null = null;
+        let bannerKey: string | null = null;
+
+        if (logoFile) {
+          const uploadedLogo = await uploadRestaurantLogo(
+            logoFile,
+            created.restaurantId
+          );
+
+          logoKey = uploadedLogo.s3Key;
+        }
+
+        if (bannerFile) {
+          const uploadedBanner = await uploadRestaurantBanner(
+            bannerFile,
+            
+            created.restaurantId
+          );
+
+          bannerKey = uploadedBanner.s3Key;
+        }
+
+        if (logoKey || bannerKey) {
+          await updateRestaurant(created.restaurantId, {
+            ...(logoKey ? { logoKey } : {}),
+            ...(bannerKey ? { bannerKey } : {}),
+          });
+        }
+
         showToast('Restaurant created');
       }
       onSaved();

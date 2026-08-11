@@ -31,74 +31,109 @@ const ADMIN_NEEDS_TENANT = NextResponse.json(
 )
 
 async function forward(req: NextRequest, path: string[]) {
-  // API Gateway drops a bare token — always forward with the Bearer scheme.
-  let auth = req.headers.get('authorization') ?? ''
-  if (!auth) return NO_TENANT
-  if (!auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
+  let auth = req.headers.get('authorization') ?? '';
+  if (!auth) return NO_TENANT;
+  if (!auth.startsWith('Bearer ')) {
+    auth = `Bearer ${auth}`;
+  }
 
-  const claims = parseJwt(auth.slice(7))
-  const groups = (claims['cognito:groups'] as string[]) ?? []
-  const ownTenant = (claims['custom:tenant_id'] as string) ?? ''
+  const claims = parseJwt(auth.slice(7));
+  const groups = (claims['cognito:groups'] as string[]) ?? [];
+  const ownTenant = (claims['custom:tenant_id'] as string) ?? '';
 
-  // A company owner always works inside their own tenant. A platform admin
-  // has none, so support views state which company they are looking at via
-  // the X-Tenant-Id header — the backend logs and authorises that separately.
-  let tenantId = ownTenant
+  let tenantId = ownTenant;
   if (!tenantId) {
-    if (!groups.includes('menulay_admin')) return NO_TENANT
-    tenantId = req.headers.get('x-tenant-id') ?? ''
-    if (!tenantId) return ADMIN_NEEDS_TENANT
-  }
-
-  const pathString = path.join('/')
-
-  const upstream = pathString.startsWith('upload/')
-    ? `${API_BASE}/${pathString}${req.nextUrl.search}`
-    : `${API_BASE}/menus/${pathString}${req.nextUrl.search}`
-  const ct = req.headers.get('content-type') ?? ''
-
-  const headers: Record<string, string> = {
-    'X-Tenant-Id': tenantId,
-    Authorization: auth,
-  }
-
-  const init: RequestInit = { method: req.method, headers, cache: 'no-store' }
-
-  if (!['GET', 'HEAD'].includes(req.method)) {
-    if (ct.includes('multipart')) {
-      // The multipart boundary lives inside the Content-Type header, so it has
-      // to be forwarded verbatim — dropping it makes the server read the whole
-      // body as one field. Send the bytes untouched.
-      headers['Content-Type'] = ct
-      init.body = await req.arrayBuffer()
-    } else {
-      headers['Content-Type'] = ct || 'application/json'
-      init.body = await req.text()
+    if (!groups.includes('menulay_admin')) {
+      return NO_TENANT;
+    }
+    tenantId = req.headers.get('x-tenant-id') ?? '';
+    if (!tenantId) {
+      return ADMIN_NEEDS_TENANT;
     }
   }
 
-  const res = await fetch(upstream, init)
-  const text = await res.text()
+  // -----------------------------------------
+  // ROUTING — every route in menu_svc (including all four /upload/...
+  // endpoints) lives under /menus/ on the backend. There's no case where
+  // upload paths should be treated differently from any other menu_svc
+  // path — both need the same prefix. (Previously this branched on
+  // `isUpload` and skipped the prefix for upload paths specifically,
+  // which sent those requests to a URL the backend never registered.)
+  // -----------------------------------------
+  const pathString = path.join('/');
+  const upstream = `${API_BASE}/menus/${pathString}${req.nextUrl.search}`;
+  // -----------------------------------------
+
+  const ct = req.headers.get('content-type') ?? '';
+  const headers: Record<string, string> = {
+    'X-Tenant-Id': tenantId,
+    Authorization: auth,
+  };
+
+  console.log('========== MENU PROXY ==========');
+  console.log('UPSTREAM:', upstream);
+  console.log('METHOD:', req.method);
+  console.log('CONTENT TYPE:', ct);
+  console.log('TENANT:', tenantId);
+  console.log('PATH:', pathString);
+  console.log('================================');
+
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+    cache: 'no-store',
+  };
+
+  if (!['GET', 'HEAD'].includes(req.method)) {
+    if (ct.includes('multipart')) {
+      headers['Content-Type'] = ct;
+      init.body = await req.arrayBuffer();
+    } else {
+      headers['Content-Type'] = ct || 'application/json';
+      init.body = await req.text();
+    }
+  }
+
+  const res = await fetch(upstream, init);
+  const text = await res.text();
 
   try {
-    return NextResponse.json(text ? JSON.parse(text) : {}, { status: res.status })
+    return NextResponse.json(
+      text ? JSON.parse(text) : {},
+      { status: res.status }
+    );
   } catch {
-    return new NextResponse(text, { status: res.status })
+    return new NextResponse(text, { status: res.status });
   }
 }
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(req, (await ctx.params).path)
+export async function GET(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
+  return forward(req, (await ctx.params).path);
 }
-export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(req, (await ctx.params).path)
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
+  return forward(req, (await ctx.params).path);
 }
-export async function PUT(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(req, (await ctx.params).path)
+export async function PUT(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
+  return forward(req, (await ctx.params).path);
 }
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(req, (await ctx.params).path)
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
+  return forward(req, (await ctx.params).path);
 }
-export async function DELETE(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(req, (await ctx.params).path)
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
+  return forward(req, (await ctx.params).path);
 }

@@ -433,14 +433,14 @@ function CategoryModal({
 
               <CloudUpload
                 size={24}
-                color={imageFile ? C.dark : C.subtle}
+                color={imageFile ? C.subtle : C.subtle}
               />
 
               <span
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: imageFile ? C.dark : C.subtle,
+                  color: imageFile ? C.subtle : C.subtle,
                 }}
               >
                 {imageFile

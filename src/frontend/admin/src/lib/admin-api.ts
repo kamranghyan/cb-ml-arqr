@@ -148,16 +148,17 @@ async function adminFetch<T = any>(
 // ══════════════════════════════════════════════════════════════════════════════
 // Restaurants
 // ══════════════════════════════════════════════════════════════════════════════
-
 export async function fetchRestaurants(): Promise<ApiRestaurant[]> {
-  const data = await adminFetch<Paginated<ApiRestaurant>>('/restaurants')
-  return data.items ?? []
+  const data = await adminFetch<Paginated<ApiRestaurant>>('/restaurants');
+  return data.items ?? [];
 }
 
 export async function fetchRestaurant(
   restaurantId: string = RESTAURANT_ID,
 ): Promise<ApiRestaurant> {
-  return adminFetch<ApiRestaurant>(`/restaurants/${restaurantId}`)
+  return adminFetch<ApiRestaurant>(
+    `/restaurants/${restaurantId}`
+  );
 }
 
 export async function createRestaurant(
@@ -166,21 +167,31 @@ export async function createRestaurant(
   return adminFetch<ApiRestaurant>('/restaurants', {
     method: 'POST',
     body: JSON.stringify(payload),
-  })
+  });
 }
 
 export async function updateRestaurant(
   restaurantId: string,
-  payload: Partial<Omit<ApiRestaurant, 'restaurantId'>>,
+  payload: Record<string, any>,
 ): Promise<ApiRestaurant> {
-  return adminFetch<ApiRestaurant>(`/restaurants/${restaurantId}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  })
+  return adminFetch<ApiRestaurant>(
+    `/restaurants/${restaurantId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
-export async function deleteRestaurant(restaurantId: string): Promise<void> {
-  await adminFetch<void>(`/restaurants/${restaurantId}`, { method: 'DELETE' })
+export async function deleteRestaurant(
+  restaurantId: string
+): Promise<void> {
+  await adminFetch(
+    `/restaurants/${restaurantId}`,
+    {
+      method: 'DELETE',
+    }
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -401,28 +412,40 @@ export async function uploadRestaurantLogo(
   file: File,
   restaurantId: string = RESTAURANT_ID,
 ): Promise<{ s3Key: string; url: string }> {
-  const token = await getValidIdToken()
-  const form = new FormData()
-  form.append('file', file)
+
+  const token = await getValidIdToken();
+
+  console.log('UPLOAD TOKEN:', token);
+  console.log('TOKEN PARTS:', token?.split('.').length);
+
+  const form = new FormData();
+  form.append('file', file);
 
   const res = await fetch(
     `/api/menu/upload/restaurants/${restaurantId}/logo`,
     {
       method: 'POST',
-      headers: token ? { Authorization: token } : {},
+      headers: token
+        ? {
+          Authorization: `Bearer ${token}`,
+        }
+        : {},
       body: form,
-    },
-  )
+    }
+  );
+
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Logo upload ${res.status}: ${text}`)
+    const text = await res.text().catch(() => '');
+    throw new Error(`Logo upload ${res.status}: ${text}`);
   }
-  return res.json()
+
+  return res.json();
 }
 export async function uploadRestaurantBanner(
   file: File,
   restaurantId: string,
 ): Promise<{ s3Key: string; url: string }> {
+
   const token = await getValidIdToken();
 
   const form = new FormData();
@@ -433,7 +456,7 @@ export async function uploadRestaurantBanner(
     {
       method: 'POST',
       headers: token
-        ? { Authorization: token }
+        ? { Authorization: `Bearer ${token}` }
         : {},
       body: form,
     }
@@ -446,6 +469,7 @@ export async function uploadRestaurantBanner(
 
   return res.json();
 }
+
 /**
  * Upload a category image. Field name must be `file`.
  */

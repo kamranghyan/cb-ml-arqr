@@ -128,11 +128,7 @@ function GuestContent() {
 
         // Only keep categories that have at least one item
         const visibleCategories = categoriesData.filter((category) => {
-          const categoryId = (
-            category.categoryId ||
-            category.id ||
-            ''
-          ).trim();
+          const categoryId = category.categoryId?.trim() || '';
 
           const categoryName = category.name?.trim().toLowerCase();
 
@@ -584,7 +580,7 @@ function GuestContent() {
                 </div>
               ) : (
                 categories.map((cat) => {
-                  const categoryId = cat.categoryId || cat.id || '';
+                  const categoryId = cat.categoryId || '';
 
                   return (
                     <Link
