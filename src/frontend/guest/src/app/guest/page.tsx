@@ -423,7 +423,7 @@ function GuestContent() {
 
         </div>
 
-        {/* ── Padded content ── */}
+        {/* ── Padded content ── //*/}
         <div style={{ padding: '20px 20px 0' }}>
 
           {/* Search */}
