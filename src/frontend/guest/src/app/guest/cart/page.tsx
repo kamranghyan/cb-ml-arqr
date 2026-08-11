@@ -36,7 +36,7 @@ export default function CartPage() {
     setTableId(tid || `table-${tnum || '01'}`);
     setTableNum(tnum);
   }, []);
-//
+  //
 
   const getItemUnitPrice = (item: any) => {
     let unitPrice = item.price;
@@ -77,7 +77,7 @@ export default function CartPage() {
         if (item.options?.toppingsTotal) {
           unitPrice += item.options.toppingsTotal;
         }
-        
+
         return {
           itemId: item.menuItemId,
           name: item.name,
@@ -119,16 +119,44 @@ export default function CartPage() {
   // ── Success screen ──
   if (placed) return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <Image src="/Images/success/tick.png" alt="Success tick" width={130} height={130} />
+      <Image src="/images/success/tick.png" alt="Success tick" width={130} height={130} />
 
-      <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 28, fontWeight: 700, color: D.text, margin: '70px 0 8px', textAlign: 'center', color: "#FF5723" }}>Order Placed <br />
-        Successfully!</h2>
-      <p style={{ fontSize: 14, color: D.muted, textAlign: 'center', margin: '40px 0 5px', color: "#FF5723" }}>Order ID</p>
+      <h2
+        style={{
+          fontFamily: "'Baloo 2', sans-serif",
+          fontSize: 28,
+          fontWeight: 700,
+          color: "#FF5723",
+          margin: '70px 0 8px',
+          textAlign: 'center',
+        }}
+      >
+        Order Placed <br />
+        Successfully!
+      </h2>
+      <p
+        style={{
+          fontSize: 14,
+          color: "#FF5723",
+          textAlign: 'center',
+          margin: '40px 0 5px',
+        }}
+      >
+        Order ID
+      </p>
       {orderId && (
-        <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace',marginBottom:"40px" }}>#{orderId.slice(0, 8).toUpperCase()}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace', marginBottom: "40px" }}>#{orderId.slice(0, 8).toUpperCase()}</span>
       )}
-      <p style={{ fontSize: 14, color: D.muted, textAlign: 'center', margin: '10px 0 5px', color: "#FF5723" }}>Estimated Time</p>
-      <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace',marginBottom:"50px" }}>20-30 mins</span>
+      <p
+        style={{
+          fontSize: 14,
+          color: "#FF5723",
+          textAlign: 'center',
+          margin: '10px 0 5px',
+        }}
+      >
+        Estimated Time
+      </p>      <span style={{ fontSize: 16, fontWeight: 700, color: "#0A0A0A", fontFamily: 'monospace', marginBottom: "50px" }}>20-30 mins</span>
 
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button onClick={() => router.push('/guest/tracking')}
@@ -186,12 +214,37 @@ export default function CartPage() {
               if (item.options?.size) optionsDisplay.push(item.options.size);
               if (item.options?.toppings && item.options.toppings !== '') optionsDisplay.push(item.options.toppings);
               const variantLine = optionsDisplay.join(' · ');
-              
+
               return (
                 <div key={item.id} style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 100, height: 100, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: 16,
+                      background: D.card2,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 40,
+                      overflow: 'hidden',
+                    }}
+                  >
                     {(item as any).imageUrl
-                      ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? (
+                        <Image
+                          src={(item as any).imageUrl}
+                          alt={item.name}
+                          width={100}
+                          height={100}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      )
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -287,15 +340,15 @@ export default function CartPage() {
 
       {/* Proceed to Checkout - MOVED UP so it's above BottomNav */}
       {items.length > 0 && (
-        <div style={{ 
-          position: 'fixed', 
+        <div style={{
+          position: 'fixed',
           bottom: '80px', /* ← Increased from 72px to make room for BottomNav */
-          left: '50%', 
-          transform: 'translateX(-50%)', 
-          width: '100%', 
-          maxWidth: 480, 
-          padding: '0 20px', 
-          boxSizing: 'border-box', 
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100%',
+          maxWidth: 480,
+          padding: '0 20px',
+          boxSizing: 'border-box',
           zIndex: 10 /* ← Lower z-index so BottomNav can be on top if needed */
         }}>
           <button onClick={() => router.push('/guest/checkout')} disabled={placing}
@@ -308,18 +361,18 @@ export default function CartPage() {
       )}
 
       {/* BottomNav - MOVED to bottom with proper positioning */}
-      <div style={{ 
-        position: 'fixed', 
-        bottom: 0, 
-        left: '50%', 
-        transform: 'translateX(-50%)', 
-        width: '100%', 
-        maxWidth: 480, 
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%',
+        maxWidth: 480,
         zIndex: 20 /* ← Higher z-index so it's on top */
       }}>
         <BottomNav />
       </div>
-      
+
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );

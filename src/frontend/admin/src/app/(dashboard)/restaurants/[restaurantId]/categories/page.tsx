@@ -12,6 +12,7 @@ import {
   type ApiCategory,
 } from '@/lib/admin-api';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
+import Image from 'next/image';
 
 const C = {
   red: '#E1251B', bg: '#FFF8F1', white: '#fff', border: '#F0E8E0',
@@ -158,15 +159,16 @@ export default function CategoriesPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
+                        position: 'relative',
                       }}
                     >
                       {c.imageUrl ? (
-                        <img
+                        <Image
                           src={c.imageUrl}
                           alt={c.name}
+                          fill
+                          sizes="44px"
                           style={{
-                            width: '100%',
-                            height: '100%',
                             objectFit: 'cover',
                             borderRadius: 10,
                           }}
@@ -433,14 +435,14 @@ function CategoryModal({
 
               <CloudUpload
                 size={24}
-                color={imageFile ? C.dark : C.subtle}
+                color={imageFile ? C.subtle : C.subtle}
               />
 
               <span
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: imageFile ? C.dark : C.subtle,
+                  color: imageFile ? C.subtle : C.subtle,
                 }}
               >
                 {imageFile
@@ -458,12 +460,12 @@ function CategoryModal({
                   justifyContent: 'center'
                 }}
               >
-                <img
+                <Image
                   src={imagePreview}
                   alt="category"
+                  width={90}
+                  height={90}
                   style={{
-                    width: 90,
-                    height: 90,
                     objectFit: 'cover',
                     borderRadius: 12,
                     border: `1px solid ${C.border}`,

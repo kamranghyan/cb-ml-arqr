@@ -407,19 +407,23 @@ export interface ApiCategory {
   imageUrl?: string | null;
 }
 
+interface ApiCategoriesResponse {
+  items: ApiCategory[];
+}
+
 export async function fetchCategories(
   restaurantId: string
 ): Promise<ApiCategory[]> {
-  const res = await menuFetch(
+  const res = await menuFetch<ApiCategory[] | ApiCategoriesResponse>(
     `/api/menu/restaurants/${restaurantId}/categories`
   );
 
   const categories = Array.isArray(res)
     ? res
-    : res?.items ?? [];
+    : res.items ?? [];
 
   return categories
-    .map((category: any) => ({
+    .map((category: any): ApiCategory => ({
       categoryId:
         category.categoryId ??
         category.id ??
@@ -429,19 +433,30 @@ export async function fetchCategories(
       imageUrl: category.imageUrl ?? null,
     }))
     .filter(
-      (category: ApiCategory) =>
+      (category) =>
         Boolean(category.categoryId) &&
         Boolean(category.name)
     );
 }
 
-export function extractCategoriesFromItems(items: ApiMenuItem[]): ApiCategory[] {
-  const seen = new Map<string, string>()
+export function extractCategoriesFromItems(
+  items: ApiMenuItem[]
+): ApiCategory[] {
+  const seen = new Map<string, string>();
+
   for (const item of items) {
-    const id = (item as any).categoryId ?? item.category
-    const name = item.category ?? id
-    if (id && !seen.has(id)) seen.set(id, name)
+    const id = item.categoryId ?? item.category;
+    const name = item.categoryName ?? item.category ?? id;
+
+    if (id && !seen.has(id)) {
+      seen.set(id, name);
+    }
   }
-  return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
+
+  return Array.from(seen.entries()).map(
+    ([categoryId, name]) => ({
+      categoryId,
+      name,
+    })
+  );
 }
-//

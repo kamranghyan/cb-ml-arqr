@@ -8,6 +8,7 @@ import { useCartStore } from '@/lib/store';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
+import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
@@ -82,7 +83,7 @@ function MenuContent() {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
     text: '#000000', muted: '#9D9D9D', sub: '#C4C4C4', input: '#FFFFFF',
   };
-  
+
   const activeCategoryName =
     categories.find(cat => cat.id === activeCategory)?.name ?? 'All';
 
@@ -148,9 +149,18 @@ function MenuContent() {
               style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px', background: D.card, border: `1.5px solid ${BRAND}`, borderRadius: 20, cursor: 'pointer', transition: 'all 0.15s' }}>
               {/* Image */}
               <div style={{ width: 80, height: 80, borderRadius: 14, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, overflow: 'hidden', position: 'relative' }}>
-                {(item as any).imageUrl
-                  ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : item.emoji}
+                {(item as any).imageUrl ? (
+                  <Image
+                    src={(item as any).imageUrl}
+                    alt={item.name}
+                    fill
+                    sizes="80px"
+                    unoptimized
+                    style={{ objectFit: 'cover' }}
+                  />
+                ) : (
+                  item.emoji
+                )}
                 {(item.tags ?? []).includes('chef') && (
                   <span style={{ position: 'absolute', top: 4, left: 4, background: BRAND, color: '#fff', fontSize: 8, fontWeight: 800, padding: '2px 6px', borderRadius: 8 }}>Popular</span>
                 )}

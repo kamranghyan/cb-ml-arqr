@@ -128,11 +128,7 @@ function GuestContent() {
 
         // Only keep categories that have at least one item
         const visibleCategories = categoriesData.filter((category) => {
-          const categoryId = (
-            category.categoryId ||
-            category.id ||
-            ''
-          ).trim();
+          const categoryId = category.categoryId?.trim() || '';
 
           const categoryName = category.name?.trim().toLowerCase();
 
@@ -261,9 +257,11 @@ function GuestContent() {
           e.currentTarget.style.opacity = '1';
         }}
       >
-        <img
+        <Image
           src={icon}
           alt={platform}
+          width={26}
+          height={26}
           style={{
             width: 26,
             height: 26,
@@ -413,12 +411,27 @@ function GuestContent() {
                 }
               </span></span>
             </div>
+            ```tsx
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
-              <img src="/Images/menu/delivery.png" className='w-[30px] h-[30px]' color="#fff" />
-              <span style={{ fontSize: 12.5, color: '#fff' }}>{
-                restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY
-              }</span>
+              <Image
+                src="/images/menu/delivery.png"
+                alt="Delivery"
+                width={30}
+                height={30}
+                style={{
+                  width: 30,
+                  height: 30,
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
+
+              <span style={{ fontSize: 12.5, color: '#fff' }}>
+                {restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY}
+              </span>
             </div>
+            ```
+
           </div>
 
         </div>
@@ -493,7 +506,17 @@ function GuestContent() {
                     overflow: 'hidden'
                   }}>
                     {(item as any).imageUrl
-                      ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? <Image
+                        src={(item as any).imageUrl}
+                        alt={item.name}
+                        width={44}
+                        height={44}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -584,7 +607,7 @@ function GuestContent() {
                 </div>
               ) : (
                 categories.map((cat) => {
-                  const categoryId = cat.categoryId || cat.id || '';
+                  const categoryId = cat.categoryId || '';
 
                   return (
                     <Link
@@ -615,9 +638,11 @@ function GuestContent() {
                         }}
                       >
                         {cat.imageUrl ? (
-                          <img
+                          <Image
                             src={cat.imageUrl}
                             alt={cat.name}
+                            width={76}
+                            height={76}
                             loading="lazy"
                             style={{
                               width: '100%',
@@ -626,13 +651,15 @@ function GuestContent() {
                               display: 'block',
                             }}
                             onError={(e) => {
-                              e.currentTarget.src = '/Images/menu/burger.jpg';
+                              e.currentTarget.src = '/images/menu/burger.jpg';
                             }}
                           />
                         ) : (
-                          <img
-                            src="/Images/menu/burger.jpg"
+                          <Image
+                            src="/images/menu/burger.jpg"
                             alt={cat.name}
+                            width={76}
+                            height={76}
                             loading="lazy"
                             style={{
                               width: '100%',
@@ -680,15 +707,21 @@ function GuestContent() {
                   style={{ display: 'flex', gap: 16, padding: 16, background: D.card, border: `1.5px solid ${BRAND}`, borderRadius: 20, textDecoration: 'none' }}>
                   <div style={{ width: 100, height: 100, borderRadius: 14, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
                     {(item as any).imageUrl ? (
-                      <img
+                      <Image
                         src={(item as any).imageUrl}
                         alt={item.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        width={100}
+                        height={100}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
                       />
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
                         <Image
-                          src='/Images/menu/pizza.jpg'
+                          src='/images/menu/pizza.jpg'
                           alt={item.name}
                           width={100}
                           height={100}

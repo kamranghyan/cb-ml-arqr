@@ -12,7 +12,7 @@ import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
-const ORDER_TYPES     = ['dine_in', 'pickup', 'delivery'];
+const ORDER_TYPES = ['dine_in', 'pickup', 'delivery'];
 const PAYMENT_METHODS = ['Cash', 'Card', 'Digital Wallet'];
 
 // Display names for order types
@@ -28,14 +28,14 @@ export default function CheckoutPage() {
   const { items, clearCart } = useCartStore();
   const savedProfile = useGuestProfileStore();
 
-  const [orderType,     setOrderType]     = useState('dine_in');
-  const [tableNumber,   setTableNumber]   = useState('');
-  const [fullName,      setFullName]      = useState(savedProfile.fullName);
-  const [phone,         setPhone]         = useState(savedProfile.phone);
-  const [notes,         setNotes]         = useState('');
+  const [orderType, setOrderType] = useState('dine_in');
+  const [tableNumber, setTableNumber] = useState('');
+  const [fullName, setFullName] = useState(savedProfile.fullName);
+  const [phone, setPhone] = useState(savedProfile.phone);
+  const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [contactPhone, setContactPhone]   = useState('');
+  const [contactPhone, setContactPhone] = useState('');
 
   // Card Details
   const [cardNumber, setCardNumber] = useState('');
@@ -46,9 +46,9 @@ export default function CheckoutPage() {
   // Digital Wallet
   const [walletProvider, setWalletProvider] = useState('');
 
-  const [placing,    setPlacing]    = useState(false);
-  const [placed,     setPlaced]     = useState(false);
-  const [orderId,    setOrderId]    = useState('');
+  const [placing, setPlacing] = useState(false);
+  const [placed, setPlaced] = useState(false);
+  const [orderId, setOrderId] = useState('');
   const [orderError, setOrderError] = useState('');
 
   // ── Logging Helper ──────────────────────────────────────────────────────────
@@ -60,22 +60,22 @@ export default function CheckoutPage() {
     console.log('═══════════════════════════════════════════════');
     console.log('📋 CHECKOUT PAGE INITIALIZED');
     console.log('═══════════════════════════════════════════════');
-    
+
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
     console.log('📋 Session exists:', !!hasSession);
-    
-    if (!hasSession) { 
+
+    if (!hasSession) {
       console.log('❌ No session found, redirecting to /guest');
-      window.location.href = '/guest'; 
-      return; 
+      window.location.href = '/guest';
+      return;
     }
-    
-    if (items.length === 0) { 
+
+    if (items.length === 0) {
       console.log('❌ Cart is empty, redirecting to /guest/cart');
-      router.replace('/guest/cart'); 
-      return; 
+      router.replace('/guest/cart');
+      return;
     }
-    
+
     console.log('📋 Cart items:', items.length);
     items.forEach((item, idx) => {
       console.log(`   Item ${idx + 1}:`, {
@@ -85,11 +85,11 @@ export default function CheckoutPage() {
         options: item.options
       });
     });
-    
+
     const tid = sessionStorage.getItem('lm_tid') ?? '';
     const tnum = sessionStorage.getItem('lm_table') ?? '';
     console.log('📋 Session data:', { tid, tnum });
-    
+
     let tableNum = tnum;
     if (!tableNum && tid) {
       const match = tid.match(/table[-_]?(\d+)/i);
@@ -98,20 +98,20 @@ export default function CheckoutPage() {
         console.log('📋 Extracted table number from tid:', tableNum);
       }
     }
-    
+
     if (tableNum) {
       console.log('✅ Setting table number to:', tableNum);
       setTableNumber(tableNum);
     } else {
       console.log('ℹ️ No table number found in session');
     }
-    
+
     // Set contact phone from saved profile
     if (savedProfile.phone) {
       console.log('📋 Setting contact phone from profile:', savedProfile.phone);
       setContactPhone(savedProfile.phone);
     }
-    
+
     console.log('═══════════════════════════════════════════════');
   }, []);
 
@@ -154,7 +154,7 @@ export default function CheckoutPage() {
     console.log('═══════════════════════════════════════════════');
     console.log('🔄 PLACE ORDER STARTED');
     console.log('═══════════════════════════════════════════════');
-    
+
     console.log('📋 Current state:');
     console.log('   - Order Type:', orderType);
     console.log('   - Table Number:', tableNumber);
@@ -164,28 +164,27 @@ export default function CheckoutPage() {
     console.log('   - Notes:', notes);
     console.log('   - Delivery Address:', deliveryAddress);
     console.log('   - Contact Phone:', contactPhone);
-    
+
     if (!items.length) {
       console.log('❌ Cart is empty, cannot place order');
       setOrderError('Cart is empty');
       return;
     }
-    
+
     console.log('📋 Items in cart:', items.length);
     items.forEach((item, idx) => {
       console.log(`   Item ${idx + 1}: ${item.name} x${item.quantity} = Rs.${item.price * item.quantity}`);
     });
-    
-    setPlacing(true); 
+
+    setPlacing(true);
     setOrderError('');
-    
+
     try {
       const scope = getGuestScope();
       console.log('📋 Guest Scope:', {
         restaurantId: scope.restaurantId,
-        tenantId: scope.tenantId
       });
-      
+
       // Get table ID - only for dine-in
       let tableId = '';
       if (orderType === 'dine_in') {
@@ -196,14 +195,14 @@ export default function CheckoutPage() {
       } else {
         console.log('📋 Order type:', orderType, '- No table ID needed');
       }
-      
+
       // Calculate prices with options
       console.log('📋 Calculating prices for items...');
       const lineItems = items.map((item, idx) => {
         let unitPrice = item.price;
         console.log(`   Item ${idx + 1}: ${item.name}`);
         console.log(`      Base price: ${unitPrice}`);
-        
+
         if (item.options?.sizeMultiplier) {
           const oldPrice = unitPrice;
           unitPrice = item.price * item.options.sizeMultiplier;
@@ -214,7 +213,7 @@ export default function CheckoutPage() {
           unitPrice += item.options.toppingsTotal;
           console.log(`      Toppings total: ${item.options.toppingsTotal} → ${oldPrice} → ${unitPrice}`);
         }
-        
+
         const result = {
           itemId: item.menuItemId || item.id,
           name: item.name,
@@ -226,12 +225,12 @@ export default function CheckoutPage() {
         console.log(`      Minor units: ${result.unitPriceMinorUnits} × ${item.quantity} = ${result.totalPriceMinorUnits}`);
         return result;
       });
-      
+
       const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
       console.log('📋 Line items total:');
       console.log(`   Minor units: ${lineItemsTotal}`);
       console.log(`   Rs.: ${lineItemsTotal / 100}`);
-      
+
       // ✅ Build payload matching the schema
       const payload: any = {
         restaurantId: scope.restaurantId,
@@ -241,7 +240,7 @@ export default function CheckoutPage() {
         orderType: orderType,
         tableId: tableId,
       };
-      
+
       console.log('📋 Basic payload:');
       console.log(`   restaurantId: ${payload.restaurantId}`);
       console.log(`   currencyCode: ${payload.currencyCode}`);
@@ -276,12 +275,12 @@ export default function CheckoutPage() {
       // Add payment method info
       payload.paymentMethod = paymentMethod;
       console.log(`   paymentMethod: ${payload.paymentMethod}`);
-      
+
       if (paymentMethod === 'Card' && cardNumber) {
         payload.cardLast4 = cardNumber.slice(-4);
         console.log(`   cardLast4: ${payload.cardLast4}`);
       }
-      
+
       if (paymentMethod === 'Digital Wallet' && walletProvider) {
         payload.walletProvider = walletProvider;
         console.log(`   walletProvider: ${payload.walletProvider}`);
@@ -291,28 +290,28 @@ export default function CheckoutPage() {
       console.log('📦 FINAL ORDER PAYLOAD:');
       console.log(JSON.stringify(payload, null, 2));
       console.log('═══════════════════════════════════════════════');
-      
+
       console.log('📡 Sending request to /api/orders...');
       console.log(`   Headers: x-tenant-id: ${scope.restaurantId}`);
-      
-      const res = await fetch('/api/orders', { 
-        method: 'POST', 
-        headers: { 
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
           'Content-Type': 'application/json',
           'x-tenant-id': scope.restaurantId,
-        }, 
-        body: JSON.stringify(payload) 
+        },
+        body: JSON.stringify(payload)
       });
-      
+
       console.log(`📡 Response status: ${res.status}`);
       console.log(`📡 Response status text: ${res.statusText}`);
       console.log(`📡 Response ok: ${res.ok}`);
-      
+
       const data = await res.json();
       console.log('📦 ORDER RESPONSE:');
       console.log(JSON.stringify(data, null, 2));
       console.log('═══════════════════════════════════════════════');
-      
+
       if (!res.ok) {
         const errorMsg = data?.error || data?.message || `Error ${res.status}`;
         console.log(`❌ Order failed: ${errorMsg}`);
@@ -321,14 +320,14 @@ export default function CheckoutPage() {
         }
         throw new Error(errorMsg);
       }
-      
+
       console.log('✅ Order placed successfully!');
       console.log(`📋 Order ID: ${data.orderId}`);
       console.log(`📋 Status: ${data.status}`);
       if (data.stepFunctionsExecutionArn) {
         console.log(`📋 Execution ARN: ${data.stepFunctionsExecutionArn}`);
       }
-      
+
       if (fullName.trim()) {
         savedProfile.setFullName(fullName.trim());
         console.log('📋 Saved full name to profile');
@@ -337,12 +336,12 @@ export default function CheckoutPage() {
         savedProfile.setPhone(phone.trim());
         console.log('📋 Saved phone to profile');
       }
-      
-      setOrderId(data.orderId ?? ''); 
-      clearCart(); 
+
+      setOrderId(data.orderId ?? '');
+      clearCart();
       setPlaced(true);
       console.log('✅ Cart cleared, redirecting to success screen');
-      
+
     } catch (err: any) {
       console.log('❌ ORDER ERROR:');
       console.log(`   Error: ${err}`);
@@ -427,8 +426,8 @@ export default function CheckoutPage() {
             <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>
               Table Number
             </h2>
-            <div style={{ 
-              position: 'relative', 
+            <div style={{
+              position: 'relative',
               marginBottom: 28,
               display: 'flex',
               alignItems: 'center',
@@ -462,44 +461,44 @@ export default function CheckoutPage() {
             <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>
               Delivery Details
             </h2>
-            <input 
-              value={deliveryAddress} 
-              onChange={e => setDeliveryAddress(e.target.value)} 
-              placeholder="Delivery Address *" 
+            <input
+              value={deliveryAddress}
+              onChange={e => setDeliveryAddress(e.target.value)}
+              placeholder="Delivery Address *"
               className="checkout-input"
-              style={{ 
-                width: '100%', 
-                height: 56, 
-                borderRadius: 14, 
-                border: 'none', 
-                background: BRAND, 
-                color: '#fff', 
-                fontSize: 16, 
-                padding: '0 18px', 
-                marginBottom: 12, 
-                boxSizing: 'border-box', 
-                fontFamily: "'DM Sans',sans-serif" 
-              }} 
+              style={{
+                width: '100%',
+                height: 56,
+                borderRadius: 14,
+                border: 'none',
+                background: BRAND,
+                color: '#fff',
+                fontSize: 16,
+                padding: '0 18px',
+                marginBottom: 12,
+                boxSizing: 'border-box',
+                fontFamily: "'DM Sans',sans-serif"
+              }}
             />
-            <input 
-              value={contactPhone} 
-              onChange={e => setContactPhone(e.target.value)} 
-              placeholder="Contact Phone *" 
-              type="tel" 
+            <input
+              value={contactPhone}
+              onChange={e => setContactPhone(e.target.value)}
+              placeholder="Contact Phone *"
+              type="tel"
               className="checkout-input"
-              style={{ 
-                width: '100%', 
-                height: 56, 
-                borderRadius: 14, 
-                border: 'none', 
-                background: BRAND, 
-                color: '#fff', 
-                fontSize: 16, 
-                padding: '0 18px', 
-                marginBottom: 28, 
-                boxSizing: 'border-box', 
-                fontFamily: "'DM Sans',sans-serif" 
-              }} 
+              style={{
+                width: '100%',
+                height: 56,
+                borderRadius: 14,
+                border: 'none',
+                background: BRAND,
+                color: '#fff',
+                fontSize: 16,
+                padding: '0 18px',
+                marginBottom: 28,
+                boxSizing: 'border-box',
+                fontFamily: "'DM Sans',sans-serif"
+              }}
             />
           </>
         )}

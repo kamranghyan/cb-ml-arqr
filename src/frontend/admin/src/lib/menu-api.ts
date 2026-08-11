@@ -9,6 +9,7 @@ import {
   AR_API,
   RESTAURANT_ID,
   TENANT_ID,
+  ADMIN_RESTAURANT_ID,
 } from './api-config'
 import { getValidIdToken } from './cognito'
 

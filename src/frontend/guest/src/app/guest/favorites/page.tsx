@@ -6,6 +6,7 @@ import { useFavoritesStore } from '@/lib/favorites-store';
 import { useCartStore } from '@/lib/store';
 import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
+import Image from 'next/image';
 
 /**
  * Favorites page — no Figma was provided for this one. Built to match the
@@ -51,7 +52,7 @@ export default function FavoritesPage() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 120px' }}>
         {items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 0', display:"flex", flexDirection:"column",alignItems:"center" }}>
+          <div style={{ textAlign: 'center', padding: '80px 0', display: "flex", flexDirection: "column", alignItems: "center" }}>
             <Heart size={48} color={BRAND} strokeWidth={1.5} style={{ opacity: 0.25 }} />
             <p style={{ color: D.muted, fontSize: 14, marginTop: 16 }}>No favorites yet</p>
             <p style={{ color: D.muted, fontSize: 12, marginTop: 4 }}>Tap the heart on any dish to save it here.</p>
@@ -65,10 +66,32 @@ export default function FavoritesPage() {
             {items.map(item => (
               <div key={item.id} style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                 <div onClick={() => router.push(`/guest/menu/${item.id}`)}
-                  style={{ width: 84, height: 84, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, overflow: 'hidden', cursor: 'pointer' }}>
-                  {item.imageUrl
-                    ? <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : item.emoji}
+                  style={{
+                    width: 84,
+                    height: 84,
+                    borderRadius: 16,
+                    background: D.card2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 34,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}>
+                  {item.imageUrl ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.name}
+                      fill
+                      sizes="84px"
+                      unoptimized
+                      style={{ objectFit: 'cover' }}
+                    />
+                  ) : (
+                    item.emoji
+                  )}
                 </div>
                 <div onClick={() => router.push(`/guest/menu/${item.id}`)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                   <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 600, color: BRAND, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
