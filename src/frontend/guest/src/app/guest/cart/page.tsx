@@ -461,6 +461,7 @@ export default function CartPage() {
 //             </button>
 //           </div>
 //         ) : (
+///
 //           <div style={{ display: 'flex', flexDirection: 'column', gap: 26, marginBottom: 24 }}>
 //             {items.map(item => {
 //               const variantLine = Object.values(item.options).filter(Boolean).join(' · ');

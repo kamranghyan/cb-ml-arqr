@@ -29,15 +29,10 @@ async def parse_body(request: Request) -> dict:
         raw_event = build_gateway_event(body_bytes, ct)
         body = parse_form_text_fields(raw_event, ct)
 
-        # Convert JSON strings into Python objects
-        if isinstance(body.get("address"), str):
-            body["address"] = json.loads(body["address"])
-
-        if isinstance(body.get("cuisineTags"), str):
-            body["cuisineTags"] = json.loads(body["cuisineTags"])
-
-        if isinstance(body.get("socialMedia"), str):
-            body["socialMedia"] = json.loads(body["socialMedia"])
+        parse_json_field(body, "address")
+        parse_json_field(body, "cuisineTags")
+        parse_json_field(body, "socialMedia")
+        parse_json_field(body, "sizes")
 
         # Convert primitive form values
         coerce_bool(body, "isActive")
@@ -59,6 +54,19 @@ def build_gateway_event(body_bytes: bytes, content_type: str) -> dict:
         "isBase64Encoded": True,
         "headers": {"content-type": content_type},
     }
+
+
+def parse_json_field(body: dict, field: str) -> None:
+    if field in body and isinstance(body[field], str):
+        raw = body[field].strip()
+
+        if not raw:
+            return
+
+        try:
+            body[field] = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError(f"{field} must be valid JSON")
 
 
 def coerce_bool(body: dict, field: str) -> None:

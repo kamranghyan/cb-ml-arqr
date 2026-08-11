@@ -221,12 +221,12 @@ function GuestContent() {
     const icons: Record<string, string> = {
       instagram: '/images/social/instagram.png',
       facebook: '/images/social/facebook.png',
-      youtube: '/images/social/X.png',
+      youtube: '/images/social/x.png',
       linkedin: '/images/social/linkedIn.png',
-      tiktok: '/images/social/X.png',
+      tiktok: '/images/social/x.png',
       x: '/images/social/x.png',
     };
-
+//
     const icon = icons[platform];
 
     if (!icon) return null;
@@ -411,7 +411,6 @@ function GuestContent() {
                 }
               </span></span>
             </div>
-            ```tsx
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Image
                 src="/images/menu/delivery.png"
@@ -430,7 +429,6 @@ function GuestContent() {
                 {restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY}
               </span>
             </div>
-            ```
 
           </div>
 
