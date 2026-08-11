@@ -422,7 +422,7 @@ class S3Repository:
         }
 
         # Upload image
-        file_info = form.files.get("file")
+        file_info = form.files.get("image") or form.files.get("file")
         if file_info and file_info["bytes"]:
             try:
                 ext    = validate_image(file_info["bytes"], file_info["content_type"])
@@ -436,7 +436,7 @@ class S3Repository:
             log.info("No image file field found", extra={"fields": list(form.files.keys())})
 
         # Upload AR model
-        ar_info = form.files.get("arFile")
+        ar_info = form.files.get("arModel") or form.files.get("arFile")
         if ar_info and ar_info["bytes"]:
             try:
                 ct = ar_info["content_type"] or "model/gltf-binary"

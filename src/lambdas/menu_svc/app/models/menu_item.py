@@ -25,6 +25,48 @@ from .base import (
     ALLOWED_ALLERGENS,
 )
 
+@dataclass
+class MenuItemSize:
+    name: str
+    priceMinorUnits: int
+
+    ALLOWED_SIZES = {"Small", "Medium", "Large"}
+
+    def validate(self) -> None:
+        errors: dict[str, str] = {}
+
+        if self.name not in self.ALLOWED_SIZES:
+            errors["name"] = (
+                "must be one of: Small, Medium, Large"
+            )
+
+        if self.priceMinorUnits is None:
+            errors["priceMinorUnits"] = "required"
+        else:
+            _validate_positive(
+                errors,
+                "priceMinorUnits",
+                self.priceMinorUnits,
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "priceMinorUnits": self.priceMinorUnits,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MenuItemSize":
+        return cls(
+            name=data.get("name", ""),
+            priceMinorUnits=int(
+                data.get("priceMinorUnits", 0)
+            ),
+        )
+
 
 @dataclass
 class MenuItem(BaseModel):
@@ -45,6 +87,8 @@ class MenuItem(BaseModel):
     allergens: List[str] = field(default_factory=list)
     arModelKey: Optional[str] = None        # S3 key for .glb -- stored in DDB
     arModelUrl: Optional[str] = None        # presigned GET URL for AR -- not stored
+
+    sizes: Optional[List[MenuItemSize]] = None
 
     # -- DynamoDB key helpers -----------------------------------------------
 
@@ -84,6 +128,21 @@ class MenuItem(BaseModel):
         else:
             _validate_positive(errors, "priceMinorUnits", self.priceMinorUnits)
 
+        # Validate optional sizes
+        if self.sizes:
+            seen_sizes: set[str] = set()
+
+            for size in self.sizes:
+                size.validate()
+
+                if size.name in seen_sizes:
+                    errors["sizes"] = (
+                        f"duplicate size: {size.name}"
+                    )
+                    break
+
+                seen_sizes.add(size.name)
+
         if self.version is None or self.version < 1:
             errors["version"] = "must be a positive integer"
 
@@ -117,6 +176,11 @@ class MenuItem(BaseModel):
             "createdAt": self.createdAt,
             "updatedAt": self.updatedAt,
             "allergens": self.allergens,
+            "sizes": (
+                [size.to_dict() for size in self.sizes]
+                if self.sizes is not None
+                else None
+            ),
         }
         if self.imageKey is not None or not exclude_none:
             data["imageKey"] = self.imageKey
@@ -158,6 +222,10 @@ class MenuItem(BaseModel):
             allergens=list(data.get("allergens") or []),
             arModelKey=data.get("arModelKey"),
             arModelUrl=data.get("arModelUrl"),
+            sizes=[
+                MenuItemSize.from_dict(size)
+                for size in (data.get("sizes") or [])
+            ],
         )
 
     @classmethod
