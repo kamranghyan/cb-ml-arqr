@@ -18,6 +18,7 @@ import {
 } from '@/lib/admin-api';
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
+import Image from 'next/image';
 // import { uploadRestaurantLogo } from '@/lib/admin-api';
 
 const C = {
@@ -416,7 +417,7 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
         if (bannerFile) {
           const uploadedBanner = await uploadRestaurantBanner(
             bannerFile,
-            
+
             created.restaurantId
           );
 
@@ -587,9 +588,11 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                   justifyContent: 'center',
                 }}
               >
-                <img
+                <Image
                   src={logoPreview}
                   alt="restaurant logo"
+                  width={90}
+                  height={90}
                   style={{
                     width: 90,
                     height: 90,
@@ -669,9 +672,11 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                   justifyContent: 'center',
                 }}
               >
-                <img
+                <Image
                   src={bannerPreview}
                   alt="restaurant banner"
+                  width={470}
+                  height={120}
                   style={{
                     width: '100%',
                     height: 120,

@@ -8,6 +8,7 @@ import {
   Copy, CheckCheck, QrCode, MapPin,
   ExternalLink, AlertCircle, Loader2,
 } from 'lucide-react';
+import Image from 'next/image';
 
 interface QrRecord {
   id: string; restaurantId: string; tableId: string; tableNumber: string;
@@ -33,35 +34,35 @@ function buildS3Url(s3Key: string) { return `https://lamaison-assets.s3.ap-south
 
 // Build a QR record from a real table stored in DynamoDB.
 function tableToRecord(t: ApiTable): QrRecord {
-  const base   = GUEST_BASE;
-  const s3Key  = buildS3Key(t.restaurantId, t.tableId);
+  const base = GUEST_BASE;
+  const s3Key = buildS3Key(t.restaurantId, t.tableId);
   return {
-    id:           t.tableId,
+    id: t.tableId,
     restaurantId: t.restaurantId,
-    tableId:      t.tableId,
-    tableNumber:  t.tableNumber,
-    zone:         t.zone,
-    outlet:       t.outlet,
-    encodedUrl:   buildQrUrl(base, t.restaurantId, t.tableId),
+    tableId: t.tableId,
+    tableNumber: t.tableNumber,
+    zone: t.zone,
+    outlet: t.outlet,
+    encodedUrl: buildQrUrl(base, t.restaurantId, t.tableId),
     s3Key,
-    s3Url:        buildS3Url(s3Key),
-    createdAt:    t.createdAt ?? new Date().toISOString(),
-    linked:       true,
+    s3Url: buildS3Url(s3Key),
+    createdAt: t.createdAt ?? new Date().toISOString(),
+    linked: true,
   };
 }
 
 export default function BranchQrPage() {
   const restaurantId = String(useParams().restaurantId ?? '');
-  const [records,     setRecords]     = useState<QrRecord[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [loadError,   setLoadError]   = useState('');
-  const [zoneFilter,  setZoneFilter]  = useState('All Zones');
-  const [preview,     setPreview]     = useState<QrRecord | null>(null);
-  const [previewImg,  setPreviewImg]  = useState<string | null>(null);
-  const [genState,    setGenState]    = useState<GenState>('idle');
-  const [genError,    setGenError]    = useState('');
-  const [copiedId,    setCopiedId]    = useState<string | null>(null);
-  const [dlAll,       setDlAll]       = useState(false);
+  const [records, setRecords] = useState<QrRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [zoneFilter, setZoneFilter] = useState('All Zones');
+  const [preview, setPreview] = useState<QrRecord | null>(null);
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const [genState, setGenState] = useState<GenState>('idle');
+  const [genError, setGenError] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [dlAll, setDlAll] = useState(false);
 
   // Load real tables from the backend (created in Settings → Tables).
   const loadTables = useCallback(async () => {
@@ -81,7 +82,7 @@ export default function BranchQrPage() {
 
   const generateQR = useCallback(async (record: QrRecord): Promise<string | null> => {
     try {
-      const res  = await fetch('/api/qr/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restaurantId: record.restaurantId, tableId: record.tableId, tableNumber: record.tableNumber, zone: record.zone, outlet: record.outlet }) });
+      const res = await fetch('/api/qr/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restaurantId: record.restaurantId, tableId: record.tableId, tableNumber: record.tableNumber, zone: record.zone, outlet: record.outlet }) });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
       return data.pngDataUrl ?? null;
@@ -123,15 +124,26 @@ export default function BranchQrPage() {
 
       {/* Hidden print sheet */}
       <div id="print-sheet" ref={printRef} style={{ display: 'none', position: 'fixed', inset: 0, zIndex: 9999, background: '#fff', padding: 32, flexWrap: 'wrap', gap: 24, alignContent: 'flex-start', overflow: 'auto' }}>
-        {records.filter(r => r.qrDataUrl).map(r => (
-          <div key={r.id} style={{ border: '1px solid #E5E7EB', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: 200, breakInside: 'avoid' }}>
-            <img src={r.qrDataUrl} alt={`Table ${r.tableNumber}`} style={{ width: 140, height: 140 }} />
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: 16, fontWeight: 600, color: '#000' }}>Table {r.tableNumber}</p>
-              <p style={{ fontSize: 11, color: '#6B7280' }}>{r.zone}</p>
+        {records
+          .filter((r): r is QrRecord & { qrDataUrl: string } => Boolean(r.qrDataUrl))
+          .map(r => (
+            <div key={r.id} style={{ border: '1px solid #E5E7EB', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: 200, breakInside: 'avoid' }}>
+              <Image
+                src={r.qrDataUrl}
+                alt={`Table ${r.tableNumber}`}
+                width={140}
+                height={140}
+                style={{
+                  width: 140,
+                  height: 140,
+                  objectFit: 'contain',
+                }}
+              />            <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: 16, fontWeight: 600, color: '#000' }}>Table {r.tableNumber}</p>
+                <p style={{ fontSize: 11, color: '#6B7280' }}>{r.zone}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
 
       {/* ── Top bar ───────────────────────────────────────────────────────── */}
@@ -158,10 +170,10 @@ export default function BranchQrPage() {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
           {[
-            { label: 'Total Tables', val: stats.total,     icon: '🪑', color: C.text     },
-            { label: 'Linked',       val: stats.linked,    icon: '🔗', color: C.red      },
-            { label: 'QR Generated', val: stats.generated, icon: '📱', color: '#16a34a'  },
-            { label: 'Zones',        val: stats.zones,     icon: '🏛️', color: '#7c3aed' },
+            { label: 'Total Tables', val: stats.total, icon: '🪑', color: C.text },
+            { label: 'Linked', val: stats.linked, icon: '🔗', color: C.red },
+            { label: 'QR Generated', val: stats.generated, icon: '📱', color: '#16a34a' },
+            { label: 'Zones', val: stats.zones, icon: '🏛️', color: '#7c3aed' },
           ].map(s => (
             <div key={s.label} style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: 16, padding: '16px' }}>
               <span style={{ fontSize: 22, display: 'block', marginBottom: 8 }}>{s.icon}</span>
@@ -204,66 +216,78 @@ export default function BranchQrPage() {
 
         {/* QR Grid */}
         {!loading && records.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-          {filtered.map(record => (
-            <div key={record.id} style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 8px rgba(137,28,28,0.05)', transition: 'all 0.2s' }}
-              onMouseEnter={e => { const d = e.currentTarget as HTMLDivElement; d.style.borderColor = '#FED0CC'; d.style.boxShadow = '0 6px 20px rgba(225,37,27,0.1)'; }}
-              onMouseLeave={e => { const d = e.currentTarget as HTMLDivElement; d.style.borderColor = C.border; d.style.boxShadow = '0 2px 8px rgba(137,28,28,0.05)'; }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+            {filtered.map(record => (
+              <div key={record.id} style={{ background: C.white, border: `1.5px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 8px rgba(137,28,28,0.05)', transition: 'all 0.2s' }}
+                onMouseEnter={e => { const d = e.currentTarget as HTMLDivElement; d.style.borderColor = '#FED0CC'; d.style.boxShadow = '0 6px 20px rgba(225,37,27,0.1)'; }}
+                onMouseLeave={e => { const d = e.currentTarget as HTMLDivElement; d.style.borderColor = C.border; d.style.boxShadow = '0 2px 8px rgba(137,28,28,0.05)'; }}>
 
-              {/* QR preview area */}
-              <div style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
-                onClick={() => openPreview(record)}>
-                {record.qrDataUrl
-                  ? <img src={record.qrDataUrl} alt={`Table ${record.tableNumber}`} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 16 }} />
-                  : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                {/* QR preview area */}
+                <div style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+                  onClick={() => openPreview(record)}>
+                  {record.qrDataUrl
+                    ? <Image
+                      src={record.qrDataUrl}
+                      alt={`Table ${record.tableNumber}`}
+                      width={300}
+                      height={300}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        padding: 16,
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                       <QrCode size={40} color={C.border} />
                       <p style={{ fontSize: 10, color: C.subtle, fontWeight: 600 }}>Click to generate</p>
                     </div>
-                }
-                {/* Hover overlay */}
-                <div style={{ position: 'absolute', inset: 0, background: `${C.red}CC`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: 0, transition: 'opacity 0.2s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = '1'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = '0'}>
-                  <Eye size={20} color="#fff" />
-                  <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>Preview</span>
-                </div>
-              </div>
-
-              <div style={{ padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0, fontFamily: 'Georgia, serif' }}>Table {record.tableNumber}</p>
-                    <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
-                      <MapPin size={10} />{record.zone}
-                    </p>
+                  }
+                  {/* Hover overlay */}
+                  <div style={{ position: 'absolute', inset: 0, background: `${C.red}CC`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: 0, transition: 'opacity 0.2s' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = '1'}
+                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = '0'}>
+                    <Eye size={20} color="#fff" />
+                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>Preview</span>
                   </div>
-                  <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, fontWeight: 700, background: record.linked ? '#F0FFF4' : C.bg, color: record.linked ? '#16a34a' : C.subtle, border: `1px solid ${record.linked ? '#BBF7D0' : C.border}` }}>
-                    {record.linked ? 'Linked' : 'Unlinked'}
-                  </span>
                 </div>
 
-                {/* URL copy row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 10px', marginBottom: 10, cursor: 'pointer' }}
-                  onClick={() => copyUrl(record)}>
-                  <p style={{ fontSize: 10, color: C.muted, fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{record.encodedUrl}</p>
-                  {copiedId === record.id ? <CheckCheck size={11} color="#16a34a" style={{ flexShrink: 0 }} /> : <Copy size={11} color={C.subtle} style={{ flexShrink: 0 }} />}
-                </div>
+                <div style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0, fontFamily: 'Georgia, serif' }}>Table {record.tableNumber}</p>
+                      <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <MapPin size={10} />{record.zone}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, fontWeight: 700, background: record.linked ? '#F0FFF4' : C.bg, color: record.linked ? '#16a34a' : C.subtle, border: `1px solid ${record.linked ? '#BBF7D0' : C.border}` }}>
+                      {record.linked ? 'Linked' : 'Unlinked'}
+                    </span>
+                  </div>
 
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => openPreview(record)}
-                    style={{ flex: 1, height: 32, borderRadius: 10, background: '#FFF0EE', border: '1.5px solid #FED0CC', color: C.red, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
-                    <Eye size={11} /> View
-                  </button>
-                  <button onClick={() => downloadQR(record)}
-                    style={{ flex: 1, height: 32, borderRadius: 10, background: '#FFF3E0', border: '1.5px solid #FED7AA', color: C.dark, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
-                    <Download size={11} /> Save
-                  </button>
+                  {/* URL copy row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 10px', marginBottom: 10, cursor: 'pointer' }}
+                    onClick={() => copyUrl(record)}>
+                    <p style={{ fontSize: 10, color: C.muted, fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{record.encodedUrl}</p>
+                    {copiedId === record.id ? <CheckCheck size={11} color="#16a34a" style={{ flexShrink: 0 }} /> : <Copy size={11} color={C.subtle} style={{ flexShrink: 0 }} />}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => openPreview(record)}
+                      style={{ flex: 1, height: 32, borderRadius: 10, background: '#FFF0EE', border: '1.5px solid #FED0CC', color: C.red, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+                      <Eye size={11} /> View
+                    </button>
+                    <button onClick={() => downloadQR(record)}
+                      style={{ flex: 1, height: 32, borderRadius: 10, background: '#FFF3E0', border: '1.5px solid #FED7AA', color: C.dark, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+                      <Download size={11} /> Save
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -289,7 +313,18 @@ export default function BranchQrPage() {
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
                 <div style={{ width: 220, height: 220, background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {genState === 'generating' && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}><div style={{ width: 32, height: 32, border: `3px solid ${C.red}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /><p style={{ fontSize: 12, color: C.muted }}>Generating QR code…</p></div>}
-                  {genState === 'done' && previewImg && <img src={previewImg} alt={`Table ${preview.tableNumber}`} style={{ width: 200, height: 200, borderRadius: 14 }} />}
+                  {genState === 'done' && previewImg && <Image
+                    src={previewImg}
+                    alt={`Table ${preview.tableNumber}`}
+                    width={200}
+                    height={200}
+                    style={{
+                      width: 200,
+                      height: 200,
+                      borderRadius: 14,
+                      objectFit: 'contain',
+                    }}
+                  />}
                   {genState === 'error' && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '0 16px', textAlign: 'center' }}><AlertCircle size={28} color={C.red} /><p style={{ fontSize: 12, color: C.red }}>{genError}</p></div>}
                 </div>
               </div>
@@ -297,10 +332,10 @@ export default function BranchQrPage() {
               {/* Meta grid */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
                 {[
-                  { label: 'Table ID',      val: preview.tableId },
-                  { label: 'Zone',          val: preview.zone },
+                  { label: 'Table ID', val: preview.tableId },
+                  { label: 'Zone', val: preview.zone },
                   { label: 'Restaurant ID', val: `${preview.restaurantId.slice(0, 8)}…` },
-                  { label: 'Created',       val: new Date(preview.createdAt).toLocaleDateString() },
+                  { label: 'Created', val: new Date(preview.createdAt).toLocaleDateString() },
                 ].map(m => (
                   <div key={m.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px' }}>
                     <p style={{ fontSize: 10, color: C.subtle, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 3px' }}>{m.label}</p>
@@ -325,7 +360,7 @@ export default function BranchQrPage() {
                 </div>
               </div>
 
-     
+
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 10 }}>
@@ -333,7 +368,7 @@ export default function BranchQrPage() {
                   style={{ flex: 1, height: 44, borderRadius: 12, background: previewImg ? C.red : '#ccc', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: previewImg ? 'pointer' : 'not-allowed', boxShadow: previewImg ? '0 4px 12px rgba(225,37,27,0.25)' : 'none' }}>
                   <Download size={15} /> Download PNG
                 </button>
-                <button onClick={() => { if (previewImg) { const w = window.open('', '_print'); w?.document.write(`<img src="${previewImg}" style="width:100%;max-width:400px;"/>`); w?.print(); }}} disabled={!previewImg}
+                <button onClick={() => { if (previewImg) { const w = window.open('', '_print'); w?.document.write(`<img src="${previewImg}" style="width:100%;max-width:400px;"/>`); w?.print(); } }} disabled={!previewImg}
                   style={{ height: 44, padding: '0 16px', borderRadius: 12, background: '#FFF3E0', border: '1.5px solid #FED7AA', color: C.dark, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, cursor: previewImg ? 'pointer' : 'not-allowed', opacity: previewImg ? 1 : 0.5 }}>
                   <Printer size={15} /> Print
                 </button>

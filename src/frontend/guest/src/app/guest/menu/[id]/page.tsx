@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ChevronLeft, Heart, Star, Plus, Minus, Check } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { fetchMenuItem, normaliseItem, type ApiMenuItem } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
 import { useFavoritesStore } from '@/lib/favorites-store';
@@ -19,32 +20,32 @@ const BRAND = '#ff5723';
 // (600 / 800 / 1000 on an Rs.800 item), applied to the real item.price so
 // it's correct for whatever item a guest is actually viewing.
 const SIZES = [
-  { label: 'Small',  mult: 0.75 },
+  { label: 'Small', mult: 0.75 },
   { label: 'Medium', mult: 1.00 },
-  { label: 'Large',  mult: 1.25 },
+  { label: 'Large', mult: 1.25 },
 ];
 const TOPPINGS = [
   { label: 'Extra cheese', price: 100 },
-  { label: 'Mushrooms',    price: 100 },
-  { label: 'Olives',       price: 100 },
-  { label: 'Chicken',      price: 100 },
+  { label: 'Mushrooms', price: 100 },
+  { label: 'Olives', price: 100 },
+  { label: 'Chicken', price: 100 },
 ];
 
 export default function ItemDetailPage() {
-  const router    = useRouter();
-  const { id }    = useParams<{ id: string }>();
-  const { isDark }= useTheme();
+  const router = useRouter();
+  const { id } = useParams<{ id: string }>();
+  const { isDark } = useTheme();
 
-  const [item,     setItem]     = useState<ApiMenuItem | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [size,     setSize]     = useState(1); // index — Medium default (see note below)
-  const [qty,      setQty]      = useState(1);
+  const [item, setItem] = useState<ApiMenuItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [size, setSize] = useState(1); // index — Medium default (see note below)
+  const [qty, setQty] = useState(1);
   const [toppings, setToppings] = useState<string[]>(['Extra cheese']); // matches Figma's shown default
-  const [added,    setAdded]    = useState(false);
+  const [added, setAdded] = useState(false);
   const { addItem } = useCartStore();
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const liked = item ? isFavorite(item.id) : false;
-  
+
 
   // ── Image carousel — structurally real (scroll-snap + dots), but
   // ApiMenuItem only has one imageUrl field today, so it renders as a single
@@ -77,13 +78,13 @@ export default function ItemDetailPage() {
   const toggleTopping = (label: string) =>
     setToppings(p => p.includes(label) ? p.filter(x => x !== label) : [...p, label]);
 
-  const sizePrice     = item ? item.price * SIZES[size].mult : 0;
+  const sizePrice = item ? item.price * SIZES[size].mult : 0;
   const toppingsTotal = toppings.reduce((sum, t) => sum + (TOPPINGS.find(x => x.label === t)?.price ?? 0), 0);
-  const unitPrice      = sizePrice + toppingsTotal;
-  const finalPrice     = Math.round(unitPrice * qty);
+  const unitPrice = sizePrice + toppingsTotal;
+  const finalPrice = Math.round(unitPrice * qty);
 
-  const hasAr  = !!(item as any)?.arModelKey || !!(item as any)?.arModelUrl;
-  const arUrl  = (item as any)?.arModelUrl ?? '';
+  const hasAr = !!(item as any)?.arModelKey || !!(item as any)?.arModelUrl;
+  const arUrl = (item as any)?.arModelUrl ?? '';
   // TEMP DEBUG — remove once the AR-banner issue is confirmed fixed.
   // Tells us exactly which of the three cases we're in:
   //   arModelKey/arModelUrl both null  -> backend has no AR model for this item (not a frontend bug)
@@ -98,7 +99,7 @@ export default function ItemDetailPage() {
       hasAr_computedHere: hasAr,
     });
   }
-  const rid    = getGuestScope().restaurantId;
+  const rid = getGuestScope().restaurantId;
   const arHref = `/guest/ar?rid=${encodeURIComponent(rid)}&iid=${encodeURIComponent(id ?? '')}&name=${encodeURIComponent(item?.name ?? '')}&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
 
   const handleAddToCart = () => {
@@ -152,22 +153,79 @@ export default function ItemDetailPage() {
           <div
             ref={scrollRef}
             onScroll={handleCarouselScroll}
-            style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', borderRadius: 20 }}
+            style={{
+              display: 'flex',
+              overflowX: 'auto',
+              scrollSnapType: 'x mandatory',
+              scrollbarWidth: 'none',
+              borderRadius: 20,
+            }}
           >
-            {images.length > 0 ? images.map((src, i) => (
-              <img key={i} src={src} alt={item?.name}
-                style={{ width: '100%', flexShrink: 0, scrollSnapAlign: 'center', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 20 }} />
-            )) : (
-              <div style={{ width: '100%', flexShrink: 0, aspectRatio: '16 / 9', borderRadius: 20, background: D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>
+            {images.length > 0 ? (
+              images.map((src, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    flexShrink: 0,
+                    aspectRatio: '16 / 9',
+                    borderRadius: 20,
+                    overflow: 'hidden',
+                    scrollSnapAlign: 'center',
+                  }}
+                >
+                  <Image
+                    src={src}
+                    alt={item?.name ?? 'Menu item'}
+                    fill
+                    sizes="(max-width: 480px) 100vw, 480px"
+                    unoptimized
+                    style={{
+                      objectFit: 'cover',
+                      borderRadius: 20,
+                    }}
+                  />
+                </div>
+              ))
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  flexShrink: 0,
+                  aspectRatio: '16 / 9',
+                  borderRadius: 20,
+                  background: D.card2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 72,
+                }}
+              >
                 {item?.emoji ?? '🍽️'}
               </div>
             )}
           </div>
-          {/* Dots only render with real multiple images — see note above */}
+
           {images.length > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: 6,
+                marginTop: 14,
+              }}
+            >
               {images.map((_, i) => (
-                <span key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i === activeImg ? BRAND : '#ffbca7' }} />
+                <span
+                  key={i}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: i === activeImg ? BRAND : '#ffbca7',
+                  }}
+                />
               ))}
             </div>
           )}

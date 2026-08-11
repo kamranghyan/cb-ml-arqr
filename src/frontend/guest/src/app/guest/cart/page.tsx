@@ -217,9 +217,34 @@ export default function CartPage() {
 
               return (
                 <div key={item.id} style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 100, height: 100, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: 16,
+                      background: D.card2,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 40,
+                      overflow: 'hidden',
+                    }}
+                  >
                     {(item as any).imageUrl
-                      ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? (
+                        <Image
+                          src={(item as any).imageUrl}
+                          alt={item.name}
+                          width={100}
+                          height={100}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      )
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>

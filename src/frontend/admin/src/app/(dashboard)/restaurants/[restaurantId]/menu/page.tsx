@@ -20,6 +20,7 @@ import {
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
+import Image from 'next/image';
 
 type ModalState = { open: boolean; item?: ApiMenuItem };
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
@@ -81,6 +82,7 @@ export default function BranchMenuPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [saveErr, setSaveErr] = useState('');
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState<string | null>(null);
@@ -200,6 +202,7 @@ export default function BranchMenuPage() {
     setUploadFile(null);
     setUploadName(null);
     setGlbFile(null);
+    setImagePreview(null);
     setGlbName(null);
     setGlbStatus('idle');
     setGlbError('');
@@ -492,10 +495,37 @@ export default function BranchMenuPage() {
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}>
 
                 {/* Thumb */}
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FFF3E0', border: '1px solid #FED7AA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, overflow: 'hidden', flexShrink: 0 }}>
-                  {(item as any).imageUrl
-                    ? <img src={(item as any).imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />
-                    : item.emoji}
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: '#FFF3E0',
+                    border: '1px solid #FED7AA',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 20,
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    position: 'relative',
+                  }}
+                >
+                  {(item as any).imageUrl ? (
+                    <Image
+                      src={(item as any).imageUrl}
+                      alt={item.name}
+                      fill
+                      sizes="40px"
+                      unoptimized
+                      style={{
+                        objectFit: 'cover',
+                        borderRadius: 10,
+                      }}
+                    />
+                  ) : (
+                    item.emoji
+                  )}
                 </div>
 
                 {/* Name */}
@@ -658,10 +688,44 @@ export default function BranchMenuPage() {
               <FieldLabel extra={modal.item && !(modal.item as any).imageKey ? <span style={{ color: '#d97706', fontSize: 11 }}>— no image yet</span> : modal.item && (modal.item as any).imageKey ? <span style={{ color: '#16a34a', fontSize: 11 }}>✓ uploaded</span> : null}>Item Image</FieldLabel>
               <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 20, borderRadius: 16, border: `2px dashed ${uploadName ? '#FED7AA' : C.border}`, background: uploadName ? '#FFF8F1' : C.bg, cursor: 'pointer', transition: 'all 0.2s' }}>
                 <input className="searchInput" type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => { const f = e.target.files?.[0] ?? null; setUploadFile(f); setUploadName(f?.name ?? null); }} />
+                  onChange={e => {
+                    const f = e.target.files?.[0] ?? null;
+
+                    setUploadFile(f);
+                    setUploadName(f?.name ?? null);
+
+                    if (f) {
+                      const previewUrl = URL.createObjectURL(f);
+                      setImagePreview(previewUrl);
+                    } else {
+                      setImagePreview(null);
+                    }
+                  }} />
                 <CloudUpload size={24} color={uploadName ? C.dark : C.subtle} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: uploadName ? C.dark : C.subtle }}>{uploadName ? `✓ ${uploadName}` : 'Click to upload · PNG, JPG'}</span>
               </label>
+              {imagePreview && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Image
+                    src={imagePreview}
+                    alt="Selected item"
+                    width={90}
+                    height={90}
+                    unoptimized
+                    style={{
+                      objectFit: 'cover',
+                      borderRadius: 12,
+                      border: `1px solid ${C.border}`,
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* GLB upload */}
