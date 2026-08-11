@@ -18,7 +18,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-from app.models.menu_item import MenuItem
+from app.models.menu_item import MenuItem, MenuItemSize
 from app.services.cache_service import CacheService
 from app.services.s3_service import S3Service
 from app.utils.dynamo_helpers import (
@@ -54,6 +54,14 @@ class MenuItemService:
         self._cache = cache or CacheService()
         self._s3 = s3_svc or S3Service()
 
+    def _parse_sizes(self, sizes) -> Optional[list[MenuItemSize]]:
+        if sizes is None:
+            return None
+
+        return [
+            MenuItemSize.from_dict(size)
+            for size in sizes
+        ]
     # ── Private helpers (single-key: itemId) ──────────────────────────────
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
@@ -164,6 +172,7 @@ class MenuItemService:
             imageKey=body.get("imageKey"),
             allergens=list(body.get("allergens") or []),
             arModelKey=body.get("arModelKey"),
+            sizes=self._parse_sizes(body.get("sizes")), 
         )
         menu_item.validate()
 
@@ -250,17 +259,40 @@ class MenuItemService:
         expected_version = int(expected_version)
 
         mutable = {
-    "name",
-    "description",
-    "priceMinorUnits",
-    "isActive",
-    "imageKey",
-    "allergens",
-    "arModelKey",
-    "categoryId",
-    "categoryName",
-}
+            "name",
+            "description",
+            "priceMinorUnits",
+            "isActive",
+            "imageKey",
+            "allergens",
+            "arModelKey",
+            "categoryId",
+            "categoryName",
+            "sizes"
+        }
+
         updates = {k: v for k, v in body.items() if k in mutable}
+
+        if "sizes" in body:
+            parsed_sizes = self._parse_sizes(body["sizes"])
+
+            if parsed_sizes is not None:
+                seen_sizes = set()
+
+                for size in parsed_sizes:
+                    size.validate()
+
+                    if size.name in seen_sizes:
+                        raise ValueError(f"duplicate size: {size.name}")
+
+                    seen_sizes.add(size.name)
+
+            updates["sizes"] = (
+                [size.to_dict() for size in parsed_sizes]
+                if parsed_sizes is not None
+                else None
+            )
+
         updates["updatedAt"] = utc_now()
 
         attrs = self._ddb_update_with_version(item_id, updates, expected_version)
