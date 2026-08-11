@@ -119,7 +119,7 @@ export default function CartPage() {
   // ── Success screen ──
   if (placed) return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <Image src="/Images/success/tick.png" alt="Success tick" width={130} height={130} />
+      <Image src="/images/success/tick.png" alt="Success tick" width={130} height={130} />
 
       <h2
         style={{

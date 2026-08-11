@@ -414,7 +414,7 @@ function GuestContent() {
             ```tsx
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Image
-                src="/Images/menu/delivery.png"
+                src="/images/menu/delivery.png"
                 alt="Delivery"
                 width={30}
                 height={30}
@@ -651,12 +651,12 @@ function GuestContent() {
                               display: 'block',
                             }}
                             onError={(e) => {
-                              e.currentTarget.src = '/Images/menu/burger.jpg';
+                              e.currentTarget.src = '/images/menu/burger.jpg';
                             }}
                           />
                         ) : (
                           <Image
-                            src="/Images/menu/burger.jpg"
+                            src="/images/menu/burger.jpg"
                             alt={cat.name}
                             width={76}
                             height={76}
@@ -721,7 +721,7 @@ function GuestContent() {
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
                         <Image
-                          src='/Images/menu/pizza.jpg'
+                          src='/images/menu/pizza.jpg'
                           alt={item.name}
                           width={100}
                           height={100}

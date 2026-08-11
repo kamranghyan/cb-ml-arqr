@@ -221,7 +221,7 @@ export default function GuestTopBar() {
       >
         {/* Logo + Page Name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Image src="/Images/nav/logo.png" alt="Menulay Logo" width={107.5} height={35} />
+          <Image src="/images/nav/logo.png" alt="Menulay Logo" width={107.5} height={35} />
         </div>
 
         {/* Actions */}
@@ -241,7 +241,7 @@ export default function GuestTopBar() {
               position: 'relative',
             }}
           >
-            <Image src="/Images/nav/Bell.png" alt="Notifications" width={28} height={28} />
+            <Image src="/images/nav/Bell.png" alt="Notifications" width={28} height={28} />
             {unreadCount > 0 && (
               <span
                 style={{
@@ -283,7 +283,7 @@ export default function GuestTopBar() {
             {isMenuOpen ? (
               <X size={28} color={BRAND} />
             ) : (
-              <Image src="/Images/nav/Menu.png" alt="Menu" width={28} height={28} />
+              <Image src="/images/nav/Menu.png" alt="Menu" width={28} height={28} />
             )}
           </button>
         </div>
