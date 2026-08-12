@@ -63,7 +63,7 @@ export default function TablesPage() {
   }
 
   const zones = Array.from(new Set(rows.map(r => r.zone).filter(Boolean)));
-
+//
   return (
     <div style={{
       padding: '24px 20px 40px',
