@@ -1,20 +1,22 @@
-// src/app/login/page.tsx  — the single door into the console.
+// src/app/login/page.tsx — the single door into the console.
+
 // Platform admins and company owners use the same form; the role in their
 // token decides which section they land in.
+
 'use client'
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
-import { AlertCircle, Eye, EyeOff, LogIn, CheckCircle, KeyRound, UserPlus, Mail, Store, ArrowLeft } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, LogIn, CheckCircle, KeyRound, UserPlus, Mail, Store, ArrowLeft, Sun, Moon } from 'lucide-react'
 
 type Step = 'login' | 'new_password' | 'forgot' | 'reset_confirm' | 'register' | 'verify'
 
 const BRAND = '#ff5723'
 
 function useD() {
-  const { isDark } = useTheme()
+  const { isDark, toggleTheme } = useTheme()
   const D = isDark ? {
     bg: '#111111', white: '#1C1C1C', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
@@ -22,7 +24,7 @@ function useD() {
     bg: '#FFFFFF', white: '#fff', border: '#F0EBE6',
     text: '#000000', muted: '#6B6B6B', subtle: '#9CA3AF',
   };
-  return { isDark, D };
+  return { isDark, D, toggleTheme };
 }
 
 function Field({ label, type, value, onChange, placeholder, showToggle, show, onToggle }: {
@@ -69,7 +71,7 @@ function TenantLoginContent() {
   const searchParams = useSearchParams()
   const reason = searchParams.get('reason')
   const { login, handleNewPassword, sendResetCode, resetPassword, register, verifyEmail, loading, error } = useAuth()
-  const { isDark, D } = useD()
+  const { isDark, D, toggleTheme } = useD()
 
   const [step, setStep] = useState<Step>('login')
   const [email, setEmail] = useState('')
@@ -122,18 +124,16 @@ function TenantLoginContent() {
 
   // Step meta — icon sits on the brand-orange header, so white throughout
   const stepMeta: Record<Step, { icon: React.ReactNode; title: string; sub: string }> = {
-    login: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'MenuLay Console', sub: 'Sign in to your workspace' },
-    new_password: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'Set New Password', sub: 'First login — permanent password' },
-    forgot: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'Reset Password', sub: 'Enter email to receive a code' },
-    reset_confirm: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'Enter Reset Code', sub: 'Check your email for the code' },
-    register: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'Register Restaurant', sub: 'Create your account' },
-    verify: { icon: <img src='./Images/white-logo.png' color="#fff" />, title: 'Verify Email', sub: `Code sent to ${email}` },
+    login: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'MenuLay Console', sub: 'Sign in to your workspace' },
+    new_password: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Set New Password', sub: 'First login — permanent password' },
+    forgot: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Reset Password', sub: 'Enter email to receive a code' },
+    reset_confirm: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Enter Reset Code', sub: 'Check your email for the code' },
+    register: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Register Restaurant', sub: 'Create your account' },
+    verify: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Verify Email', sub: `Code sent to ${email}` },
   }
   const meta = stepMeta[step]
 
-  // Theme-aware pastel notice tones — same reasoning as the KDS board: a
-  // light pastel bg + saturated text reads fine on white, goes low-contrast
-  // on dark, so each gets its own dark pairing.
+  // Theme-aware pastel notice tones
   const AMBER = isDark ? { bg: 'rgba(217,119,6,0.15)', border: 'rgba(217,119,6,0.35)', text: '#fbbf24' } : { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' };
   const GREEN = isDark ? { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' } : { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' };
   const DANGER = isDark ? { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' } : { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND };
@@ -145,6 +145,36 @@ function TenantLoginContent() {
 
         {/* Header — brand orange, constant across themes */}
         <div className="login-card-header" style={{ background: BRAND, borderRadius: '20px 20px 0 0', padding: '32px 32px 28px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              border: '1.5px solid rgba(255,255,255,0.25)',
+              background: 'rgba(255,255,255,0.12)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 5,
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.25)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
+            }}
+          >
+            {isDark ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', bottom: -30, left: -30, width: 110, height: 110, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
           <div style={{ width: 72, height: 72, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', position: 'relative', zIndex: 1 }}>
@@ -155,7 +185,7 @@ function TenantLoginContent() {
         </div>
 
         {/* Form card */}
-        <div className="login-card-form" style={{ background: D.white, border: `1.5px solid ${D.border}`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '28px 32px 32px', boxShadow: '0 8px 32px rgba(255,87,35,0.1)' }}>
+        <div className="login-card-form" style={{ background: D.white, border: `1.5px solid ${D.border}`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '28px 32px 32px', boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(255,87,35,0.1)', transition: 'all 0.25s' }}>
 
           {/* Notices */}
           {reason === 'expired' && (
@@ -185,15 +215,15 @@ function TenantLoginContent() {
               <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="owner@daspardes.com" />
               <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" showToggle show={showPass} onToggle={() => setShowPass(!showPass)} />
               <PrimaryBtn loading={loading}><LogIn size={18} /> Sign In</PrimaryBtn>
-              <div className="login-links-row" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <div className="login-links-row" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
                 <button type="button" onClick={() => { setStep('forgot'); setMessage(''); setLocalError(''); }}
-                  style={{ fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                  style={{ fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, transition: 'color 0.2s' }}
                   onMouseEnter={e => (e.target as HTMLButtonElement).style.color = BRAND}
                   onMouseLeave={e => (e.target as HTMLButtonElement).style.color = D.muted}>
                   Forgot password?
                 </button>
                 <button type="button" onClick={() => { setStep('register'); setMessage(''); setLocalError(''); }}
-                  style={{ fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                  style={{ fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, transition: 'color 0.2s' }}
                   onMouseEnter={e => (e.target as HTMLButtonElement).style.color = BRAND}
                   onMouseLeave={e => (e.target as HTMLButtonElement).style.color = D.muted}>
                   Register restaurant
@@ -222,7 +252,9 @@ function TenantLoginContent() {
               <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="owner@daspardes.com" />
               <PrimaryBtn loading={loading}><Mail size={18} /> Send Reset Code</PrimaryBtn>
               <button type="button" onClick={() => setStep('login')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, marginTop: 4 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, marginTop: 4, transition: 'color 0.2s' }}
+                onMouseEnter={e => (e.target as HTMLButtonElement).style.color = BRAND}
+                onMouseLeave={e => (e.target as HTMLButtonElement).style.color = D.muted}>
                 <ArrowLeft size={14} /> Back to sign in
               </button>
             </form>
@@ -235,7 +267,7 @@ function TenantLoginContent() {
                 <label style={{ display: 'block', fontSize: 11, color: D.subtle, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Reset Code</label>
                 <input type="text" required value={code} onChange={e => setCode(e.target.value)} placeholder="123456"
                   className="login-code-input"
-                  style={{ width: '100%', height: 46, borderRadius: 12, padding: '0 14px', background: D.bg, border: `1.5px solid ${D.border}`, fontSize: 18, fontWeight: 700, color: D.text, outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', letterSpacing: 4, textAlign: 'center' }}
+                  style={{ width: '100%', height: 46, borderRadius: 12, padding: '0 14px', background: D.bg, border: `1.5px solid ${D.border}`, fontSize: 18, fontWeight: 700, color: D.text, outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', letterSpacing: 4, textAlign: 'center', transition: 'border-color 0.2s' }}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = BRAND}
                   onBlur={e => (e.target as HTMLInputElement).style.borderColor = D.border}
                 />
@@ -259,7 +291,9 @@ function TenantLoginContent() {
               </div>
               <PrimaryBtn loading={loading}><UserPlus size={18} /> Create Account</PrimaryBtn>
               <button type="button" onClick={() => setStep('login')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, marginTop: 4 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: D.muted, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, marginTop: 4, transition: 'color 0.2s' }}
+                onMouseEnter={e => (e.target as HTMLButtonElement).style.color = BRAND}
+                onMouseLeave={e => (e.target as HTMLButtonElement).style.color = D.muted}>
                 <ArrowLeft size={14} /> Already have an account?
               </button>
             </form>
@@ -276,7 +310,7 @@ function TenantLoginContent() {
                 <label style={{ display: 'block', fontSize: 11, color: D.subtle, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Verification Code</label>
                 <input type="text" required value={code} onChange={e => setCode(e.target.value)} placeholder="123456"
                   className="login-code-input login-code-input-lg"
-                  style={{ width: '100%', height: 52, borderRadius: 12, padding: '0 14px', background: D.bg, border: `1.5px solid ${D.border}`, fontSize: 24, fontWeight: 700, color: D.text, outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', letterSpacing: 6, textAlign: 'center' }}
+                  style={{ width: '100%', height: 52, borderRadius: 12, padding: '0 14px', background: D.bg, border: `1.5px solid ${D.border}`, fontSize: 24, fontWeight: 700, color: D.text, outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', letterSpacing: 6, textAlign: 'center', transition: 'border-color 0.2s' }}
                   onFocus={e => (e.target as HTMLInputElement).style.borderColor = BRAND}
                   onBlur={e => (e.target as HTMLInputElement).style.borderColor = D.border}
                 />
@@ -286,7 +320,7 @@ function TenantLoginContent() {
           )}
 
           <p style={{ textAlign: 'center', fontSize: 11, color: D.subtle, margin: '20px 0 0' }}>
-            © {new Date().getFullYear()} Das Pardes · Admin access only
+            © {new Date().getFullYear()} · Admin access only
           </p>
         </div>
       </div>
