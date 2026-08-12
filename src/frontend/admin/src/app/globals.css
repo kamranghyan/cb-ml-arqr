@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=Baloo+2:wght@500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -35,6 +35,29 @@
   }
   input:focus, textarea:focus, select:focus { border-color: rgba(212,163,78,0.4); }
   input::placeholder, textarea::placeholder  { color: rgba(255,255,255,0.2); }
+}
+/* app/globals.css */
+:root {
+  /* Light theme (default) */
+  --color-bg: #FFFFFF;
+  --color-card: #ffffff;
+  --color-card2: #F9FAFB;
+  --color-border: #F0EBE6;
+  --color-text: #000000;
+  --color-muted: #6B6B6B;
+  --color-subtle: #9CA3AF;
+  --color-brand: #ff5723;
+}
+
+[data-theme="dark"] {
+  --color-bg: #111111;
+  --color-card: #1C1C1C;
+  --color-card2: #242424;
+  --color-border: rgba(255,255,255,0.08);
+  --color-text: #F5F0E8;
+  --color-muted: #9CA3AF;
+  --color-subtle: #6B7280;
+  --color-brand: #ff5723;
 }
 
 @layer components {

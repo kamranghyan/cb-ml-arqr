@@ -61,7 +61,9 @@ async function forward(req: NextRequest, path: string[]) {
   // which sent those requests to a URL the backend never registered.)
   // -----------------------------------------
   const pathString = path.join('/');
-  const upstream = `${API_BASE}/menus/${pathString}${req.nextUrl.search}`;
+
+  const upstream =
+    `${API_BASE}/menus/${pathString}${req.nextUrl.search}`;
   // -----------------------------------------
 
   const ct = req.headers.get('content-type') ?? '';

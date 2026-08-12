@@ -91,9 +91,14 @@ function GuestContent() {
         if (restaurant) {
           setRestaurantData(restaurant);
 
-          // ✅ Restaurant hero image comes from bannerUrl
+          // ✅ Use restaurant name from API
+          if (restaurant.name?.trim()) {
+            setRestName(restaurant.name.trim());
+          }
+
+          // ✅ Use restaurant banner from API
           if (restaurant.bannerUrl?.trim()) {
-            setRestaurantImage(restaurant.bannerUrl);
+            setRestaurantImage(restaurant.bannerUrl.trim());
           }
         }
       } catch (err) {
@@ -226,7 +231,7 @@ function GuestContent() {
       tiktok: '/images/social/x.png',
       x: '/images/social/x.png',
     };
-//
+    //
     const icon = icons[platform];
 
     if (!icon) return null;

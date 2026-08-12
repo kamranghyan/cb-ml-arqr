@@ -48,6 +48,7 @@ export interface CartItem {
   menuItemId: string;
   name: string;
   emoji: string;
+  imageUrl?: string;
   price: number;
   quantity: number;
   options: {

@@ -52,20 +52,55 @@ function MenuContent() {
   }, [params]);
 
   const catRaw = params.get('cat') || 'all';
-  useEffect(() => { setActiveCategory(catRaw); }, [catRaw]);
+
+  useEffect(() => {
+    setActiveCategory(catRaw);
+  }, [catRaw]);
 
   const categories = [
     { id: 'all', name: 'All', emoji: '🍽️' },
-    ...Array.from(new Set(items.map(i => i.category).filter(Boolean))).map(cat => {
-      const isUuid = /^[0-9a-f]{10,}/i.test(cat);
-      const name = isUuid ? 'Dishes' : cat.charAt(0).toUpperCase() + cat.slice(1);
-      return { id: cat, name, emoji: getCatEmoji(cat) };
-    }),
+
+    ...Array.from(
+      new Map(
+        items
+          .filter(item => item.status !== 'inactive')
+          .map(item => {
+            const categoryId = item.categoryId ?? '';
+            const categoryName =
+              item.categoryName?.trim() ||
+              item.category?.trim() ||
+              'Other';
+
+            return [
+              categoryName.toLowerCase(),
+              {
+                id: categoryName.toLowerCase(),
+                name:
+                  categoryName.charAt(0).toUpperCase() +
+                  categoryName.slice(1),
+                emoji: getCatEmoji(categoryName),
+                categoryId,
+              },
+            ];
+          })
+      ).values()
+    ),
   ];
 
   const filtered = items.filter(item => {
-    const matchCat = activeCategory === 'all' || item.category === activeCategory;
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase()) || (item.description ?? '').toLowerCase().includes(search.toLowerCase());
+    const categoryName =
+      item.categoryName?.trim().toLowerCase() ||
+      item.category?.trim().toLowerCase() ||
+      '';
+
+    const matchCat =
+      activeCategory === 'all' ||
+      categoryName === activeCategory.toLowerCase();
+
+    const matchSearch =
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      (item.description ?? '').toLowerCase().includes(search.toLowerCase());
+
     return matchCat && matchSearch && item.status !== 'inactive';
   });
 
@@ -119,8 +154,37 @@ function MenuContent() {
         {/* Category tabs */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 14 }}>
           {categories.map(cat => (
-            <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
-              style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 20, border: `1.5px solid ${activeCategory === cat.id ? BRAND : D.border}`, background: activeCategory === cat.id ? BRAND : D.card, color: activeCategory === cat.id ? '#fff' : D.muted, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>
+            <button
+              key={cat.id}
+              onClick={() => {
+                setActiveCategory(cat.id);
+
+                const url = new URL(window.location.href);
+
+                if (cat.id === 'all') {
+                  url.searchParams.delete('cat');
+                } else {
+                  url.searchParams.set('cat', cat.id);
+                }
+
+                router.replace(url.pathname + url.search);
+              }}
+              style={{
+                flexShrink: 0,
+                padding: '8px 16px',
+                borderRadius: 20,
+                border: `1.5px solid ${activeCategory === cat.id ? BRAND : D.border
+                  }`,
+                background:
+                  activeCategory === cat.id ? BRAND : D.card,
+                color:
+                  activeCategory === cat.id ? '#fff' : D.muted,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
               {cat.name}
             </button>
           ))}

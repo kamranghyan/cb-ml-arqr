@@ -43,6 +43,7 @@ export default function CartPage() {
     if (item.options?.sizeMultiplier) {
       unitPrice = item.price * item.options.sizeMultiplier;
     }
+
     if (item.options?.toppingsTotal) {
       unitPrice += item.options.toppingsTotal;
     }
@@ -231,21 +232,22 @@ export default function CartPage() {
                       overflow: 'hidden',
                     }}
                   >
-                    {(item as any).imageUrl
-                      ? (
-                        <Image
-                          src={(item as any).imageUrl}
-                          alt={item.name}
-                          width={100}
-                          height={100}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                        />
-                      )
-                      : item.emoji}
+                    {item.imageUrl ? (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        width={100}
+                        height={100}
+                        unoptimized
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    ) : (
+                      item.emoji
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>

@@ -10,54 +10,102 @@ import ScopePicker, { EMPTY_SCOPE, type Scope } from '@/components/ScopePicker';
 import {
   fetchOrdersForRestaurant, derivedStatus, money, type SupportOrder,
 } from '@/lib/support-api';
+import { useTheme } from '@/hooks/useTheme';
 
-const C = {
-  red: '#E1251B', dark: '#891C1C', bg: '#FFF8F1', white: '#fff',
-  border: '#F0E8E0', text: '#1A1A1A', muted: '#687780',
-  subtle: '#9CA3AF', green: '#0F9D58',
+// ── Color Schema (Matches other pages) ──────────────────────────────────
+const BRAND = '#ff5723';
+const D = {
+  bg: '#111111',
+  card: '#1C1C1C',
+  card2: '#242424',
+  border: 'rgba(255,255,255,0.08)',
+  text: '#F5F0E8',
+  muted: '#9CA3AF',
+  subtle: '#6B7280',
+};
+const TONE = {
+  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
+  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
+  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
 };
 
 const PLANS: PlanTier[] = ['starter', 'professional', 'enterprise'];
 
 export default function AdminAnalytics() {
+  const { isDark } = useTheme();
   // ── Platform-wide (no scope needed) ────────────────────────────────
   const [tenants, setTenants] = useState<ApiTenant[]>([]);
-  const [loadingT, setLoadT]  = useState(true);
-  const [errorT, setErrorT]   = useState('');
+  const [loadingT, setLoadT] = useState(true);
+  const [errorT, setErrorT] = useState('');
 
   // ── One branch (needs a scope) ─────────────────────────────────────
-  const [scope, setScope]   = useState<Scope>(EMPTY_SCOPE);
+  const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [orders, setOrders] = useState<SupportOrder[]>([]);
   const [loadingO, setLoadO] = useState(false);
 
+  // Theme-aware colors
+  const colors = isDark ? D : {
+    bg: '#FFFFFF',
+    card: '#ffffff',
+    card2: '#F9FAFB',
+    border: '#F0EBE6',
+    text: '#000000',
+    muted: '#6B6B6B',
+    subtle: '#9CA3AF',
+  };
+  const accent = isDark ? TONE : {
+    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
+    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
+    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
+  };
+
   const loadTenants = useCallback(async () => {
-    setLoadT(true); setErrorT('');
-    try { setTenants(await fetchTenants()); }
-    catch (e: any) { setErrorT(e?.message ?? 'Could not load platform data'); }
-    finally { setLoadT(false); }
+    setLoadT(true);
+    setErrorT('');
+    try {
+      setTenants(await fetchTenants());
+    } catch (e: any) {
+      setErrorT(e?.message ?? 'Could not load platform data');
+    } finally {
+      setLoadT(false);
+    }
   }, []);
 
-  useEffect(() => { loadTenants(); }, [loadTenants]);
+  useEffect(() => {
+    loadTenants();
+  }, [loadTenants]);
 
   useEffect(() => {
-    if (!scope.tenantId || !scope.restaurantId) { setOrders([]); return; }
+    if (!scope.tenantId || !scope.restaurantId) {
+      setOrders([]);
+      return;
+    }
     let cancelled = false;
     setLoadO(true);
     fetchOrdersForRestaurant(scope.tenantId, scope.restaurantId, 24)
-      .then(o => { if (!cancelled) setOrders(o); })
-      .catch(() => { if (!cancelled) setOrders([]); })
-      .finally(() => { if (!cancelled) setLoadO(false); });
-    return () => { cancelled = true; };
+      .then(o => {
+        if (!cancelled) setOrders(o);
+      })
+      .catch(() => {
+        if (!cancelled) setOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadO(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [scope.tenantId, scope.restaurantId]);
 
-  const active      = tenants.filter(t => t.isActive);
+  const active = tenants.filter(t => t.isActive);
   const restaurants = tenants.reduce((s, t) => s + (t.restaurantCount ?? 0), 0);
-  const atLimit     = tenants.filter(
-    t => t.maxRestaurants !== -1 && t.restaurantCount >= t.maxRestaurants);
+  const atLimit = tenants.filter(
+    t => t.maxRestaurants !== -1 && t.restaurantCount >= t.maxRestaurants
+  );
 
   const completed = orders.filter(o => derivedStatus(o) !== 'cancelled');
-  const revenue   = completed.reduce((s, o) => s + (o.totalAmountMinorUnits ?? 0), 0);
-  const avgOrder  = completed.length ? Math.round(revenue / completed.length) : 0;
+  const revenue = completed.reduce((s, o) => s + (o.totalAmountMinorUnits ?? 0), 0);
+  const avgOrder = completed.length ? Math.round(revenue / completed.length) : 0;
 
   // Most-ordered items in the last 24h at the picked branch.
   const itemCounts = new Map<string, number>();
@@ -69,131 +117,332 @@ export default function AdminAnalytics() {
     .slice(0, 5);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1150, margin: '0 auto' }}>
+    <div style={{
+      background: colors.bg,
+      padding: '16px 20px 40px',
+      maxWidth: 1150,
+      margin: '0 auto',
+      minHeight: '100vh',
+    }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: '0 0 4px' }}>
-            Analytics
-          </h1>
-          <p style={{ color: C.muted, fontSize: 14, margin: 0 }}>
-            How the platform is doing, and how any one branch is trading.
-          </p>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        marginBottom: 20,
+      }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div>
+            <h1 style={{
+              fontSize: 'clamp(20px, 3vw, 26px)',
+              fontWeight: 800,
+              color: colors.text,
+              margin: '0 0 2px',
+            }}>
+              Analytics
+            </h1>
+            <p style={{
+              color: colors.muted,
+              fontSize: 13,
+              margin: 0,
+            }}>
+              How the platform is doing, and how any one branch is trading.
+            </p>
+          </div>
+          <button
+            onClick={loadTenants}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
+              background: colors.card2,
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: 'pointer',
+              color: colors.text,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <RefreshCw size={14} className={loadingT ? 'animate-spin' : ''} />
+            Refresh
+          </button>
         </div>
-        <button onClick={loadTenants} style={ghost}><RefreshCw size={14} /> Refresh</button>
       </div>
 
       {/* ── Platform ─────────────────────────────────────────────── */}
-      <h2 style={sectionTitle}>Platform</h2>
+      <h2 style={{
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: colors.subtle,
+        margin: '0 0 12px',
+      }}>
+        Platform
+      </h2>
 
       {loadingT && (
-        <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>
-          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 20px',
+          color: colors.muted,
+        }}>
+          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+          <p style={{ marginTop: 12, fontSize: 14 }}>Loading platform data…</p>
         </div>
       )}
 
       {!loadingT && errorT && (
-        <div style={{ padding: 30, textAlign: 'center', color: C.red }}>
-          <AlertCircle size={18} /> {errorT}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          padding: '30px 20px',
+          color: accent.danger.text,
+        }}>
+          <AlertCircle size={18} />
+          <span>{errorT}</span>
         </div>
       )}
 
       {!loadingT && !errorT && (
         <>
+          {/* Platform Stats */}
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
-            gap: 14, marginBottom: 18,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 14,
+            marginBottom: 18,
           }}>
-            <Stat icon={<Building2 size={17} />}  label="Companies"   value={String(tenants.length)} />
-            <Stat icon={<TrendingUp size={17} />} label="Active"      value={String(active.length)} accent={C.green} />
-            <Stat icon={<Pause size={17} />}      label="Suspended"   value={String(tenants.length - active.length)}
-                  accent={tenants.length - active.length ? C.red : undefined} />
-            <Stat icon={<Store size={17} />}      label="Restaurants" value={String(restaurants)} />
+            <Stat
+              icon={<Building2 size={17} />}
+              label="Companies"
+              value={String(tenants.length)}
+              colors={colors}
+            />
+            <Stat
+              icon={<TrendingUp size={17} />}
+              label="Active"
+              value={String(active.length)}
+              accent={accent.green.text}
+              colors={colors}
+            />
+            <Stat
+              icon={<Pause size={17} />}
+              label="Suspended"
+              value={String(tenants.length - active.length)}
+              accent={tenants.length - active.length ? accent.danger.text : undefined}
+              colors={colors}
+            />
+            <Stat
+              icon={<Store size={17} />}
+              label="Restaurants"
+              value={String(restaurants)}
+              colors={colors}
+            />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 16, marginBottom: 28 }}>
-            <Card title="Plan mix">
-              {tenants.length === 0 ? <Muted text="No companies yet." /> : PLANS.map(p => {
-                const n = tenants.filter(t => t.planTier === p).length;
-                const pct = tenants.length ? Math.round((n / tenants.length) * 100) : 0;
-                return (
-                  <div key={p} style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>{p}</span>
-                      <span style={{ fontSize: 13, color: C.muted }}>{n} · {pct}%</span>
+          {/* Platform Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+            marginBottom: 28,
+          }}>
+            <Card title="Plan mix" colors={colors}>
+              {tenants.length === 0 ? (
+                <Muted text="No companies yet." colors={colors} />
+              ) : (
+                PLANS.map(p => {
+                  const n = tenants.filter(t => t.planTier === p).length;
+                  const pct = tenants.length ? Math.round((n / tenants.length) * 100) : 0;
+                  return (
+                    <div key={p} style={{ marginBottom: 12 }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginBottom: 4,
+                      }}>
+                        <span style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          textTransform: 'capitalize',
+                          color: colors.text,
+                        }}>
+                          {p}
+                        </span>
+                        <span style={{
+                          fontSize: 13,
+                          color: colors.muted,
+                        }}>
+                          {n} · {pct}%
+                        </span>
+                      </div>
+                      <Bar pct={pct} colors={colors} />
                     </div>
-                    <Bar pct={pct} />
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </Card>
 
-            <Card title="Ready to upgrade">
+            <Card title="Ready to upgrade" colors={colors}>
               {atLimit.length === 0 ? (
-                <Muted text="No company has filled its plan." />
-              ) : atLimit.map(t => (
-                <Row key={t.tenantId} left={t.companyName}
-                     right={`${t.restaurantCount}/${t.maxRestaurants} · ${t.planTier}`}
-                     rightColor={C.red} />
-              ))}
+                <Muted text="No company has filled its plan." colors={colors} />
+              ) : (
+                atLimit.map(t => (
+                  <Row
+                    key={t.tenantId}
+                    left={t.companyName}
+                    right={`${t.restaurantCount}/${t.maxRestaurants} · ${t.planTier}`}
+                    rightColor={accent.danger.text}
+                    colors={colors}
+                  />
+                ))
+              )}
             </Card>
 
-            <Card title="Biggest customers">
-              {tenants.length === 0 ? <Muted text="No companies yet." /> :
+            <Card title="Biggest customers" colors={colors}>
+              {tenants.length === 0 ? (
+                <Muted text="No companies yet." colors={colors} />
+              ) : (
                 [...tenants]
                   .sort((a, b) => (b.restaurantCount ?? 0) - (a.restaurantCount ?? 0))
                   .slice(0, 5)
                   .map(t => (
-                    <Row key={t.tenantId} left={t.companyName} right={planUsage(t)} />
-                  ))}
+                    <Row
+                      key={t.tenantId}
+                      left={t.companyName}
+                      right={planUsage(t)}
+                      colors={colors}
+                    />
+                  ))
+              )}
             </Card>
           </div>
         </>
       )}
 
       {/* ── One branch ───────────────────────────────────────────── */}
-      <h2 style={sectionTitle}>A single branch — last 24 hours</h2>
-      <ScopePicker value={scope} onChange={setScope} storageKey="console_analytics_scope" />
+      <h2 style={{
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: colors.subtle,
+        margin: '0 0 12px',
+      }}>
+        A single branch — last 24 hours
+      </h2>
+
+      <ScopePicker
+        value={scope}
+        onChange={setScope}
+        storageKey="console_analytics_scope"
+      />
 
       {!scope.restaurantId && (
-        <Muted text="Pick a company and restaurant above to see its trading figures." />
+        <Muted text="Pick a company and restaurant above to see its trading figures." colors={colors} />
       )}
 
       {scope.restaurantId && loadingO && (
-        <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>
-          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> Loading orders…
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 20px',
+          color: colors.muted,
+        }}>
+          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+          <p style={{ marginTop: 12, fontSize: 14 }}>Loading orders…</p>
         </div>
       )}
 
       {scope.restaurantId && !loadingO && (
         <>
+          {/* Branch Stats */}
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
-            gap: 14, marginBottom: 18,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 14,
+            marginBottom: 18,
           }}>
-            <Stat icon={<BarChart2 size={17} />} label="Orders"    value={String(completed.length)} />
-            <Stat icon={<TrendingUp size={17} />} label="Revenue"  value={money(revenue, scope.currency)} accent={C.green} />
-            <Stat icon={<BarChart2 size={17} />} label="Avg order" value={money(avgOrder, scope.currency)} />
-            <Stat icon={<Pause size={17} />}     label="Cancelled"
-                  value={String(orders.length - completed.length)} />
+            <Stat
+              icon={<BarChart2 size={17} />}
+              label="Orders"
+              value={String(completed.length)}
+              colors={colors}
+            />
+            <Stat
+              icon={<TrendingUp size={17} />}
+              label="Revenue"
+              value={money(revenue, scope.currency)}
+              accent={accent.green.text}
+              colors={colors}
+            />
+            <Stat
+              icon={<BarChart2 size={17} />}
+              label="Avg order"
+              value={money(avgOrder, scope.currency)}
+              colors={colors}
+            />
+            <Stat
+              icon={<Pause size={17} />}
+              label="Cancelled"
+              value={String(orders.length - completed.length)}
+              colors={colors}
+            />
           </div>
 
-          <Card title="Most ordered">
+          {/* Top Items Card */}
+          <Card title="Most ordered" colors={colors}>
             {topItems.length === 0 ? (
-              <Muted text="No orders in the last 24 hours." />
-            ) : topItems.map(([name, qty]) => {
-              const max = topItems[0][1];
-              return (
-                <div key={name} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{name}</span>
-                    <span style={{ fontSize: 13, color: C.muted }}>{qty}</span>
+              <Muted text="No orders in the last 24 hours." colors={colors} />
+            ) : (
+              topItems.map(([name, qty]) => {
+                const max = topItems[0][1];
+                return (
+                  <div key={name} style={{ marginBottom: 12 }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 4,
+                    }}>
+                      <span style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: colors.text,
+                      }}>
+                        {name}
+                      </span>
+                      <span style={{
+                        fontSize: 13,
+                        color: colors.muted,
+                      }}>
+                        {qty}
+                      </span>
+                    </div>
+                    <Bar pct={Math.round((qty / max) * 100)} colors={colors} />
                   </div>
-                  <Bar pct={Math.round((qty / max) * 100)} />
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </Card>
         </>
       )}
@@ -201,61 +450,152 @@ export default function AdminAnalytics() {
   );
 }
 
-// ── Bits ──────────────────────────────────────────────────────────────
+// ── Sub-components ──────────────────────────────────────────────────
 
-function Stat({ icon, label, value, accent }: {
-  icon: React.ReactNode; label: string; value: string; accent?: string;
+function Stat({
+  icon,
+  label,
+  value,
+  accent,
+  colors,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent?: string;
+  colors: any;
 }) {
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: accent ?? C.muted, marginBottom: 6 }}>
+    <div style={{
+      background: colors.card,
+      border: `1px solid ${colors.border}`,
+      borderRadius: 14,
+      padding: '15px 17px',
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        color: accent ?? colors.muted,
+        marginBottom: 6,
+      }}>
         {icon}
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: 1,
+          textTransform: 'uppercase',
+        }}>
+          {label}
+        </span>
       </div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: accent ?? C.text, lineHeight: 1 }}>{value}</div>
+      <div style={{
+        fontSize: 'clamp(20px, 2.5vw, 24px)',
+        fontWeight: 800,
+        color: accent ?? colors.text,
+        lineHeight: 1,
+      }}>
+        {value}
+      </div>
     </div>
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({
+  title,
+  children,
+  colors,
+}: {
+  title: string;
+  children: React.ReactNode;
+  colors: any;
+}) {
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: '0 0 14px' }}>{title}</h3>
+    <div style={{
+      background: colors.card,
+      border: `1px solid ${colors.border}`,
+      borderRadius: 14,
+      padding: 18,
+    }}>
+      <h3 style={{
+        fontSize: 14,
+        fontWeight: 800,
+        color: colors.text,
+        margin: '0 0 14px',
+      }}>
+        {title}
+      </h3>
       {children}
     </div>
   );
 }
 
-function Bar({ pct }: { pct: number }) {
-  return (
-    <div style={{ height: 6, borderRadius: 3, background: C.bg, overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: C.red }} />
-    </div>
-  );
-}
-
-function Row({ left, right, rightColor }: { left: string; right: string; rightColor?: string }) {
+function Bar({ pct, colors }: { pct: number; colors: any }) {
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '8px 0', borderTop: `1px solid ${C.border}`,
+      height: 6,
+      borderRadius: 3,
+      background: colors.border,
+      overflow: 'hidden',
     }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>{left}</span>
-      <span style={{ fontSize: 12, color: rightColor ?? C.muted, fontWeight: 700 }}>{right}</span>
+      <div style={{
+        width: `${Math.min(pct, 100)}%`,
+        height: '100%',
+        background: BRAND,
+        transition: 'width 0.3s ease',
+      }} />
     </div>
   );
 }
 
-function Muted({ text }: { text: string }) {
-  return <p style={{ fontSize: 13, color: C.subtle, margin: '0 0 14px' }}>{text}</p>;
+function Row({
+  left,
+  right,
+  rightColor,
+  colors,
+}: {
+  left: string;
+  right: string;
+  rightColor?: string;
+  colors: any;
+}) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '8px 0',
+      borderTop: `1px solid ${colors.border}`,
+      gap: 8,
+      flexWrap: 'wrap',
+    }}>
+      <span style={{
+        fontSize: 13,
+        fontWeight: 600,
+        color: colors.text,
+      }}>
+        {left}
+      </span>
+      <span style={{
+        fontSize: 12,
+        color: rightColor ?? colors.muted,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+      }}>
+        {right}
+      </span>
+    </div>
+  );
 }
 
-const sectionTitle: React.CSSProperties = {
-  fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase',
-  color: C.subtle, margin: '0 0 12px',
-};
-const ghost: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-  border: `1px solid ${C.border}`, borderRadius: 8, background: '#fff',
-  fontWeight: 600, fontSize: 13, cursor: 'pointer', color: C.text,
-};
+function Muted({ text, colors }: { text: string; colors: any }) {
+  return (
+    <p style={{
+      fontSize: 13,
+      color: colors.subtle,
+      margin: '0 0 14px',
+    }}>
+      {text}
+    </p>
+  );
+}

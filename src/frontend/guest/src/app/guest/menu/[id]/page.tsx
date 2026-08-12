@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { ChevronLeft, Heart, Star, Plus, Minus, Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { fetchMenuItem, normaliseItem, type ApiMenuItem } from '@/lib/menu-api';
+import { fetchMenuItem, normaliseItem, fetchAddOns, type ApiMenuItem, type ApiAddOn } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
 import { useFavoritesStore } from '@/lib/favorites-store';
 import { useTheme } from '@/hooks/useTheme';
@@ -14,22 +14,18 @@ import { getGuestScope } from '@/lib/guest-scope';
 const BRAND = '#ff5723';
 
 // ── Placeholder data — not yet available from the backend ───────────────────
-// TODO(backend): ApiMenuItem.customisations has no size/topping pricing
-// today. These replace the old free-text SIZES/EXTRAS with a priced model —
-// multipliers (0.75 / 1.00 / 1.25) are derived from the Figma's example
-// (600 / 800 / 1000 on an Rs.800 item), applied to the real item.price so
-// it's correct for whatever item a guest is actually viewing.
+// TODO(backend): ApiMenuItem.customisations has no size pricing today. These
+// replace the old free-text SIZES with a priced model — multipliers
+// (0.75 / 1.00 / 1.25) are derived from the Figma's example (600 / 800 /
+// 1000 on an Rs.800 item), applied to the real item.price so it's correct
+// for whatever item a guest is actually viewing.
 const SIZES = [
   { label: 'Small', mult: 0.75 },
   { label: 'Medium', mult: 1.00 },
   { label: 'Large', mult: 1.25 },
 ];
-const TOPPINGS = [
-  { label: 'Extra cheese', price: 100 },
-  { label: 'Mushrooms', price: 100 },
-  { label: 'Olives', price: 100 },
-  { label: 'Chicken', price: 100 },
-];
+// TOPPINGS placeholder is gone — "Extra Toppings" is now real data from
+// fetchAddOns() (the new addons.py backend endpoint), see below.
 
 export default function ItemDetailPage() {
   const router = useRouter();
@@ -40,7 +36,11 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [size, setSize] = useState(1); // index — Medium default (see note below)
   const [qty, setQty] = useState(1);
-  const [toppings, setToppings] = useState<string[]>([]);
+
+  // ── Extra Toppings — real add-ons for this item ──────────────────────────
+  const [addOns, setAddOns] = useState<ApiAddOn[]>([]);
+  const [toppings, setToppings] = useState<string[]>([]); // selected add-on names
+
   const [added, setAdded] = useState(false);
   const { addItem } = useCartStore();
   const { isFavorite, toggleFavorite } = useFavoritesStore();
@@ -70,16 +70,26 @@ export default function ItemDetailPage() {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
     if (!hasSession) { window.location.href = '/guest'; return; }
     const rid = getGuestScope().restaurantId;
+
+    // Item and add-ons are independent (add-ons don't block the item from
+    // showing), fetched in parallel rather than one after the other.
     fetchMenuItem(id, rid)
-      .then(raw => { setItem(normaliseItem(raw)); setLoading(false); })
+      .then(raw => {
+        setItem(normaliseItem(raw));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
+
+    fetchAddOns(id, rid)
+      .then(setAddOns)
+      .catch(() => setAddOns([])); // no add-ons for this item is normal, not an error
   }, [id]);
 
   const toggleTopping = (label: string) =>
     setToppings(p => p.includes(label) ? p.filter(x => x !== label) : [...p, label]);
 
   const sizePrice = item ? item.price * SIZES[size].mult : 0;
-  const toppingsTotal = toppings.reduce((sum, t) => sum + (TOPPINGS.find(x => x.label === t)?.price ?? 0), 0);
+  const toppingsTotal = toppings.reduce((sum, label) => sum + (addOns.find(a => a.name === label)?.price ?? 0), 0);
   const unitPrice = sizePrice + toppingsTotal;
   const finalPrice = Math.round(unitPrice * qty);
 
@@ -100,18 +110,44 @@ export default function ItemDetailPage() {
     });
   }
   const rid = getGuestScope().restaurantId;
-  const arHref = `/guest/ar?rid=${encodeURIComponent(rid)}&iid=${encodeURIComponent(id ?? '')}&name=${encodeURIComponent(item?.name ?? '')}&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
+  const arHref =
+    `/guest/ar?rid=${encodeURIComponent(rid)}` +
+    `&iid=${encodeURIComponent(id ?? '')}` +
+    `&name=${encodeURIComponent(item?.name ?? '')}` +
+    `&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}` +
+    `&imageUrl=${encodeURIComponent((item as any)?.imageUrl ?? '')}` +
+    `${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
 
   const handleAddToCart = () => {
     if (!item) return;
+
+    const selectedSize = SIZES[size];
+
     addItem({
-      menuItemId: item.id, name: item.name, emoji: item.emoji ?? '🍽️',
-      price: Math.round(unitPrice),
+      menuItemId: item.id,
+      name: item.name,
+      emoji: item.emoji ?? '🍽️',
+      imageUrl: item.imageUrl || undefined,
+
+      // Base item price
+      price: item.price,
+
       quantity: qty,
-      options: { doneness: SIZES[size].label, side: toppings.join(', ') },
+
+      options: {
+        size: selectedSize.label,
+        sizeMultiplier: selectedSize.mult,
+        toppings: toppings.join(', '),
+        toppingsTotal: toppingsTotal,
+      },
     });
+
     setAdded(true);
-    setTimeout(() => { setAdded(false); router.push('/guest/cart'); }, 800);
+
+    setTimeout(() => {
+      setAdded(false);
+      router.push('/guest/cart');
+    }, 800);
   };
 
   const D = isDark ? {
@@ -140,7 +176,14 @@ export default function ItemDetailPage() {
             <ChevronLeft size={30} strokeWidth={2.5} />
           </button>
           <button
-            onClick={() => item && toggleFavorite({ id: item.id, name: item.name, price: item.price, emoji: item.emoji ?? '🍽️', imageUrl: (item as any).imageUrl, description: item.description })}
+            onClick={() => item && toggleFavorite({
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              emoji: item.emoji ?? '🍽️',
+              imageUrl: item.imageUrl,
+              description: item.description,
+            })}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }}
             aria-label="Save to favorites"
           >
@@ -281,25 +324,28 @@ export default function ItemDetailPage() {
           </div>
         </div>
 
-        {/* ── Extra Toppings ── */}
-        <div style={{ marginBottom: 12 }}>
-          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Extra Toppings</h2>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {TOPPINGS.map(t => {
-              const checked = toppings.includes(t.label);
-              return (
-                <button key={t.label} onClick={() => toggleTopping(t.label)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-                  <span style={{ width: 26, height: 26, borderRadius: 6, border: `2px solid ${BRAND}`, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {checked && <Check size={16} color="#363853" strokeWidth={3} />}
-                  </span>
-                  <span style={{ flex: 1, fontSize: 16, color: D.text }}>{t.label}</span>
-                  <span style={{ fontSize: 15, color: D.text }}>RS:{t.price}</span>
-                </button>
-              );
-            })}
+        {/* ── Extra Toppings — real add-ons for this item, hidden entirely
+             when there are none rather than showing an empty section ── */}
+        {addOns.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Extra Toppings</h2>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {addOns.map(addon => {
+                const checked = toppings.includes(addon.name);
+                return (
+                  <button key={addon.addOnId} onClick={() => toggleTopping(addon.name)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 6, border: `2px solid ${BRAND}`, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {checked && <Check size={16} color="#363853" strokeWidth={3} />}
+                    </span>
+                    <span style={{ flex: 1, fontSize: 16, color: D.text }}>{addon.name}</span>
+                    <span style={{ fontSize: 15, color: D.text }}>RS:{addon.price}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Bottom bar: quantity stepper + Add to Cart ── */}

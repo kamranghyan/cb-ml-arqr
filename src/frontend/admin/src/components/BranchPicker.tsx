@@ -3,9 +3,19 @@
 import { Store, Loader2 } from 'lucide-react';
 import type { Branch } from '@/lib/tenant-api';
 
-const C = {
-  red: '#E1251B', bg: '#FFF8F1', white: '#fff', border: '#F0E8E0',
-  text: '#1A1A1A', muted: '#687780', subtle: '#9CA3AF',
+// ── Color Schema (Matches your KDS page) ──────────────────────────────
+const BRAND = '#ff5723';
+const D = {
+  bg: '#111111',
+  card: '#1C1C1C',
+  card2: '#242424',
+  border: 'rgba(255,255,255,0.08)',
+  text: '#F5F0E8',
+  muted: '#9CA3AF',
+  subtle: '#6B7280',
+};
+const TONE = {
+  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
 };
 
 /**
@@ -31,20 +41,18 @@ export default function BranchPicker({
 }) {
   if (loading) {
     return (
-      <div style={{ ...bar, color: C.muted }}>
-        <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontSize: 13 }}>Loading your restaurants…</span>
+      <div className="flex items-center gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4 text-[#9CA3AF]">
+        <Loader2 size={15} className="animate-spin" />
+        <span className="text-sm">Loading your restaurants…</span>
       </div>
     );
   }
 
   if (branches.length === 0) {
     return (
-      <div style={{ ...bar, color: C.subtle }}>
+      <div className="flex items-center gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4 text-[#6B7280]">
         <Store size={15} />
-        <span style={{ fontSize: 13 }}>
-          No restaurants yet — add one to start taking orders.
-        </span>
+        <span className="text-sm">No restaurants yet — add one to start taking orders.</span>
       </div>
     );
   }
@@ -53,15 +61,15 @@ export default function BranchPicker({
   if (branches.length === 1 && !allowAll) return null;
 
   return (
-    <div style={bar}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.muted }}>
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4">
+      <div className="flex items-center gap-1.5 text-[#9CA3AF] flex-shrink-0">
         <Store size={15} />
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider hidden xs:inline">
           Restaurant
         </span>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="flex flex-wrap gap-1.5 flex-1">
         {allowAll && (
           <Chip active={value === ''} onClick={() => onChange('')}>
             All branches
@@ -75,7 +83,7 @@ export default function BranchPicker({
           >
             {b.name}
             {!b.isActive && (
-              <span style={{ opacity: 0.6, fontWeight: 500 }}> · closed</span>
+              <span className="opacity-60 font-medium"> · closed</span>
             )}
           </Chip>
         ))}
@@ -88,20 +96,18 @@ function Chip({ active, onClick, children }: {
   active: boolean; onClick: () => void; children: React.ReactNode;
 }) {
   return (
-    <button onClick={onClick} style={{
-      padding: '6px 13px', borderRadius: 20, cursor: 'pointer',
-      fontSize: 12.5, fontWeight: 700,
-      border: `1px solid ${active ? C.red : C.border}`,
-      background: active ? C.red : '#fff',
-      color:      active ? '#fff' : C.muted,
-    }}>
+    <button
+      onClick={onClick}
+      className={`
+        px-3.5 py-1.5 rounded-full cursor-pointer text-xs font-bold transition-all duration-200
+        whitespace-nowrap
+        ${active
+          ? 'bg-[#ff5723] text-white border border-[#ff5723] shadow-[0_0_12px_rgba(255,87,35,0.25)]'
+          : 'bg-[#242424] text-[#9CA3AF] border border-[rgba(255,255,255,0.08)] hover:bg-[#2A2A2A] hover:text-[#F5F0E8]'
+        }
+      `}
+    >
       {children}
     </button>
   );
 }
-
-const bar: React.CSSProperties = {
-  display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
-  background: C.white, border: `1px solid ${C.border}`,
-  borderRadius: 12, padding: '12px 14px', marginBottom: 18,
-};

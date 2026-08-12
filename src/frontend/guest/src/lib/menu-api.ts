@@ -4,7 +4,7 @@
  * Authorization token injected client-side before proxying.
  */
 
-import { MENU_API, AR_API, RESTAURANT_ID, ADMIN_RESTAURANT_ID } from './api-config'
+import { MENU_API, AR_API, ADDON_API, RESTAURANT_ID, ADMIN_RESTAURANT_ID } from './api-config'
 import { getValidIdToken } from './cognito'
 
 export interface ApiMenuItem {
@@ -42,6 +42,23 @@ export interface ApiMenuResponse {
   items: ApiMenuItem[]
   total?: number
   page?: number
+}
+
+// ── Add-on ("Extra Toppings") ────────────────────────────────────────────────
+// NOTE: field names inferred from addons.py's route handlers, not a confirmed
+// schema — the addon_service.py / model file weren't part of what was shared.
+// Defensive fallbacks (addOnId ?? id, priceMinorUnits ?? price) so this keeps
+// working if the real field names turn out slightly different — check the
+// browser console's "🧩 Raw add-on" log below against what actually comes
+// back the first time you load an item that has add-ons, and adjust the
+// field names here if they don't match.
+export interface ApiAddOn {
+  addOnId: string
+  menuItemId: string
+  name: string
+  price: number      // major units (Rs.), normalised from priceMinorUnits if present
+  isActive: boolean
+  sortOrder: number
 }
 
 // ── Restaurant Data Types ──────────────────────────────────────────────────────
@@ -170,6 +187,34 @@ async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
     return await res.json()
   } catch {
     return null
+  }
+}
+
+// ── Fetch add-ons ("Extra Toppings") for a menu item ──────────────────────────
+// No add-ons for an item is a completely normal case (not every item has
+// them) — returns [] rather than throwing, same spirit as fetchARModel above.
+export async function fetchAddOns(itemId: string, restaurantId?: string): Promise<ApiAddOn[]> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID
+  try {
+    const data = await menuFetch<any>(ADDON_API.list(itemId, rid))
+    const raw: any[] = Array.isArray(data) ? data : (data?.items ?? [])
+
+    console.log('🧩 Raw add-on data:', raw)
+
+    return raw
+      .map((a): ApiAddOn => ({
+        addOnId:    a.addOnId ?? a.id ?? '',
+        menuItemId: a.menuItemId ?? itemId,
+        name:       a.name ?? 'Add-on',
+        price:      a.priceMinorUnits != null ? Number(a.priceMinorUnits) / 100 : Number(a.price ?? 0),
+        isActive:   a.isActive ?? true,
+        sortOrder:  a.sortOrder ?? 0,
+      }))
+      .filter(a => a.isActive && a.addOnId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  } catch (err) {
+    console.warn('No add-ons for this item (or fetch failed):', err)
+    return []
   }
 }
 

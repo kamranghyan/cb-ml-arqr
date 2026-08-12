@@ -19,17 +19,34 @@ import {
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 import Image from 'next/image';
-// import { uploadRestaurantLogo } from '@/lib/admin-api';
+import { useTheme } from '@/hooks/useTheme';
 
-const C = {
-  red: '#E1251B', dark: '#891C1C', gold: '#FFC72C', bg: '#FFF8F1',
-  white: '#fff', border: '#F0E8E0', text: '#1A1A1A',
-  muted: '#687780', subtle: '#9CA3AF', green: '#0F9D58',
-};
+const BRAND = '#ff5723';
+const GREEN = '#16a34a';
+
+// Shared by the view and the modal — each calls useTheme() independently
+// (cheap, just a state read) rather than the modal closing over the
+// parent's values, so it stays a stable top-level component and doesn't
+// lose its form state if the parent re-renders while it's open.
+function useD() {
+  const { isDark } = useTheme();
+  const D = isDark ? {
+    bg: '#111111', card: '#1C1C1C', border: 'rgba(255,255,255,0.08)',
+    text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
+  } : {
+    bg: '#FFFFFF', card: '#fff', border: '#F0EBE6',
+    text: '#000000', muted: '#6B6B6B', subtle: '#9CA3AF',
+  };
+  const ORANGE_TINT = isDark ? { bg: 'rgba(255,87,35,0.15)', border: 'rgba(255,87,35,0.3)' } : { bg: '#FFF3E0', border: '#FED7AA' };
+  const AMBER = isDark ? { bg: 'rgba(217,119,6,0.15)', border: 'rgba(217,119,6,0.35)', text: '#fbbf24' } : { bg: '#FFF7E6', border: '#FFE0A3', text: '#92400e' };
+  return { isDark, D, ORANGE_TINT, AMBER };
+}
 
 type Toast = { msg: string; kind: 'ok' | 'err' } | null;
 
 export default function RestaurantsView() {
+  const { D, ORANGE_TINT, AMBER } = useD();
+
   const [rows, setRows] = useState<ApiRestaurant[]>([]);
   const [tenant, setTenant] = useState<ApiTenant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,23 +123,23 @@ export default function RestaurantsView() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: '0 0 4px' }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: D.text, margin: '0 0 4px', fontFamily: "'Baloo 2', sans-serif" }}>
             Restaurants
           </h1>
-          <p style={{ color: C.muted, fontSize: 14, margin: 0 }}>
+          <p style={{ color: D.muted, fontSize: 14, margin: 0 }}>
             {tenant
               ? <>Your branches — {planUsage(tenant)} on the {tenant.planTier} plan.</>
               : 'Your branches.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} style={btnGhost}><RefreshCw size={14} /> Refresh</button>
+          <button onClick={load} style={btnGhost(D)}><RefreshCw size={14} /> Refresh</button>
           <button
             onClick={() => atLimit ? showToast(
               `You have used all ${tenant?.maxRestaurants} restaurants on the ` +
               `${tenant?.planTier} plan. Contact support to upgrade.`, 'err'
             ) : setModal({ open: true })}
-            style={{ ...btn(atLimit ? C.subtle : C.red), cursor: atLimit ? 'not-allowed' : 'pointer' }}
+            style={{ ...btn(atLimit ? D.subtle : BRAND), cursor: atLimit ? 'not-allowed' : 'pointer' }}
             title={atLimit ? 'Plan limit reached' : 'Add a branch'}
           >
             {atLimit ? <Lock size={15} /> : <Plus size={16} />} New Restaurant
@@ -133,8 +150,8 @@ export default function RestaurantsView() {
       {atLimit && (
         <div style={{
           padding: '10px 14px', borderRadius: 10, marginBottom: 16,
-          background: '#FFF7E6', border: '1px solid #FFE0A3',
-          color: C.dark, fontSize: 13,
+          background: AMBER.bg, border: `1px solid ${AMBER.border}`,
+          color: AMBER.text, fontSize: 13,
         }}>
           <strong>Plan limit reached.</strong> You are using {tenant!.restaurantCount} of{' '}
           {tenant!.maxRestaurants} restaurants. Upgrade to add more branches.
@@ -142,19 +159,19 @@ export default function RestaurantsView() {
       )}
 
       {loading && (
-        <div style={{ padding: 60, textAlign: 'center', color: C.muted }}>
+        <div style={{ padding: 60, textAlign: 'center', color: D.muted }}>
           <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
         </div>
       )}
 
       {!loading && error && (
-        <div style={{ padding: 40, textAlign: 'center', color: C.red }}>
+        <div style={{ padding: 40, textAlign: 'center', color: BRAND }}>
           <AlertCircle size={20} /> {error}
         </div>
       )}
 
       {!loading && !error && rows.length === 0 && (
-        <div style={{ padding: 60, textAlign: 'center', color: C.subtle }}>
+        <div style={{ padding: 60, textAlign: 'center', color: D.subtle }}>
           <Store size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
           <p style={{ margin: 0, fontWeight: 600 }}>No restaurants yet.</p>
           <p style={{ margin: '4px 0 0', fontSize: 13 }}>
@@ -167,32 +184,32 @@ export default function RestaurantsView() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
           {rows.map(r => (
             <div key={r.restaurantId} style={{
-              background: C.white, border: `1px solid ${C.border}`,
+              background: D.card, border: `1px solid ${D.border}`,
               borderRadius: 14, padding: 16,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{r.name}</div>
-                  <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: D.text, fontFamily: "'Baloo 2', sans-serif" }}>{r.name}</div>
+                  <div style={{ fontSize: 13, color: D.muted, marginTop: 2 }}>
                     {r.address?.city || '—'}{r.address?.country ? `, ${r.address.country}` : ''}
                   </div>
                 </div>
                 <span style={{
                   fontSize: 11, fontWeight: 700,
-                  color: r.isActive ? C.green : C.subtle, whiteSpace: 'nowrap',
+                  color: r.isActive ? GREEN : D.subtle, whiteSpace: 'nowrap',
                 }}>
                   {r.isActive ? '● open' : '● closed'}
                 </span>
               </div>
 
-              <div style={{ fontSize: 12, color: C.subtle, marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: D.subtle, marginTop: 10 }}>
                 {r.currencyCode} · {r.timezone}
               </div>
 
               <Link href={`/restaurants/${r.restaurantId}/menu`} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 marginTop: 12, padding: '9px 12px', borderRadius: 9,
-                background: `${C.red}0D`, color: C.red, textDecoration: 'none',
+                background: ORANGE_TINT.bg, color: BRAND, textDecoration: 'none',
                 fontSize: 13, fontWeight: 700,
               }}>
                 Manage menu, tables &amp; QR <ChevronRight size={15} />
@@ -215,14 +232,14 @@ export default function RestaurantsView() {
                       );
                     }
                   }}
-                  style={{ ...iconBtn, flex: 1 }}
+                  style={{ ...iconBtn(D), flex: 1 }}
                 >
                   <Edit2 size={14} />
                   Edit details
                 </button>
                 <button
                   onClick={() => onDelete(r)}
-                  style={{ ...iconBtn, color: C.red }}
+                  style={{ ...iconBtn(D), color: BRAND }}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -244,7 +261,7 @@ export default function RestaurantsView() {
       {toast && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24, padding: '12px 18px', borderRadius: 10,
-          background: toast.kind === 'ok' ? C.green : C.red, color: '#fff',
+          background: toast.kind === 'ok' ? GREEN : BRAND, color: '#fff',
           fontWeight: 600, fontSize: 14, maxWidth: 420,
           boxShadow: '0 4px 16px rgba(0,0,0,0.2)', zIndex: 100,
         }}>
@@ -267,7 +284,8 @@ export default function RestaurantsView() {
   );
 }
 
-// ── Modal ─────────────────────────────────────────────────────────────
+// ── Modal — top-level sibling, not nested, so it stays a stable component
+// identity across the parent's re-renders ──────────────────────────────
 
 function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   edit?: ApiRestaurant;
@@ -275,6 +293,8 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   onSaved: () => void;
   showToast: (m: string, k?: 'ok' | 'err') => void;
 }) {
+  const { D, ORANGE_TINT } = useD();
+
   const [f, setF] = useState({
     name: edit?.name ?? '',
 
@@ -309,12 +329,6 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{
-    open: boolean;
-    restaurant?: ApiRestaurant;
-  }>({
-    open: false,
-  });
   const [logoPreview, setLogoPreview] = useState<string>(
     edit?.logoUrl ?? ''
   );
@@ -391,8 +405,6 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
           updatedPayload.bannerKey = uploadedBanner.s3Key;
         }
 
-        console.log('FINAL UPDATE PAYLOAD:', updatedPayload);
-
         await updateRestaurant(
           edit.restaurantId,
           updatedPayload
@@ -447,80 +459,75 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
       alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background: '#fff', borderRadius: 14, padding: 24, width: '100%',
+        background: D.card, borderRadius: 14, padding: 24, width: '100%',
         maxWidth: 470, maxHeight: '90vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: D.text, fontFamily: "'Baloo 2', sans-serif" }}>
             {edit ? 'Edit Restaurant' : 'New Restaurant'}
           </h3>
-          <button onClick={onClose} style={{ ...iconBtn, border: 'none' }}><X size={18} /></button>
+          <button onClick={onClose} style={{ ...iconBtn(D), border: 'none' }}><X size={18} /></button>
         </div>
 
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
-            <label style={label}>Restaurant Name</label>
-            <input className='searchInput' style={input} value={f.name} placeholder="Cheezious"
+            <label style={labelStyle(D)}>Restaurant Name</label>
+            <input style={inputStyle(D)} value={f.name} placeholder="Cheezious"
               onChange={e => set('name', e.target.value)} />
           </div>
           <div>
-            <label style={label}>Street</label>
-            <input className='searchInput' style={input} value={f.street} onChange={e => set('street', e.target.value)} />
+            <label style={labelStyle(D)}>Street</label>
+            <input style={inputStyle(D)} value={f.street} onChange={e => set('street', e.target.value)} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={label}>City</label>
-              <input className='searchInput' style={input} value={f.city} onChange={e => set('city', e.target.value)} />
+              <label style={labelStyle(D)}>City</label>
+              <input style={inputStyle(D)} value={f.city} onChange={e => set('city', e.target.value)} />
             </div>
             <div>
-              <label style={label}>Postcode</label>
-              <input className='searchInput' style={input} value={f.postcode} onChange={e => set('postcode', e.target.value)} />
+              <label style={labelStyle(D)}>Postcode</label>
+              <input style={inputStyle(D)} value={f.postcode} onChange={e => set('postcode', e.target.value)} />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={label}>Country</label>
-              <input className='searchInput' style={input} value={f.country} onChange={e => set('country', e.target.value)} />
+              <label style={labelStyle(D)}>Country</label>
+              <input style={inputStyle(D)} value={f.country} onChange={e => set('country', e.target.value)} />
             </div>
             <div>
-              <label style={label}>Currency</label>
-              <input className='searchInput' style={input} value={f.currencyCode} maxLength={3}
+              <label style={labelStyle(D)}>Currency</label>
+              <input style={inputStyle(D)} value={f.currencyCode} maxLength={3}
                 onChange={e => set('currencyCode', e.target.value.toUpperCase())} />
             </div>
           </div>
           <div>
-            <label style={label}>Timezone</label>
-            <input className='searchInput' style={input} value={f.timezone} onChange={e => set('timezone', e.target.value)} />
+            <label style={labelStyle(D)}>Timezone</label>
+            <input style={inputStyle(D)} value={f.timezone} onChange={e => set('timezone', e.target.value)} />
           </div>
           <div>
-            <label style={label}>Tagline</label>
+            <label style={labelStyle(D)}>Tagline</label>
             <input
-              className="searchInput"
-              style={input}
+              style={inputStyle(D)}
               value={f.tagline}
               placeholder="Fine Dining Experience"
               onChange={e => set('tagline', e.target.value)}
             />
           </div>
 
-
           <div>
-            <label style={label}>Opening Hours</label>
+            <label style={labelStyle(D)}>Opening Hours</label>
             <input
-              className="searchInput"
-              style={input}
+              style={inputStyle(D)}
               value={f.openingHours}
               placeholder="10:00AM - 11:00PM"
               onChange={e => set('openingHours', e.target.value)}
             />
           </div>
 
-
           <div>
-            <label style={label}>Delivery Note</label>
+            <label style={labelStyle(D)}>Delivery Note</label>
             <input
-              className="searchInput"
-              style={input}
+              style={inputStyle(D)}
               value={f.deliveryNote}
               placeholder="Free Delivery"
               onChange={e => set('deliveryNote', e.target.value)}
@@ -529,7 +536,7 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
 
           {/* Restaurant Logo */}
           <div style={{ marginBottom: 14 }}>
-            <label style={label}>
+            <label style={labelStyle(D)}>
               Restaurant Logo
             </label>
 
@@ -541,8 +548,8 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                 gap: 8,
                 padding: 20,
                 borderRadius: 16,
-                border: `2px dashed ${logoFile ? '#FED7AA' : C.border}`,
-                background: logoFile ? '#FFF8F1' : C.bg,
+                border: `2px dashed ${logoFile ? ORANGE_TINT.border : D.border}`,
+                background: logoFile ? ORANGE_TINT.bg : D.bg,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
@@ -563,14 +570,14 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
 
               <CloudUpload
                 size={24}
-                color={logoFile ? C.dark : C.subtle}
+                color={logoFile ? BRAND : D.subtle}
               />
 
               <span
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: logoFile ? C.dark : C.subtle,
+                  color: logoFile ? BRAND : D.subtle,
                 }}
               >
                 {logoFile
@@ -578,7 +585,6 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                   : 'Click to upload logo · PNG, JPG'}
               </span>
             </label>
-
 
             {logoPreview && (
               <div
@@ -598,21 +604,18 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                     height: 90,
                     objectFit: 'cover',
                     borderRadius: 12,
-                    border: `1px solid ${C.border}`,
+                    border: `1px solid ${D.border}`,
                   }}
                 />
               </div>
             )}
           </div>
 
-
-
           {/* Restaurant Banner */}
           <div style={{ marginBottom: 14 }}>
-            <label style={label}>
+            <label style={labelStyle(D)}>
               Restaurant Banner
             </label>
-
 
             <label
               style={{
@@ -622,8 +625,8 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                 gap: 8,
                 padding: 20,
                 borderRadius: 16,
-                border: `2px dashed ${bannerFile ? '#FED7AA' : C.border}`,
-                background: bannerFile ? '#FFF8F1' : C.bg,
+                border: `2px dashed ${bannerFile ? ORANGE_TINT.border : D.border}`,
+                background: bannerFile ? ORANGE_TINT.bg : D.bg,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
@@ -642,27 +645,23 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                 }}
               />
 
-
               <CloudUpload
                 size={24}
-                color={bannerFile ? C.dark : C.subtle}
+                color={bannerFile ? BRAND : D.subtle}
               />
-
 
               <span
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: bannerFile ? C.dark : C.subtle,
+                  color: bannerFile ? BRAND : D.subtle,
                 }}
               >
                 {bannerFile
                   ? `✓ ${bannerFile.name}`
                   : 'Click to upload banner · PNG, JPG'}
               </span>
-
             </label>
-
 
             {bannerPreview && (
               <div
@@ -682,22 +681,18 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
                     height: 120,
                     objectFit: 'cover',
                     borderRadius: 12,
-                    border: `1px solid ${C.border}`,
+                    border: `1px solid ${D.border}`,
                   }}
                 />
               </div>
             )}
-
           </div>
 
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-
             <div>
-              <label style={label}>Rating</label>
+              <label style={labelStyle(D)}>Rating</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 type="number"
                 value={f.ratingValue}
                 placeholder="4.8"
@@ -705,25 +700,21 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
               />
             </div>
 
-
             <div>
-              <label style={label}>Rating Count</label>
+              <label style={labelStyle(D)}>Rating Count</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 type="number"
                 value={f.ratingCount}
                 placeholder="100"
                 onChange={e => set('ratingCount', e.target.value)}
               />
             </div>
-
           </div>
           <div>
-            <label style={label}>Cuisine Tags</label>
+            <label style={labelStyle(D)}>Cuisine Tags</label>
             <input
-              className="searchInput"
-              style={input}
+              style={inputStyle(D)}
               value={f.cuisineTags}
               placeholder="Fast Food, Pizza, BBQ"
               onChange={e => set('cuisineTags', e.target.value)}
@@ -732,98 +723,86 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
           <div style={{
             marginTop: 8,
             paddingTop: 14,
-            borderTop: `1px solid ${C.border}`
+            borderTop: `1px solid ${D.border}`
           }}>
             <h4 style={{
               margin: '0 0 12px',
               fontSize: 15,
-              fontWeight: 800,
-              color: C.text
+              fontWeight: 700,
+              color: D.text,
+              fontFamily: "'Baloo 2', sans-serif",
             }}>
               Social Media
             </h4>
 
-
             <div>
-              <label style={label}>X / Twitter</label>
+              <label style={labelStyle(D)}>X / Twitter</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialX}
                 placeholder="https://x.com/kfc_pk"
                 onChange={e => set('socialX', e.target.value)}
               />
             </div>
 
-
             <div>
-              <label style={label}>Instagram</label>
+              <label style={labelStyle(D)}>Instagram</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialInstagram}
                 placeholder="https://instagram.com/kfcpakistanofficial"
                 onChange={e => set('socialInstagram', e.target.value)}
               />
             </div>
 
-
             <div>
-              <label style={label}>Facebook</label>
+              <label style={labelStyle(D)}>Facebook</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialFacebook}
                 placeholder="https://facebook.com/KFCPakistan"
                 onChange={e => set('socialFacebook', e.target.value)}
               />
             </div>
 
-
             <div>
-              <label style={label}>Youtube</label>
+              <label style={labelStyle(D)}>Youtube</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialYoutube}
                 placeholder="https://youtube.com/@kfcpakistan6047"
                 onChange={e => set('socialYoutube', e.target.value)}
               />
             </div>
 
-
             <div>
-              <label style={label}>LinkedIn</label>
+              <label style={labelStyle(D)}>LinkedIn</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialLinkedin}
                 placeholder="https://linkedin.com/company/kfcpakistan"
                 onChange={e => set('socialLinkedin', e.target.value)}
               />
             </div>
 
-
             <div>
-              <label style={label}>TikTok</label>
+              <label style={labelStyle(D)}>TikTok</label>
               <input
-                className="searchInput"
-                style={input}
+                style={inputStyle(D)}
                 value={f.socialTiktok}
                 placeholder="https://tiktok.com/@kfcpakistanofficial"
                 onChange={e => set('socialTiktok', e.target.value)}
               />
             </div>
-
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: C.text }}>
-            <input className='searchInput' type="checkbox" checked={f.isActive}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: D.text }}>
+            <input type="checkbox" checked={f.isActive}
               onChange={e => set('isActive', e.target.checked)} /> Open for orders
           </label>
 
           <button onClick={save} disabled={saving || !f.name.trim()}
             style={{
-              ...btn(C.red), justifyContent: 'center',
+              ...btn(BRAND), justifyContent: 'center',
               opacity: saving || !f.name.trim() ? 0.6 : 1
             }}>
             {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
@@ -835,7 +814,10 @@ function RestaurantModal({ edit, onClose, onSaved, showToast }: {
   );
 }
 
-// ── Bits ──────────────────────────────────────────────────────────────
+// ── Bits — take D as a parameter, so both components share one definition
+// instead of each redeclaring their own copy ────────────────────────────
+
+type DShape = ReturnType<typeof useD>['D'];
 
 const btn = (bg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
@@ -843,28 +825,23 @@ const btn = (bg: string): React.CSSProperties => ({
   fontWeight: 700, fontSize: 13, cursor: 'pointer',
 });
 
-const btnGhost: React.CSSProperties = {
+const btnGhost = (D: DShape): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-  border: `1px solid ${C.border}`, borderRadius: 8, background: '#fff',
-  fontWeight: 600, fontSize: 13, cursor: 'pointer', color: C.text,
-};
+  border: `1px solid ${D.border}`, borderRadius: 8, background: D.card,
+  fontWeight: 600, fontSize: 13, cursor: 'pointer', color: D.text,
+});
 
-const iconBtn: React.CSSProperties = {
+const iconBtn = (D: DShape): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-  padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8,
-  background: '#fff', cursor: 'pointer', fontSize: 13, color: C.text,
-};
+  padding: '7px 10px', border: `1px solid ${D.border}`, borderRadius: 8,
+  background: D.card, cursor: 'pointer', fontSize: 13, color: D.text,
+});
 
-const input: React.CSSProperties = {
-  width: '100%',
-  padding: '9px 11px',
-  border: `1px solid ${C.border}`,
-  borderRadius: 8,
-  fontSize: 14,
-  boxSizing: 'border-box',
-  color: '#000',
-};
+const inputStyle = (D: DShape): React.CSSProperties => ({
+  width: '100%', padding: '9px 11px', border: `1px solid ${D.border}`, borderRadius: 8,
+  fontSize: 14, boxSizing: 'border-box', color: D.text, background: D.bg,
+});
 
-const label: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 5,
-};
+const labelStyle = (D: DShape): React.CSSProperties => ({
+  display: 'block', fontSize: 12, fontWeight: 700, color: D.muted, marginBottom: 5,
+});

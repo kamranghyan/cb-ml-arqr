@@ -412,23 +412,19 @@ export async function uploadRestaurantLogo(
   file: File,
   restaurantId: string = RESTAURANT_ID,
 ): Promise<{ s3Key: string; url: string }> {
-
   const token = await getValidIdToken();
-
-  console.log('UPLOAD TOKEN:', token);
-  console.log('TOKEN PARTS:', token?.split('.').length);
 
   const form = new FormData();
   form.append('file', file);
 
   const res = await fetch(
-    `/api/menu/upload/restaurants/${restaurantId}/logo`,
+    `/api/menu/restaurants`,
     {
       method: 'POST',
       headers: token
         ? {
-          Authorization: `Bearer ${token}`,
-        }
+            Authorization: `Bearer ${token}`,
+          }
         : {},
       body: form,
     }
@@ -441,22 +437,25 @@ export async function uploadRestaurantLogo(
 
   return res.json();
 }
+
+
 export async function uploadRestaurantBanner(
   file: File,
   restaurantId: string,
 ): Promise<{ s3Key: string; url: string }> {
-
   const token = await getValidIdToken();
 
   const form = new FormData();
   form.append('file', file);
 
   const res = await fetch(
-    `/api/menu/upload/restaurants/${restaurantId}/banner`,
+    `/api/menu/restaurants`,
     {
       method: 'POST',
       headers: token
-        ? { Authorization: `Bearer ${token}` }
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
         : {},
       body: form,
     }

@@ -6,26 +6,35 @@ import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike } from 'lucide-r
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
+import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
+import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
-interface LineItem { name: string; itemId: string; quantity: number; unitPriceMinorUnits: number; totalPriceMinorUnits: number; }
+interface LineItem {
+  name: string;
+  itemId: string;
+  quantity: number;
+  unitPriceMinorUnits: number;
+  totalPriceMinorUnits: number;
+  imageUrl?: string;
+}
 interface ApiOrder { orderId: string; status: string; tableId?: string; lineItems: LineItem[]; placedAt?: string; totalAmountMinorUnits?: number; }
 
 const STATUS_STEPS = [
-  { key: 'RECEIVED',  label: 'Order Confirmed',      icon: CheckCircle, desc: '9:41 AM · Payment successful'   },
-  { key: 'PREPARING', label: 'Preparing Your Order',  icon: ChefHat,     desc: 'Barista is brewing now…'        },
-  { key: 'READY',     label: 'Ready for Pickup',      icon: Bell,        desc: "You'll be notified"              },
-  { key: 'DELIVERED', label: 'Enjoy & Review',        icon: Bike,        desc: 'Rate your experience'            },
+  { key: 'RECEIVED', label: 'Order Confirmed', icon: CheckCircle, desc: '9:41 AM · Payment successful' },
+  { key: 'PREPARING', label: 'Preparing Your Order', icon: ChefHat, desc: 'Barista is brewing now…' },
+  { key: 'READY', label: 'Ready for Pickup', icon: Bell, desc: "You'll be notified" },
+  { key: 'DELIVERED', label: 'Enjoy & Review', icon: Bike, desc: 'Rate your experience' },
 ];
-const STATUS_RANK: Record<string, number> = { 'RECEIVED':0,'PENDING':0,'PREPARING':1,'IN_PROGRESS':1,'KITCHEN_ACCEPTED':1,'READY':2,'READY_TO_SERVE':2,'FOOD_READY':2,'DELIVERED':3,'COMPLETED':3 };
+const STATUS_RANK: Record<string, number> = { 'RECEIVED': 0, 'PENDING': 0, 'PREPARING': 1, 'IN_PROGRESS': 1, 'KITCHEN_ACCEPTED': 1, 'READY': 2, 'READY_TO_SERVE': 2, 'FOOD_READY': 2, 'DELIVERED': 3, 'COMPLETED': 3 };
 
 function getStepIndex(status: string): number {
   const s = (status ?? '').toUpperCase();
-  if (['RECEIVED','PENDING'].includes(s)) return 0;
-  if (['PREPARING','IN_PROGRESS','KITCHEN_ACCEPTED'].includes(s)) return 1;
-  if (['READY','READY_TO_SERVE','FOOD_READY'].includes(s)) return 2;
-  if (['DELIVERED','COMPLETED'].includes(s)) return 3;
+  if (['RECEIVED', 'PENDING'].includes(s)) return 0;
+  if (['PREPARING', 'IN_PROGRESS', 'KITCHEN_ACCEPTED'].includes(s)) return 1;
+  if (['READY', 'READY_TO_SERVE', 'FOOD_READY'].includes(s)) return 2;
+  if (['DELIVERED', 'COMPLETED'].includes(s)) return 3;
   return 0;
 }
 function formatTime(iso?: string) { if (!iso) return '—'; return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }); }
@@ -34,18 +43,36 @@ function formatRs(minor?: number) { if (!minor) return 'Rs 0'; return 'Rs ' + (m
 const POLL_MS = 5000;
 
 export default function TrackingPage() {
-  const router     = useRouter();
+  const router = useRouter();
   const { isDark } = useTheme();
-
-  const [orders,       setOrders]       = useState<ApiOrder[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState('');
-  const [lastSync,     setLastSync]     = useState('');
-  const [sessionTid,   setSessionTid]   = useState('');
+  const [menuItems, setMenuItems] = useState<ApiMenuItem[]>([]);
+  const [orders, setOrders] = useState<ApiOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [lastSync, setLastSync] = useState('');
+  const [sessionTid, setSessionTid] = useState('');
   const [sessionTable, setSessionTable] = useState('');
-  const [showCancel,   setShowCancel]   = useState(false);
-  const [cancelling,   setCancelling]   = useState(false);
-  const [cancelError,  setCancelError]  = useState('');
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  useEffect(() => {
+    const loadMenuImages = async () => {
+      try {
+        const { restaurantId } = getGuestScope();
+
+        const rawItems = await fetchMenuItems(restaurantId);
+
+        const normalisedItems = rawItems.map(normaliseItem);
+
+        setMenuItems(normalisedItems);
+      } catch (error) {
+        console.error('Failed to load menu images:', error);
+      }
+    };
+
+    loadMenuImages();
+  }, []);
 
   useEffect(() => {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
@@ -58,10 +85,10 @@ export default function TrackingPage() {
     if (!silent) setLoading(true);
     try {
       const { restaurantId } = getGuestScope();
-      const res  = await fetch(`/api/orders?rid=${restaurantId}`, { cache: 'no-store' });
+      const res = await fetch(`/api/orders?rid=${restaurantId}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
-      const all  = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) =>
+      const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) =>
         new Date(b.placedAt ?? 0).getTime() - new Date(a.placedAt ?? 0).getTime()
       );
       setOrders(prev => {
@@ -71,7 +98,7 @@ export default function TrackingPage() {
           if (!ex) return o;
           const er = STATUS_RANK[(ex.status ?? '').toUpperCase()] ?? -1;
           const fr = STATUS_RANK[(o.status ?? '').toUpperCase()] ?? -1;
-          const isFinal = ['TIMED_OUT','CANCELLED'].includes((o.status??'').toUpperCase());
+          const isFinal = ['TIMED_OUT', 'CANCELLED'].includes((o.status ?? '').toUpperCase());
           return { ...o, status: (!isFinal && er > fr) ? ex.status : o.status };
         });
       });
@@ -83,12 +110,17 @@ export default function TrackingPage() {
 
   useEffect(() => { load(); const id = setInterval(() => load(true), POLL_MS); return () => clearInterval(id); }, [load]);
 
-  const myOrders = orders.filter(o => { const t = (o.tableId ?? '').toLowerCase(); return t === sessionTid.toLowerCase() || t.includes(sessionTable) || (sessionTable && t.endsWith(sessionTable.padStart(2,'0'))); });
+  const myOrders = orders.filter(o => { const t = (o.tableId ?? '').toLowerCase(); return t === sessionTid.toLowerCase() || t.includes(sessionTable) || (sessionTable && t.endsWith(sessionTable.padStart(2, '0'))); });
   const displayOrders = myOrders.length > 0 ? myOrders : orders;
-  const activeOrders  = displayOrders.filter(o => !['TIMED_OUT','CANCELLED'].includes((o.status ?? '').toUpperCase()));
-  const latest        = (activeOrders.length > 0 ? activeOrders : displayOrders)[0];
-  const currentStep   = latest ? getStepIndex(latest.status) : 0;
-  const isCancelled   = ['TIMED_OUT','CANCELLED'].includes((latest?.status ?? '').toUpperCase());
+  const activeOrders = displayOrders.filter(o => !['TIMED_OUT', 'CANCELLED'].includes((o.status ?? '').toUpperCase()));
+  const latest = (activeOrders.length > 0 ? activeOrders : displayOrders)[0];
+  const getItemImage = (itemId: string) => {
+    const menuItem = menuItems.find(item => item.id === itemId);
+
+    return (menuItem as any)?.imageUrl ?? '';
+  };
+  const currentStep = latest ? getStepIndex(latest.status) : 0;
+  const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
 
   const cancelOrder = async () => {
     if (!latest) return;
@@ -101,8 +133,8 @@ export default function TrackingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           restaurantId: getGuestScope().restaurantId,
-          orderId:      apiId,
-          cancelled:    true,
+          orderId: apiId,
+          cancelled: true,
         }),
       });
       if (!res.ok) {
@@ -165,7 +197,7 @@ export default function TrackingPage() {
           </button>
           <div style={{ textAlign: 'center' }}>
             <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, color: D.text, margin: 0 }}>Order Tracking</h1>
-            {latest && <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Order #{latest.orderId.slice(0,8).toUpperCase()}</p>}
+            {latest && <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Order #{latest.orderId.slice(0, 8).toUpperCase()}</p>}
           </div>
           <button onClick={() => load()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <RefreshCw size={16} color={D.muted} className={loading ? 'animate-spin' : ''} />
@@ -221,9 +253,9 @@ export default function TrackingPage() {
             {!isCancelled && (
               <div style={{ background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 20, padding: '20px', marginBottom: 16 }}>
                 {STATUS_STEPS.map((step, i) => {
-                  const done    = i < currentStep;
+                  const done = i < currentStep;
                   const current = i === currentStep;
-                  const Icon    = step.icon;
+                  const Icon = step.icon;
                   return (
                     <div key={step.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: i < STATUS_STEPS.length - 1 ? 20 : 0, position: 'relative' }}>
                       {/* Connector line */}
@@ -253,8 +285,37 @@ export default function TrackingPage() {
               {(latest.lineItems ?? []).map((li, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < (latest.lineItems?.length ?? 0) - 1 ? `1px solid ${D.border}` : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: D.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🍽️</div>
-                    <div>
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
+                        background: D.card2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {getItemImage(li.itemId) ? (
+                        <Image
+                          src={getItemImage(li.itemId)}
+                          alt={li.name}
+                          width={48}
+                          height={48}
+                          unoptimized
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      ) : (
+                        '🍽️'
+                      )}
+                    </div>                    <div>
                       <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 14, fontWeight: 600, color: D.text, margin: 0 }}>{li.name}</p>
                       <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>× {li.quantity}</p>
                     </div>

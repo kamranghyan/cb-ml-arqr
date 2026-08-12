@@ -48,43 +48,71 @@ async function resolveTenant(restaurantId: string): Promise<string> {
 }
 
 async function forward(req: NextRequest, path: string[]) {
-  const restaurantId = restaurantIdFrom(path, req)
-  const tenantId     = await resolveTenant(restaurantId)
+  const isRestaurantCreate =
+    req.method === 'POST' &&
+    path.length === 1 &&
+    path[0] === 'restaurants'
 
-  if (!tenantId) {
-    return NextResponse.json(
-      {
-        error:
-          'We could not find that restaurant. Please scan the QR code on ' +
-          'your table again.',
-      },
-      { status: 404 },
-    )
+  let tenantId = ''
+
+  // Restaurant create ke waqt restaurantId abhi exist nahi karta.
+  // Isliye tenant lookup skip karo.
+  if (!isRestaurantCreate) {
+    const restaurantId = restaurantIdFrom(path, req)
+    tenantId = await resolveTenant(restaurantId)
+
+    if (!tenantId) {
+      return NextResponse.json(
+        {
+          error:
+            'We could not find that restaurant. Please scan the QR code on ' +
+            'your table again.',
+        },
+        { status: 404 },
+      )
+    }
   }
 
-  const upstream = `${API_BASE}/menus/${path.join('/')}${req.nextUrl.search}`
+  const upstream =
+    `${API_BASE}/menus/${path.join('/')}${req.nextUrl.search}`
 
-  // API Gateway drops a bare token — keep the Bearer scheme if one is present.
+  // API Gateway drops a bare token — keep Bearer scheme.
   let auth = req.headers.get('authorization') ?? ''
-  if (auth && !auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
+
+  if (auth && !auth.startsWith('Bearer ')) {
+    auth = `Bearer ${auth}`
+  }
 
   const ct = req.headers.get('content-type') ?? ''
+
   const headers: Record<string, string> = {
-    'X-Tenant-Id': tenantId,
+    ...(tenantId ? { 'X-Tenant-Id': tenantId } : {}),
     ...(auth ? { Authorization: auth } : {}),
-    ...(!ct.includes('multipart') ? { 'Content-Type': ct || 'application/json' } : {}),
+    ...(!ct.includes('multipart')
+      ? { 'Content-Type': ct || 'application/json' }
+      : {}),
   }
 
-  const init: RequestInit = { method: req.method, headers, cache: 'no-store' }
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+    cache: 'no-store',
+  }
+
   if (!['GET', 'HEAD'].includes(req.method)) {
-    init.body = ct.includes('multipart') ? await req.blob() : await req.text()
+    init.body = ct.includes('multipart')
+      ? await req.blob()
+      : await req.text()
   }
 
-  const res  = await fetch(upstream, init)
+  const res = await fetch(upstream, init)
   const text = await res.text()
 
   try {
-    return NextResponse.json(text ? JSON.parse(text) : {}, { status: res.status })
+    return NextResponse.json(
+      text ? JSON.parse(text) : {},
+      { status: res.status }
+    )
   } catch {
     return new NextResponse(text, { status: res.status })
   }

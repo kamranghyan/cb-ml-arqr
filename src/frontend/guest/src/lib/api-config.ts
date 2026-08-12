@@ -30,6 +30,17 @@ export const MENU_API = {
     `/api/menu/restaurants/${rid}/items`,
   item: (itemId: string, rid = RESTAURANT_ID) =>
     `/api/menu/restaurants/${rid}/items/${itemId}`,
+  categories: (rid = RESTAURANT_ID) =>
+    `/api/menu/restaurants/${rid}/categories`,
+}
+
+// ── ADDON_API — Extra Toppings / add-ons per menu item ─────────────────────
+// NOTE: inferred from addons.py's route decorators, not a confirmed schema
+// (the service/model files weren't in what was shared) — same /api/menu
+// proxy, same /menus/ prefix convention as everything else.
+export const ADDON_API = {
+  list: (itemId: string, rid = RESTAURANT_ID) =>
+    `/api/menu/restaurants/${rid}/items/${itemId}/addons`,
 }
 
 // ── AR_API — proxied through /api/ar ─────────────────────────────────────────

@@ -3,6 +3,22 @@
 import { Loader2, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
+// ── Color Schema (Matches your KDS page) ──────────────────────────────
+const BRAND = '#ff5723';
+const D = {
+  bg: '#111111',
+  card: '#1C1C1C',
+  card2: '#242424',
+  border: 'rgba(255,255,255,0.08)',
+  text: '#F5F0E8',
+  muted: '#9CA3AF',
+  subtle: '#6B7280',
+};
+const TONE = {
+  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
+  red: '#E1251B',
+};
+
 interface ConfirmDeleteModalProps {
   open: boolean;
   title?: string;
@@ -26,7 +42,6 @@ export default function ConfirmDeleteModal({
 
   const handleConfirm = async () => {
     if (deleting) return;
-
     try {
       setDeleting(true);
       await onConfirm();
@@ -38,136 +53,50 @@ export default function ConfirmDeleteModal({
   return (
     <div
       onClick={onCancel}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: 16,
-      }}
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: 420,
-          background: '#fff',
-          borderRadius: 16,
-          padding: 24,
-          boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
-        }}
+        className="w-full max-w-[420px] bg-[#1C1C1C] rounded-2xl p-6 shadow-2xl border border-[rgba(255,255,255,0.08)]"
       >
         {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: 18,
-          }}
-        >
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: '#FFF1F0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Trash2 size={21} color="#E1251B" />
+        <div className="flex justify-between items-start mb-4">
+          <div className="w-11 h-11 rounded-xl bg-[rgba(255,87,35,0.12)] flex items-center justify-center flex-shrink-0">
+            <Trash2 size={21} color="#ff8a5c" />
           </div>
 
           <button
             type="button"
             onClick={onCancel}
             disabled={deleting}
-            style={{
-              width: 32,
-              height: 32,
-              border: 'none',
-              background: 'transparent',
-              cursor: deleting ? 'not-allowed' : 'pointer',
-              color: '#687780',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 8,
-            }}
+            className="w-8 h-8 border-none bg-transparent cursor-pointer text-[#6B7280] hover:text-[#F5F0E8] flex items-center justify-center rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Content */}
-        <h3
-          style={{
-            margin: '0 0 8px',
-            fontSize: 18,
-            fontWeight: 800,
-            color: '#1A1A1A',
-          }}
-        >
+        <h3 className="text-lg font-extrabold text-[#F5F0E8] m-0 mb-2">
           {title}
         </h3>
 
-        <p
-          style={{
-            margin: 0,
-            color: '#687780',
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
+        <p className="text-sm text-[#9CA3AF] leading-relaxed m-0">
           {message}
         </p>
 
         {itemName && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: '10px 12px',
-              borderRadius: 8,
-              background: '#FFF8F1',
-              border: '1px solid #F0E8E0',
-              fontSize: 14,
-              fontWeight: 700,
-              color: '#1A1A1A',
-            }}
-          >
+          <div className="mt-3.5 px-3 py-2.5 rounded-lg bg-[#242424] border border-[rgba(255,255,255,0.08)] text-sm font-bold text-[#F5F0E8]">
             {itemName}
           </div>
         )}
 
         {/* Buttons */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 10,
-            marginTop: 24,
-          }}
-        >
+        <div className="flex justify-end gap-2.5 mt-6">
           <button
             type="button"
             onClick={onCancel}
             disabled={deleting}
-            style={{
-              padding: '9px 16px',
-              borderRadius: 8,
-              border: '1px solid #F0E8E0',
-              background: '#fff',
-              color: '#1A1A1A',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: deleting ? 'not-allowed' : 'pointer',
-              opacity: deleting ? 0.6 : 1,
-            }}
+            className="px-4 py-2.5 rounded-lg border border-[rgba(255,255,255,0.08)] bg-transparent text-[#F5F0E8] text-sm font-bold cursor-pointer hover:bg-[#242424] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -176,30 +105,11 @@ export default function ConfirmDeleteModal({
             type="button"
             onClick={handleConfirm}
             disabled={deleting}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 7,
-              padding: '9px 16px',
-              borderRadius: 8,
-              border: 'none',
-              background: '#E1251B',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: deleting ? 'not-allowed' : 'pointer',
-              minWidth: 100,
-              opacity: deleting ? 0.7 : 1,
-            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-none bg-[#E1251B] text-white text-sm font-bold cursor-pointer hover:bg-[#c41f18] transition-colors min-w-[100px] disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {deleting && (
-              <Loader2
-                size={15}
-                style={{ animation: 'spin 1s linear infinite' }}
-              />
+              <Loader2 size={15} className="animate-spin" />
             )}
-
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
