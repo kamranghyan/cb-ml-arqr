@@ -92,8 +92,11 @@ async def create_item(
 ):
     user, tenant_id = scope
     body = await parse_body(request)
+    
     coerce_bool(body, "isActive")
     coerce_int(body, "priceMinorUnits")
+    coerce_int(body, "prepTime")
+    coerce_int(body, "calories")
     if "allergens" in body and isinstance(body["allergens"], str):
         raw = body["allergens"].strip()
         body["allergens"] = (
@@ -118,6 +121,14 @@ async def create_item(
                 if assets.get("arModelKey"):
                     updates["arModelKey"] = assets["arModelKey"]
                     item.arModelUrl = assets.get("arModelUrl")
+                if assets.get("slides"):
+                    updates["slides"] = [
+                        {
+                            "position": slide["position"],
+                            "imageKey": slide["imageKey"],
+                        }
+                        for slide in assets["slides"]
+                    ]
                 if updates:
                     updates["version"] = item.version
 
@@ -138,25 +149,120 @@ async def create_item(
         raise BadRequestError(str(exc.errors)) from exc
 
 
-@router.put("/restaurants/{restaurantId}/items/{itemId}", summary="Update a menu item")
+@router.put(
+    "/restaurants/{restaurantId}/items/{itemId}",
+    summary="Update a menu item",
+)
 async def update_item(
     restaurantId: str,
     itemId: str,
     request: Request,
-    scope: Annotated[tuple[UserContext, str], Depends(restaurant_write_scope)],
+    scope: Annotated[
+        tuple[UserContext, str],
+        Depends(restaurant_write_scope),
+    ],
     svc: Annotated[MenuItemService, Depends(get_item_service)],
-    category_svc: Annotated[CategoryService, Depends(get_category_service)],
-    ):
+    category_svc: Annotated[
+        CategoryService,
+        Depends(get_category_service),
+    ],
+    s3_repo: Annotated[
+        S3Repository,
+        Depends(get_s3_repo),
+    ],
+):
     user, tenant_id = scope
-    body = await parse_body(request)
-    try:
-        if "categoryId" in body:
-          category = category_svc.get(tenant_id,restaurantId,body["categoryId"])
-          body["categoryName"] = category.name
 
-        return svc.update(tenant_id,restaurantId,itemId,body).to_dict()
+    body = await parse_body(request)
+
+    coerce_int(body, "priceMinorUnits")
+    coerce_int(body, "prepTime")
+    coerce_int(body, "calories")
+
+    try:
+        # Category validation
+        if "categoryId" in body:
+            category = category_svc.get(
+                tenant_id,
+                restaurantId,
+                body["categoryId"],
+            )
+            body["categoryName"] = category.name
+
+        # First update normal fields
+        item = svc.update(
+            tenant_id,
+            restaurantId,
+            itemId,
+            body,
+        )
+
+        # Handle multipart assets
+        ct = request.headers.get("content-type", "")
+
+        if "multipart/form-data" in ct:
+            try:
+                raw_event = build_gateway_event(
+                    await request.body(),
+                    ct,
+                )
+
+                assets = s3_repo.upload_item_assets(
+                    raw_event,
+                    restaurantId,
+                    itemId,
+                    tenant_id,
+                )
+
+                asset_updates = {}
+
+                if assets.get("imageKey"):
+                    asset_updates["imageKey"] = assets["imageKey"]
+
+                if assets.get("arModelKey"):
+                    asset_updates["arModelKey"] = assets["arModelKey"]
+
+                if assets.get("slides"):
+                    asset_updates["slides"] = [
+                        {
+                            "position": slide["position"],
+                            "imageKey": slide["imageKey"],
+                        }
+                        for slide in assets["slides"]
+                    ]
+
+                if asset_updates:
+                    asset_updates["version"] = item.version
+
+                    item = svc.update(
+                        tenant_id,
+                        restaurantId,
+                        itemId,
+                        asset_updates,
+                    )
+
+                # Inject generated URLs
+                if assets.get("imageUrl"):
+                    item.imageUrl = assets["imageUrl"]
+
+                if assets.get("arModelUrl"):
+                    item.arModelUrl = assets["arModelUrl"]
+
+            except Exception as exc:
+                log.warning(
+                    "item.assets.upload.failed",
+                    item_id=itemId,
+                    exc=str(exc),
+                )
+
+        return item.to_dict()
+
     except MenuItemNotFoundError as exc:
-        raise ResourceNotFoundError("MenuItem", itemId) from exc
+        raise ResourceNotFoundError(
+            "MenuItem",
+            itemId,
+        ) from exc
+
     except MenuItemConflictError as exc:
         raise BadRequestError(str(exc)) from exc
 
