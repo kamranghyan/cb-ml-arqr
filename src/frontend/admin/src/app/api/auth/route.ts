@@ -24,7 +24,7 @@ const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '7903hkujl9qeq67t
 const AUTH_API =
   process.env.NEXT_PUBLIC_AUTH_API_BASE ??
   'https://REPLACE-ME.execute-api.ap-south-1.amazonaws.com/dev'
-
+//
 const client = new CognitoIdentityProviderClient({ region: REGION })
 
 /** Forward to auth_svc and normalise its error envelope. */
