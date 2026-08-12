@@ -109,7 +109,32 @@ export default function KitchenDisplayPage() {
 
   const filtered = orders.filter(o => { if (filter === 'all') return o.status !== 'delivered'; if (filter === 'delivered') return o.status === 'delivered'; return o.status === filter; }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
   const counts = { pending: orders.filter(o => o.status === 'new').length, preparing: orders.filter(o => o.status === 'preparing').length, ready: orders.filter(o => o.status === 'ready').length };
+  const [currentDate, setCurrentDate] = useState('')
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date()
 
+      setClock(
+        [now.getHours(), now.getMinutes(), now.getSeconds()]
+          .map(x => String(x).padStart(2, '0'))
+          .join(':')
+      )
+
+      setCurrentDate(
+        now.toLocaleDateString('en-US', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        })
+      )
+    }
+
+    tick()
+
+    const id = setInterval(tick, 1000)
+
+    return () => clearInterval(id)
+  }, [])
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
@@ -173,9 +198,9 @@ export default function KitchenDisplayPage() {
           {/* Clock - always visible on mobile */}
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>{clock || '00:00:00'}</p>
-            <p className="hidden sm:block text-[8px] text-white/50 m-0">
-              {new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
-            </p>          </div>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
+              {currentDate}
+            </p>        </div>
 
           {/* Counts - visible on mobile */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
