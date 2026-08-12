@@ -290,6 +290,9 @@ def category_image_key(tenant_id: str, restaurant_id: str, category_id: str, ext
 def item_image_key(tenant_id: str, restaurant_id: str, item_id: str, ext: str) -> str:
     return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/items/{item_id}{ext}"
 
+def item_slide_image_key(tenant_id: str, restaurant_id: str, item_id: str, position: int, ext: str,) -> str:
+    return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/items/{item_id}/slide-{position}{ext}"
+    
 def item_ar_key(tenant_id: str, restaurant_id: str, item_id: str) -> str:
     return f"TENANT#{tenant_id}/restaurants/{restaurant_id}/ar-models/{item_id}.glb"
 
@@ -407,49 +410,202 @@ class S3Repository:
         return s3_key, self.get_read_url(s3_key)
 
     def upload_item_assets(
-        self, event: dict, restaurant_id: str, item_id: str, tenant_id: str
+    self, event: dict, restaurant_id: str, item_id: str, tenant_id: str,
     ) -> dict[str, Any]:
         """
-        Upload item image (file) and/or AR model (arFile) from one request.
-        Returns dict with imageKey, imageUrl, arModelKey, arModelUrl.
+        Upload item main image, gallery slides and/or AR model.
+
+        Multipart fields:
+            image / file -> main item image (slide 1)
+            slide2      -> gallery slide 2
+            slide3      -> gallery slide 3
+            slide4      -> gallery slide 4
+            slide5      -> gallery slide 5
+            slide6      -> gallery slide 6
+            arModel     -> AR .glb model
+
+        Maximum gallery size: 6 images total.
         """
-        form   = parse_multipart(event)
-        result = {
-            "imageKey":   None,
-            "imageUrl":   None,
+
+        form = parse_multipart(event)
+
+        result: dict[str, Any] = {
+            "imageKey": None,
+            "imageUrl": None,
+            "slides": [],
             "arModelKey": None,
             "arModelUrl": None,
         }
 
-        # Upload image
-        file_info = form.files.get("image") or form.files.get("file")
-        if file_info and file_info["bytes"]:
-            try:
-                ext    = validate_image(file_info["bytes"], file_info["content_type"])
-                s3_key = item_image_key(tenant_id, restaurant_id, item_id, ext)
-                self.upload(file_info["bytes"], s3_key, file_info["content_type"])
-                result["imageKey"] = s3_key
-                result["imageUrl"] = self.get_read_url(s3_key)
-            except Exception as exc:
-                log.warning("Item image upload failed", extra={"error": str(exc)})
-        else:
-            log.info("No image file field found", extra={"fields": list(form.files.keys())})
+        # ---------------------------------------------------------
+        # Main image / Slide 1
+        # ---------------------------------------------------------
 
-        # Upload AR model
+        image_info = form.files.get("image") or form.files.get("file")
+
+        if image_info and image_info["bytes"]:
+            try:
+                ext = validate_image(
+                    image_info["bytes"],
+                    image_info["content_type"],
+                )
+
+                s3_key = item_image_key(
+                    tenant_id,
+                    restaurant_id,
+                    item_id,
+                    ext,
+                )
+
+                self.upload(
+                    image_info["bytes"],
+                    s3_key,
+                    image_info["content_type"],
+                )
+
+                image_url = self.get_read_url(s3_key)
+
+                result["imageKey"] = s3_key
+                result["imageUrl"] = image_url
+
+                # Slide 1 is always the main image
+                result["slides"].append({
+                    "position": 1,
+                    "imageKey": s3_key,
+                    "imageUrl": image_url,
+                })
+
+                log.info(
+                    "Item main image uploaded",
+                    extra={
+                        "key": s3_key,
+                        "position": 1,
+                    },
+                )
+
+            except Exception as exc:
+                log.warning(
+                    "Item image upload failed",
+                    extra={"error": str(exc)},
+                )
+
+        else:
+            log.info(
+                "No item image file field found",
+                extra={
+                    "fields": list(form.files.keys()),
+                },
+            )
+
+        # ---------------------------------------------------------
+        # Additional gallery slides 2 - 6
+        # ---------------------------------------------------------
+
+        for position in range(2, 7):
+            field_name = f"slide{position}"
+            slide_info = form.files.get(field_name)
+
+            if not slide_info or not slide_info["bytes"]:
+                continue
+
+            try:
+                ext = validate_image(
+                    slide_info["bytes"],
+                    slide_info["content_type"],
+                )
+
+                s3_key = item_slide_image_key(
+                    tenant_id,
+                    restaurant_id,
+                    item_id,
+                    position,
+                    ext,
+                )
+
+                self.upload(
+                    slide_info["bytes"],
+                    s3_key,
+                    slide_info["content_type"],
+                )
+
+                image_url = self.get_read_url(s3_key)
+
+                result["slides"].append({
+                    "position": position,
+                    "imageKey": s3_key,
+                    "imageUrl": image_url,
+                })
+
+                log.info(
+                    "Item gallery slide uploaded",
+                    extra={
+                        "field": field_name,
+                        "position": position,
+                        "key": s3_key,
+                    },
+                )
+
+            except Exception as exc:
+                log.warning(
+                    "Item gallery slide upload failed",
+                    extra={
+                        "field": field_name,
+                        "position": position,
+                        "error": str(exc),
+                    },
+                )
+
+        # ---------------------------------------------------------
+        # AR Model
+        # ---------------------------------------------------------
+
         ar_info = form.files.get("arModel") or form.files.get("arFile")
+
         if ar_info and ar_info["bytes"]:
             try:
                 ct = ar_info["content_type"] or "model/gltf-binary"
+
                 if ct == "application/octet-stream":
                     ct = "model/gltf-binary"
+
                 validate_ar(ar_info["bytes"], ct)
-                s3_key = item_ar_key(tenant_id, restaurant_id, item_id)
-                self.upload(ar_info["bytes"], s3_key, ct)
+
+                s3_key = item_ar_key(
+                    tenant_id,
+                    restaurant_id,
+                    item_id,
+                )
+
+                self.upload(
+                    ar_info["bytes"],
+                    s3_key,
+                    ct,
+                )
+
                 result["arModelKey"] = s3_key
                 result["arModelUrl"] = self.get_read_url(s3_key)
+
+                log.info(
+                    "AR model uploaded",
+                    extra={
+                        "key": s3_key,
+                    },
+                )
+
             except Exception as exc:
-                log.warning("AR model upload failed", extra={"error": str(exc)})
+                log.warning(
+                    "AR model upload failed",
+                    extra={"error": str(exc)},
+                )
+
         else:
-            log.info("No arFile field found", extra={"fields": list(form.files.keys())})
+            log.info(
+                "No arModel field found",
+                extra={
+                    "fields": list(form.files.keys()),
+                },
+            )
 
         return result
+
+    

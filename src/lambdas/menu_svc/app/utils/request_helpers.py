@@ -33,6 +33,7 @@ async def parse_body(request: Request) -> dict:
         parse_json_field(body, "cuisineTags")
         parse_json_field(body, "socialMedia")
         parse_json_field(body, "sizes")
+        parse_json_field(body, "slides")
 
         # Convert primitive form values
         coerce_bool(body, "isActive")

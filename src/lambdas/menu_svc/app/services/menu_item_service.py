@@ -18,7 +18,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-from app.models.menu_item import MenuItem, MenuItemSize
+from app.models.menu_item import MenuItem, MenuItemSize, MenuItemSlide
 from app.services.cache_service import CacheService
 from app.services.s3_service import S3Service
 from app.utils.dynamo_helpers import (
@@ -63,6 +63,16 @@ class MenuItemService:
             for size in sizes
         ]
     # ── Private helpers (single-key: itemId) ──────────────────────────────
+
+    def _inject_asset_urls(self, item: MenuItem) -> MenuItem:
+        item.imageUrl = self._s3.generate_read_url(item.imageKey)
+        item.arModelUrl = self._s3.generate_read_url(item.arModelKey)
+        
+        for slide in item.slides:
+            slide.imageUrl = self._s3.generate_read_url(slide.imageKey)
+            
+        return item
+
 
     @retry(retries=3, base_delay=0.1, exceptions=(ClientError,))
     def _ddb_get(self, item_id: str) -> Optional[dict]:
@@ -169,10 +179,22 @@ class MenuItemService:
             version=1,
             createdAt=now,
             updatedAt=now,
+
+            prepTime=(
+                int(body["prepTime"])
+                if body.get("prepTime") is not None
+                else None
+            ),
+            calories=(
+                int(body["calories"])
+                if body.get("calories") is not None
+                else None
+            ),
+
             imageKey=body.get("imageKey"),
             allergens=list(body.get("allergens") or []),
             arModelKey=body.get("arModelKey"),
-            sizes=self._parse_sizes(body.get("sizes")), 
+            sizes=self._parse_sizes(body.get("sizes")),
         )
         menu_item.validate()
 
@@ -204,9 +226,7 @@ class MenuItemService:
             raise MenuItemNotFoundError(f"Item {item_id} not found")
         
         item = MenuItem.from_dict(raw)
-        item.imageUrl = self._s3.generate_read_url(item.imageKey)
-        item.arModelUrl = self._s3.generate_read_url(item.arModelKey)
-        return item
+        return self._inject_asset_urls(item)
 
     def list(
         self,
@@ -234,10 +254,10 @@ class MenuItemService:
         else:
             raw_items, lek = self._ddb_list_by_restaurant(restaurant_id, exclusive_start)
 
-        menu_items = [MenuItem.from_dict(i) for i in raw_items]
-        for mi in menu_items:
-            mi.imageUrl = self._s3.generate_read_url(mi.imageKey)
-            mi.arModelUrl = self._s3.generate_read_url(mi.arModelKey)
+        menu_items = [
+            self._inject_asset_urls(MenuItem.from_dict(i))
+            for i in raw_items
+        ]
 
         if exclusive_start is None and category_id is None and lek is None:
             self._cache.set(
@@ -263,35 +283,41 @@ class MenuItemService:
             "description",
             "priceMinorUnits",
             "isActive",
+            "calories",
+            "prepTime",
             "imageKey",
             "allergens",
             "arModelKey",
             "categoryId",
             "categoryName",
-            "sizes"
+            "sizes",
+            "slides",
         }
 
         updates = {k: v for k, v in body.items() if k in mutable}
 
-        if "sizes" in body:
-            parsed_sizes = self._parse_sizes(body["sizes"])
-
-            if parsed_sizes is not None:
-                seen_sizes = set()
-
-                for size in parsed_sizes:
-                    size.validate()
-
-                    if size.name in seen_sizes:
-                        raise ValueError(f"duplicate size: {size.name}")
-
-                    seen_sizes.add(size.name)
-
-            updates["sizes"] = (
-                [size.to_dict() for size in parsed_sizes]
-                if parsed_sizes is not None
-                else None
+        if "slides" in updates:
+            current_item = self.get(
+                tenant_id,
+                restaurant_id,
+                item_id,
             )
+
+            existing_slides = {
+                slide.position: slide
+                for slide in current_item.slides
+            }
+
+            incoming_slides = updates["slides"] or []
+
+            for slide in incoming_slides:
+                position = int(slide["position"])
+                existing_slides[position] = MenuItemSlide.from_dict(slide)
+
+            updates["slides"] = [
+                slide.to_dict(exclude_none=True)
+                for _, slide in sorted(existing_slides.items())
+            ]
 
         updates["updatedAt"] = utc_now()
 
@@ -306,7 +332,8 @@ class MenuItemService:
             "tenantId": tenant_id, "restaurantId": restaurant_id,
             "itemId": item_id, "newVersion": expected_version + 1,
         })
-        return MenuItem.from_dict(attrs)
+        item = MenuItem.from_dict(attrs)
+        return self._inject_asset_urls(item)
 
     def delete(self, tenant_id: str, restaurant_id: str, item_id: str) -> None:
         self.get(tenant_id, restaurant_id, item_id)  # 404 guard
