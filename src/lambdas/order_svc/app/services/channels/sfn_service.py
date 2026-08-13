@@ -51,10 +51,19 @@ class StepFunctionsService:
             "tenantId":              request.tenantId,
             "restaurantId":          request.restaurantId,
             "tableId":               request.tableId,
+
+            "orderType":              request.orderType,
+            "customerName":           request.customerName,
+            "contactPhone":           request.contactPhone,
+            "pickupTime":             request.pickupTime,
+            "deliveryAddress":        request.deliveryAddress,
+            "deliveryFeeMinorUnits":  request.deliveryFeeMinorUnits,
+
             "totalAmountMinorUnits": request.totalAmountMinorUnits,
             "currencyCode":          request.currencyCode,
             "lineItems":             [item.model_dump() for item in request.lineItems],
             "guestConnectionId":     request.guestConnectionId,
+
             "kitchenAccepted":       False,
             "foodReady":             False,
             "delivered":             False,
@@ -101,6 +110,12 @@ class StepFunctionsService:
             "foodReady":             update.foodReady,
             "delivered":             update.delivered,
             "cancelled":             update.cancelled,
+            "orderType":             order.get("orderType", "dine_in"),
+            "customerName":          order.get("customerName"),
+            "pickupTime":            order.get("pickupTime"),
+            "deliveryAddress":       order.get("deliveryAddress"),
+            "contactPhone":          order.get("contactPhone"),
+            "deliveryFeeMinorUnits": int(order.get("deliveryFeeMinorUnits", 0)),
         }
 
         try:
