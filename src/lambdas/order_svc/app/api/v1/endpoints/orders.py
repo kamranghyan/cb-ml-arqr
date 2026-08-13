@@ -85,9 +85,15 @@ async def create_order(
         ],
         totalAmountMinorUnits=body.totalAmountMinorUnits,
         guestConnectionId=body.guestConnectionId,
+
         orderType=body.orderType,
+
+        customerName=body.customerName,
+        pickupTime=body.pickupTime,
+
         deliveryAddress=body.deliveryAddress,
         contactPhone=body.contactPhone,
+        deliveryFeeMinorUnits=body.deliveryFeeMinorUnits,
     )
 
     # Menu validation (skippable in dev/test)

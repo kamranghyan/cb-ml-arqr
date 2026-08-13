@@ -165,14 +165,102 @@ Resources:
       StateMachineName: !Sub order-state-machine-${Stage}
       RoleArn: !GetAtt StepFunctionsRole.Arn
       Definition:
-        Comment: >-
-          Order lifecycle. Currently publishes the RECEIVED notification and
-          completes. The kitchen/ready/delivered stages are not wired yet: they
-          need order_svc to expose a non-HTTP entry point (its handler is
-          Mangum-only today) and a callback mechanism for kitchen acceptance,
-          since Wait + Choice cannot observe state changed outside the execution.
-        StartAt: NotifyReceived
+        Comment: Order notification workflow
+        StartAt: DetermineStatus
+
         States:
+
+          DetermineStatus:
+            Type: Choice
+            Choices:
+
+              - Variable: "$.cancelled"
+                BooleanEquals: true
+                Next: NotifyCancelled
+
+              - Variable: "$.delivered"
+                BooleanEquals: true
+                Next: NotifyDelivered
+
+              - Variable: "$.foodReady"
+                BooleanEquals: true
+                Next: NotifyReady
+
+              - Variable: "$.kitchenAccepted"
+                BooleanEquals: true
+                Next: NotifyPreparing
+
+            Default: NotifyReceived
+
+
+          NotifyCancelled:
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage
+            Parameters:
+              QueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/notifications-queue-${Stage}"
+              MessageBody:
+                orderId.$: "$.orderId"
+                tenantId.$: "$.tenantId"
+                status: CANCELLED
+                message: Your order has been cancelled.
+            Retry:
+              - ErrorEquals: [States.ALL]
+                MaxAttempts: 2
+                IntervalSeconds: 2
+            Next: OrderSuccess
+
+
+          NotifyDelivered:
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage
+            Parameters:
+              QueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/notifications-queue-${Stage}"
+              MessageBody:
+                orderId.$: "$.orderId"
+                tenantId.$: "$.tenantId"
+                status: DELIVERED
+                message: Your order has been delivered.
+            Retry:
+              - ErrorEquals: [States.ALL]
+                MaxAttempts: 2
+                IntervalSeconds: 2
+            Next: OrderSuccess
+
+
+          NotifyReady:
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage
+            Parameters:
+              QueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/notifications-queue-${Stage}"
+              MessageBody:
+                orderId.$: "$.orderId"
+                tenantId.$: "$.tenantId"
+                status: READY
+                message: Your order is ready.
+            Retry:
+              - ErrorEquals: [States.ALL]
+                MaxAttempts: 2
+                IntervalSeconds: 2
+            Next: OrderSuccess
+
+
+          NotifyPreparing:
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage
+            Parameters:
+              QueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/notifications-queue-${Stage}"
+              MessageBody:
+                orderId.$: "$.orderId"
+                tenantId.$: "$.tenantId"
+                status: PREPARING
+                message: Your order is being prepared.
+            Retry:
+              - ErrorEquals: [States.ALL]
+                MaxAttempts: 2
+                IntervalSeconds: 2
+            Next: OrderSuccess
+
+
           NotifyReceived:
             Type: Task
             Resource: arn:aws:states:::sqs:sendMessage
@@ -183,13 +271,13 @@ Resources:
                 tenantId.$: "$.tenantId"
                 status: RECEIVED
                 message: Your order has been received.
-            # No ResultPath: CloudFormation rejects null values, and the next
-            # state is terminal so the SQS result is not needed downstream.
             Retry:
               - ErrorEquals: [States.ALL]
                 MaxAttempts: 2
                 IntervalSeconds: 2
             Next: OrderSuccess
+
+
           OrderSuccess:
             Type: Succeed
 
