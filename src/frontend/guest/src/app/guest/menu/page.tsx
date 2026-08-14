@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
+import GuestTopBar from '@/components/guest/GuestTopBar';
 
 const BRAND = '#ff5723';
 
@@ -125,9 +126,9 @@ function MenuContent() {
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans', sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-
+      <GuestTopBar />
       {/* ── Header ── */}
-      <div style={{ padding: '52px 20px 0', background: D.bg, position: 'sticky', top: 0, zIndex: 50 }}>
+      <div style={{ padding: '35px 20px 0', background: D.bg, position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <button onClick={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ArrowLeft size={18} color={D.text} />
@@ -250,7 +251,7 @@ function MenuContent() {
 
       {/* Sticky cart bar */}
       {cartCount > 0 && (
-        <div style={{ position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: 440, zIndex: 99 }}>
+        <div style={{ position: 'fixed', bottom: 82, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: 440, zIndex: 99 }}>
           <button onClick={() => router.push('/guest/cart')}
             style={{ width: '100%', height: 52, borderRadius: 26, background: BRAND, color: '#fff', border: 'none', fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', cursor: 'pointer', boxShadow: '0 8px 24px rgba(255,87,35,0.4)' }}>
             <span style={{ background: 'rgba(255,255,255,0.25)', borderRadius: 20, padding: '2px 10px', fontSize: 13 }}>{cartCount}</span>

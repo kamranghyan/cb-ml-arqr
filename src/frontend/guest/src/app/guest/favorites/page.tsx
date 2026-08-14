@@ -7,6 +7,7 @@ import { useFavoritesStore } from '@/lib/favorites-store';
 import { useCartStore } from '@/lib/store';
 import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
+import GuestTopBar from '@/components/guest/GuestTopBar';
 
 const BRAND = '#ff5723';
 
@@ -72,33 +73,33 @@ export default function FavoritesPage() {
         flexDirection: 'column',
       }}
     >
+      <GuestTopBar />
       {/* Header */}
-      <div style={{ padding: '52px 20px 16px' }}>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: BRAND,
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-          }}
-          aria-label="Back"
-        >
-          <ChevronLeft size={28} strokeWidth={2.5} />
-        </button>
-
+      <div style={{ padding: '35px 20px 16px' }}>
         <div
           style={{
             display: 'flex',
-            alignItems: 'baseline',
+            alignItems: 'center',
             gap: 10,
             marginTop: 8,
           }}
         >
+          <button
+            type="button"
+            onClick={() => router.back()}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: BRAND,
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+            aria-label="Back"
+          >
+            <ChevronLeft size={28} strokeWidth={2.5} />
+          </button>
           <h1
             style={{
               fontFamily: "'Baloo 2', sans-serif",

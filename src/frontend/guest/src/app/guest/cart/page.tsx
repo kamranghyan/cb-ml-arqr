@@ -9,6 +9,7 @@ import { useCartStore } from '@/lib/store';
 import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
+import GuestTopBar from '@/components/guest/GuestTopBar';
 
 const BRAND = '#ff5723';
 
@@ -174,23 +175,25 @@ export default function CartPage() {
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-
+      <GuestTopBar />
       {/* Header */}
-      <div style={{ padding: '52px 20px 16px' }}>
+      <div style={{ padding: '35px 20px 25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
-            <ChevronLeft size={28} strokeWidth={2.5} />
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+            <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
+              <ChevronLeft size={28} strokeWidth={2.5} />
+            </button>
+            <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart</h1>
+            <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span>
+          </div>
           {items.length > 0 && (
             <button onClick={() => setEditMode(e => !e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 600, color: BRAND }}>
               {editMode ? 'Done' : 'Edit'}
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart</h1>
-          <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span>
-        </div>
+
       </div>
 
       {/* Scrollable - ADDED extra padding bottom to make room for BottomNav */}
@@ -265,12 +268,12 @@ export default function CartPage() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', width: 'fit-content' }}>
                       <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
+                        style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
                         <Minus size={15} />
                       </button>
-                      <span style={{ width: 38, height: 40, background: D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text }}>{item.quantity}</span>
+                      <span style={{ width: 38, height: 40, background: D.card,border: `1.5px solid ${D.border}`,borderBottom:'none',borderTop:'none' , display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text }}>{item.quantity}</span>
                       <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        style={{ width: 38, height: 40, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
+                        style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
                         <Plus size={15} />
                       </button>
                     </div>

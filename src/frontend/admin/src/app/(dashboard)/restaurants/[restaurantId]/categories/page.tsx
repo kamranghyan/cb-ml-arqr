@@ -112,8 +112,6 @@ export default function CategoriesPage() {
   return (
     <div style={{ 
       padding: '24px 20px 40px', 
-      maxWidth: 900, 
-      margin: '0 auto',
       background: colors.bg,
       minHeight: '100vh',
     }}>

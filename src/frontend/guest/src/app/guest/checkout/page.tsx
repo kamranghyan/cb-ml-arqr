@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
+import GuestTopBar from '@/components/guest/GuestTopBar';
 
 const BRAND = '#ff5723';
 
@@ -356,11 +357,11 @@ export default function CheckoutPage() {
   };
 
   const D = isDark ? {
-    bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
-    text: '#F5F0E8', muted: '#9CA3AF',
+    bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)', selected: "rgba(255, 87, 35, 0.12)",
+    text: '#F5F0E8', muted: '#9CA3AF', placeholder: '#6B7280',
   } : {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-    text: '#000000', muted: '#6B6B6B',
+    text: '#000000', muted: '#6B6B6B', placeholder: '#6B6B6B',
   };
 
   // ── Success screen ───────────────────────────────────────────────────────────
@@ -395,15 +396,15 @@ export default function CheckoutPage() {
   // ── Checkout form ────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+      <GuestTopBar />
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 24px' }}>
-
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 124px' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '20px 0 28px' }}>
           <button onClick={() => router.back()} style={{ position: 'absolute', left: 0, background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
             <ChevronLeft size={28} strokeWidth={2.5} />
           </button>
-          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 24, fontWeight: 700, color: D.text, margin: 0 }}>Checkout</h1>
+          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 24, fontWeight: 700, color: BRAND, margin: 0 }}>Checkout</h1>
         </div>
 
         {/* Order Type */}
@@ -423,7 +424,13 @@ export default function CheckoutPage() {
         {/* Table Number - Only for Dine In */}
         {showTableNumber && (
           <>
-            <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>
+            <h2 style={{
+              fontFamily: "'Baloo 2', sans-serif",
+              fontSize: 19,
+              fontWeight: 700,
+              color: D.text,
+              margin: '0 0 14px'
+            }}>
               Table Number
             </h2>
             <div style={{
@@ -436,15 +443,16 @@ export default function CheckoutPage() {
                 width: '100%',
                 height: 56,
                 borderRadius: 14,
-                background: BRAND,
+                background: D.card,
+                border: `2px solid ${D.border}`,
                 display: 'flex',
                 alignItems: 'center',
                 padding: '0 18px',
                 gap: 12,
               }}>
-                <MapPin size={20} color="rgba(255,255,255,0.7)" />
+                <MapPin size={20} color={D.muted} />
                 <span style={{
-                  color: '#fff',
+                  color: D.text,
                   fontSize: 17,
                   fontWeight: 500,
                 }}>
@@ -458,7 +466,13 @@ export default function CheckoutPage() {
         {/* Delivery Fields */}
         {showDeliveryFields && (
           <>
-            <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>
+            <h2 style={{
+              fontFamily: "'Baloo 2', sans-serif",
+              fontSize: 19,
+              fontWeight: 700,
+              color: D.text,
+              margin: '0 0 14px'
+            }}>
               Delivery Details
             </h2>
             <input
@@ -470,14 +484,26 @@ export default function CheckoutPage() {
                 width: '100%',
                 height: 56,
                 borderRadius: 14,
-                border: 'none',
-                background: BRAND,
-                color: '#fff',
+                border: `1.5px solid ${D.border}`,
+                background: D.card,
+                color: D.text,
                 fontSize: 16,
                 padding: '0 18px',
                 marginBottom: 12,
                 boxSizing: 'border-box',
-                fontFamily: "'DM Sans',sans-serif"
+                fontFamily: "'DM Sans',sans-serif",
+                outline: 'none',
+                transition: 'border-color 0.2s ease',
+                // 🔥 Add placeholder color
+                ...(D.placeholder ? { '::placeholder': { color: D.placeholder, opacity: 0.7 } } : {})
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = BRAND;
+                e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = D.border;
+                e.target.style.boxShadow = 'none';
               }}
             />
             <input
@@ -490,47 +516,190 @@ export default function CheckoutPage() {
                 width: '100%',
                 height: 56,
                 borderRadius: 14,
-                border: 'none',
-                background: BRAND,
-                color: '#fff',
+                border: `1.5px solid ${D.border}`,
+                background: D.card,
+                color: D.text,
                 fontSize: 16,
                 padding: '0 18px',
                 marginBottom: 28,
                 boxSizing: 'border-box',
-                fontFamily: "'DM Sans',sans-serif"
+                fontFamily: "'DM Sans',sans-serif",
+                outline: 'none',
+                transition: 'border-color 0.2s ease',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = BRAND;
+                e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = D.border;
+                e.target.style.boxShadow = 'none';
               }}
             />
           </>
         )}
 
         {/* Customer Details */}
-        <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Customer Details</h2>
-        <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Full Name" className="checkout-input"
-          style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: BRAND, color: '#fff', fontSize: 16, padding: '0 18px', marginBottom: 12, boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif" }} />
-        <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone Number" type="tel" className="checkout-input"
-          style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: BRAND, color: '#fff', fontSize: 16, padding: '0 18px', marginBottom: 28, boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif" }} />
+        <h2 style={{
+          fontFamily: "'Baloo 2', sans-serif",
+          fontSize: 19,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 14px'
+        }}>
+          Customer Details
+        </h2>
+        <input
+          value={fullName}
+          onChange={e => setFullName(e.target.value)}
+          placeholder="Full Name"
+          className="checkout-input"
+          style={{
+            width: '100%',
+            height: 56,
+            borderRadius: 14,
+            border: `1.5px solid ${D.border}`,
+            background: D.card,
+            color: D.text,
+            fontSize: 16,
+            padding: '0 18px',
+            marginBottom: 12,
+            boxSizing: 'border-box',
+            fontFamily: "'DM Sans',sans-serif",
+            outline: 'none',
+            transition: 'border-color 0.2s ease',
+          }}
+          onFocus={e => {
+            e.target.style.borderColor = BRAND;
+            e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = D.border;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
+        <input
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          placeholder="Phone Number"
+          type="tel"
+          className="checkout-input"
+          style={{
+            width: '100%',
+            height: 56,
+            borderRadius: 14,
+            border: `1.5px solid ${D.border}`,
+            background: D.card,
+            color: D.text,
+            fontSize: 16,
+            padding: '0 18px',
+            marginBottom: 28,
+            boxSizing: 'border-box',
+            fontFamily: "'DM Sans',sans-serif",
+            outline: 'none',
+            transition: 'border-color 0.2s ease',
+          }}
+          onFocus={e => {
+            e.target.style.borderColor = BRAND;
+            e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = D.border;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
 
         {/* Special Note */}
-        <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Special Note (Optional)</h2>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Type here…." rows={4} className="checkout-input"
-          style={{ width: '100%', borderRadius: 14, border: 'none', background: BRAND, color: '#fff', fontSize: 16, padding: '16px 18px', marginBottom: 28, resize: 'none', boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif" }} />
+        <h2 style={{
+          fontFamily: "'Baloo 2', sans-serif",
+          fontSize: 19,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 14px'
+        }}>
+          Special Note (Optional)
+        </h2>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Type here…."
+          rows={4}
+          className="checkout-input"
+          style={{
+            width: '100%',
+            borderRadius: 14,
+            border: `1.5px solid ${D.border}`,
+            background: D.card,
+            color: D.text,
+            fontSize: 16,
+            padding: '16px 18px',
+            marginBottom: 28,
+            resize: 'none',
+            boxSizing: 'border-box',
+            fontFamily: "'DM Sans',sans-serif",
+            outline: 'none',
+            transition: 'border-color 0.2s ease',
+          }}
+          onFocus={e => {
+            e.target.style.borderColor = BRAND;
+            e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = D.border;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
 
         {/* Payment Method */}
         <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Payment Method</h2>
         <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
           {PAYMENT_METHODS.map(m => {
             const selected = paymentMethod === m;
+            // 🔥 Disable Card and Digital Wallet
+            const isDisabled = m === 'Card' || m === 'Digital Wallet';
             return (
-              <button key={m} onClick={() => setPaymentMethod(m)}
-                style={{ flex: 1, height: 56, borderRadius: 14, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, color: selected ? '#fff' : BRAND, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+              <button
+                key={m}
+                onClick={() => {
+                  if (isDisabled) return; // 🔥 Prevent click on disabled buttons
+                  setPaymentMethod(m);
+                }}
+                style={{
+                  flex: 1,
+                  height: 56,
+                  borderRadius: 14,
+                  border: `2px solid ${BRAND}`,
+                  background: selected ? BRAND : D.card,
+                  color: selected ? '#fff' : BRAND,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  opacity: isDisabled ? 0.4 : 1,
+                  position: 'relative',
+                }}>
                 {m}
+                {isDisabled && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    fontSize: 8,
+                    background: D.bg,
+                    color: D.muted,
+                    padding: '1px 6px',
+                    borderRadius: 10,
+                    border: `1px solid ${D.border}`,
+                  }}>
+                    Soon
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* Card Payment UI */}
-        {showCardFields && (
+        {/* ── Card Payment UI (DISABLED) ── */}
+        {/* showCardFields && (
           <div style={{
             background: D.card,
             border: `1.5px solid ${D.border}`,
@@ -538,119 +707,12 @@ export default function CheckoutPage() {
             padding: '20px',
             marginBottom: 20,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <CreditCard size={20} color={BRAND} />
-              <span style={{ fontSize: 16, fontWeight: 700, color: D.text }}>Card Details</span>
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: D.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Lock size={14} /> Secure
-              </span>
-            </div>
-
-            <div style={{ position: 'relative', marginBottom: 12 }}>
-              <input
-                value={cardNumber}
-                onChange={handleCardNumberChange}
-                placeholder="Card Number"
-                className="checkout-input"
-                maxLength={19}
-                style={{
-                  width: '100%',
-                  height: 50,
-                  borderRadius: 12,
-                  border: `1.5px solid ${D.border}`,
-                  background: D.bg,
-                  color: D.text,
-                  fontSize: 16,
-                  padding: '0 16px',
-                  paddingLeft: 44,
-                  boxSizing: 'border-box',
-                  fontFamily: "'DM Sans',sans-serif",
-                  outline: 'none',
-                }}
-              />
-              <CreditCard size={18} color={D.muted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  value={cardExpiry}
-                  onChange={handleExpiryChange}
-                  placeholder="MM/YY"
-                  className="checkout-input"
-                  maxLength={5}
-                  style={{
-                    width: '100%',
-                    height: 50,
-                    borderRadius: 12,
-                    border: `1.5px solid ${D.border}`,
-                    background: D.bg,
-                    color: D.text,
-                    fontSize: 16,
-                    padding: '0 16px',
-                    boxSizing: 'border-box',
-                    fontFamily: "'DM Sans',sans-serif",
-                    outline: 'none',
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  value={cardCvv}
-                  onChange={handleCvvChange}
-                  placeholder="CVV"
-                  className="checkout-input"
-                  maxLength={4}
-                  type="password"
-                  style={{
-                    width: '100%',
-                    height: 50,
-                    borderRadius: 12,
-                    border: `1.5px solid ${D.border}`,
-                    background: D.bg,
-                    color: D.text,
-                    fontSize: 16,
-                    padding: '0 16px',
-                    boxSizing: 'border-box',
-                    fontFamily: "'DM Sans',sans-serif",
-                    outline: 'none',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ position: 'relative', marginTop: 12 }}>
-              <input
-                value={cardName}
-                onChange={e => setCardName(e.target.value)}
-                placeholder="Name on Card"
-                className="checkout-input"
-                style={{
-                  width: '100%',
-                  height: 50,
-                  borderRadius: 12,
-                  border: `1.5px solid ${D.border}`,
-                  background: D.bg,
-                  color: D.text,
-                  fontSize: 16,
-                  padding: '0 16px',
-                  boxSizing: 'border-box',
-                  fontFamily: "'DM Sans',sans-serif",
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: D.muted, padding: '4px 12px', borderRadius: 4, background: isDark ? '#2d2d2d' : '#f0f0f0' }}>💳 Visa</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: D.muted, padding: '4px 12px', borderRadius: 4, background: isDark ? '#2d2d2d' : '#f0f0f0' }}>💳 Mastercard</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: D.muted, padding: '4px 12px', borderRadius: 4, background: isDark ? '#2d2d2d' : '#f0f0f0' }}>💳 Amex</span>
-            </div>
+            // ... card fields
           </div>
-        )}
+        ) */}
 
-        {/* Digital Wallet UI */}
-        {showWalletFields && (
+        {/* ── Digital Wallet UI (DISABLED) ── */}
+        {/* showWalletFields && (
           <div style={{
             background: D.card,
             border: `1.5px solid ${D.border}`,
@@ -658,75 +720,9 @@ export default function CheckoutPage() {
             padding: '20px',
             marginBottom: 20,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <Wallet size={20} color={BRAND} />
-              <span style={{ fontSize: 16, fontWeight: 700, color: D.text }}>Digital Wallet</span>
-            </div>
-
-            <p style={{ fontSize: 13, color: D.muted, marginBottom: 16 }}>
-              Select your preferred digital wallet to complete the payment
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {['EasyPaisa', 'JazzCash', 'SadaPay', 'NayaPay'].map(wallet => (
-                <button
-                  key={wallet}
-                  onClick={() => setWalletProvider(wallet)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: '14px 16px',
-                    borderRadius: 12,
-                    border: `2px solid ${walletProvider === wallet ? BRAND : D.border}`,
-                    background: walletProvider === wallet ? 'rgba(255,87,35,0.08)' : D.bg,
-                    cursor: 'pointer',
-                    width: '100%',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    background: isDark ? '#333' : '#f0f0f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 20,
-                  }}>
-                    {wallet === 'EasyPaisa' && '📱'}
-                    {wallet === 'JazzCash' && '📲'}
-                    {wallet === 'SadaPay' && '💳'}
-                    {wallet === 'NayaPay' && '🏦'}
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: D.text, margin: 0 }}>{wallet}</p>
-                    <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Pay with {wallet}</p>
-                  </div>
-                  {walletProvider === wallet && (
-                    <Check size={20} color={BRAND} />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div style={{
-              marginTop: 16,
-              padding: '12px 16px',
-              borderRadius: 10,
-              background: isDark ? 'rgba(255,87,35,0.15)' : 'rgba(255,87,35,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}>
-              <Shield size={16} color={BRAND} />
-              <span style={{ fontSize: 12, color: D.muted }}>
-                Secured payment via {walletProvider || 'your selected wallet'}
-              </span>
-            </div>
+            // ... wallet fields
           </div>
-        )}
+        ) */}
 
         {orderError && (
           <div style={{ padding: '12px 14px', background: '#FFF0F0', border: '1px solid #FFD0D0', borderRadius: 12, margin: '12px 0' }}>
@@ -734,18 +730,55 @@ export default function CheckoutPage() {
           </div>
         )}
 
-        <button onClick={placeOrder} disabled={placing}
-          style={{ width: '100%', height: 58, borderRadius: 16, background: placing ? '#ccc' : BRAND, color: '#fff', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, cursor: placing ? 'not-allowed' : 'pointer', marginTop: 16 }}>
+        <button
+          onClick={placeOrder}
+          disabled={placing}
+          style={{
+            width: '100%',
+            height: 58,
+            borderRadius: 16,
+            background: BRAND, // 🔥 Always BRAND color, even when loading
+            color: '#fff',
+            border: 'none',
+            fontFamily: "'Baloo 2', sans-serif",
+            fontSize: 18,
+            fontWeight: 700,
+            cursor: placing ? 'not-allowed' : 'pointer',
+            marginTop: 16,
+            opacity: placing ? 0.7 : 1,
+            transition: 'opacity 0.2s ease',
+          }}
+        >
           {placing
-            ? <div style={{ width: 20, height: 20, margin: '0 auto', border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            ? <div style={{
+              width: 20,
+              height: 20,
+              margin: '0 auto',
+              border: '2.5px solid #fff',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }} />
             : 'Place Order'}
         </button>
       </div>
-
+      <BottomNav />
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
-        .checkout-input::placeholder{color:rgba(255,255,255,0.85)}
+        .checkout-input::placeholder {
+          color: ${D.muted};
+          opacity: 0.6;
+        }
+        [data-theme="dark"] .checkout-input::placeholder {
+          color: #9CA3AF;
+          opacity: 0.7;
+        }
+        [data-theme="light"] .checkout-input::placeholder {
+          color: #6B6B6B;
+          opacity: 0.7;
+        }
       `}</style>
-    </div>
+    </div >
   );
+
 }

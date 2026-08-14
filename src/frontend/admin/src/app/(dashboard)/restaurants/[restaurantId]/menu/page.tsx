@@ -14,8 +14,10 @@ import {
   fetchMenuItem,
   updateMenuItem,
   fetchCategories,
+  fetchMenuItemAddons,
   normaliseItem,
   type ApiMenuItem,
+  type ApiAddon,
   deleteMenuItem,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
@@ -28,9 +30,6 @@ const BRAND = '#ff5723';
 type ModalState = { open: boolean; item?: ApiMenuItem };
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
 type GlbStatus = 'idle' | 'uploading' | 'approved' | 'error';
-
-// The branch is whichever restaurant the tenant opened.
-const MENU_BASE_URL = '/api/menu';
 
 // Theme colors
 const getColors = (isDark: boolean) => ({
@@ -69,46 +68,107 @@ const getColors = (isDark: boolean) => ({
 
 async function createMenuItemWithFiles(
   restaurantId: string,
-  payload: { name: string; description: string; price: number; categoryId: string; isActive: boolean; allergens?: string[]; prepTime?: string; calories?: number; },
-  imageFile?: File | null, glbFile?: File | null,
+  payload: {
+    name: string;
+    description: string;
+    price: number;
+    categoryId: string;
+    isActive: boolean;
+    allergens?: string[];
+    prepTime?: string;
+    calories?: number;
+  },
+  imageFile?: File | null,
+  glbFile?: File | null,
+  imageFiles: File[] = [],
 ): Promise<any> {
   const fd = new FormData();
+
   fd.append('name', payload.name);
   fd.append('description', payload.description);
-  fd.append('priceMinorUnits', String(Math.round(payload.price * 100)));
+  fd.append(
+    'priceMinorUnits',
+    String(Math.round(payload.price * 100))
+  );
   fd.append('categoryId', payload.categoryId);
   fd.append('isActive', String(payload.isActive));
   fd.append('restaurantId', restaurantId);
-  if (payload.allergens?.length) fd.append('allergens', payload.allergens.join(','));
-  if (payload.prepTime) fd.append('prepTime', payload.prepTime);
-  if (payload.calories) fd.append('calories', String(payload.calories));
-  if (imageFile) fd.append('file', imageFile);
-  if (glbFile) fd.append('arFile', glbFile);
+
+  if (payload.allergens?.length) {
+    fd.append('allergens', payload.allergens.join(','));
+  }
+
+  if (payload.prepTime) {
+    fd.append('prepTime', payload.prepTime);
+  }
+
+  if (payload.calories !== undefined) {
+    fd.append('calories', String(payload.calories));
+  }
+
+  // Main image
+  if (imageFile) {
+    fd.append('file', imageFile);
+  }
+
+  // AR model
+  if (glbFile) {
+    fd.append('arFile', glbFile);
+  }
+
+  // Multiple images
+  imageFiles.forEach(file => {
+    fd.append('images', file);
+  });
+
   const { getValidIdToken } = await import('@/lib/cognito');
   const token = await getValidIdToken();
 
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = token;
-  headers['x-tenant-id'] = TENANT_ID;
+  if (!token) {
+    throw new Error('Authentication token missing.');
+  }
 
-  const res = await fetch(`${MENU_BASE_URL}/restaurants/${restaurantId}/items`, { method: 'POST', headers, body: fd });
-  if (!res.ok) { const txt = await res.text().catch(() => res.statusText); throw new Error(`Create failed (${res.status}): ${txt}`); }
+
+  const headers: Record<string, string> = {
+    Authorization: token,
+    'x-tenant-id': TENANT_ID,
+  };
+
+
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/items`,
+    {
+      method: 'POST',
+      headers,
+      body: fd,
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => res.statusText);
+
+    throw new Error(
+      `Create failed (${res.status}): ${txt}`
+    );
+  }
+
   return res.json();
 }
 
 function FieldLabel({ children, extra }: { children: React.ReactNode; extra?: React.ReactNode }) {
   const { isDark } = useTheme();
   const colors = getColors(isDark);
-  
+
   return (
-    <label style={{ 
-      display: 'block', 
-      fontSize: 11, 
-      color: colors.subtle, 
-      fontWeight: 700, 
-      letterSpacing: 1.5, 
-      textTransform: 'uppercase' as const, 
-      marginBottom: 6 
+    <label style={{
+      display: 'block',
+      fontSize: 11,
+      color: colors.subtle,
+      fontWeight: 700,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase' as const,
+      marginBottom: 6
     }}>
       {children}{extra && <span style={{ marginLeft: 8, textTransform: 'none', fontWeight: 400, letterSpacing: 0 }}>{extra}</span>}
     </label>
@@ -139,6 +199,13 @@ export default function BranchMenuPage() {
   const [glbName, setGlbName] = useState<string | null>(null);
   const [glbStatus, setGlbStatus] = useState<GlbStatus>('idle');
   const [glbError, setGlbError] = useState('');
+  const [addons, setAddons] = useState<ApiAddon[]>([]);
+  const [addonInput, setAddonInput] = useState('');
+  const [addonPrice, setAddonPrice] = useState('');
+  const [addonDescription, setAddonDescription] = useState('');
+
+  const [itemImages, setItemImages] = useState<File[]>([]);
+  const [itemImagePreviews, setItemImagePreviews] = useState<string[]>([]);
   const [form, setForm] = useState({ name: '', description: '', price: '', category: '', prepTime: '', calories: '' });
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
@@ -146,13 +213,30 @@ export default function BranchMenuPage() {
   }>({
     open: false,
   });
+  const [sizes, setSizes] = useState<{ name: string; price: string }[]>([]);
 
+  const removeSize = (index: number) => {
+    setSizes(prev => prev.filter((_, i) => i !== index));
+  };
+  const addSize = () => {
+    setSizes(prev => [
+      ...prev,
+      { name: '', price: '' }
+    ]);
+  };
   const loadItems = useCallback(async () => {
     setLoadState("loading");
+    setLoadError('');
 
     try {
+      console.log('Fetching items for restaurant:', restaurantId);
+      console.log('TENANT_ID:', TENANT_ID);
+
       const raw = await fetchMenuItems(restaurantId);
+      console.log('Raw items response:', raw);
+
       const categoriesResponse = await fetchCategories(restaurantId);
+      console.log('Categories response:', categoriesResponse);
 
       const catList = categoriesResponse.map((cat: any) => ({
         id: cat.id ?? cat.categoryId,
@@ -188,11 +272,14 @@ export default function BranchMenuPage() {
         });
       });
 
+      console.log('Updated items:', updatedItems);
       setItems(updatedItems);
       setLoadState("success");
     }
     catch (err: any) {
-      console.error(err);
+      console.error('Full error:', err);
+      console.error('Error message:', err?.message);
+      console.error('Error stack:', err?.stack);
       setLoadError(err?.message ?? 'Failed to load menu items.');
       setLoadState('error');
     }
@@ -211,11 +298,59 @@ export default function BranchMenuPage() {
         .includes(search.toLowerCase());
     return matchCategory && matchSearch;
   });
-  
-  const activeItems = items.filter(i => i.status === 'active');
 
-  const openModal = (item?: ApiMenuItem) => {
+  const activeItems = items.filter(i => i.status === 'active');
+  const addAddon = () => {
+    const name = addonInput.trim();
+
+    if (!name) {
+      setSaveErr('Please enter an add-on name.');
+      return;
+    }
+
+    const price = Number(addonPrice);
+
+    if (!addonPrice || Number.isNaN(price) || price < 0) {
+      setSaveErr('Please enter a valid add-on price.');
+      return;
+    }
+
+    const exists = addons.some(
+      addon =>
+        addon.name.trim().toLowerCase() === name.toLowerCase()
+    );
+
+    if (exists) {
+      setSaveErr('This add-on already exists.');
+      return;
+    }
+
+    const newAddon: ApiAddon = {
+      addOnId: crypto.randomUUID(),
+
+      // For a new addon, the current menu item's ID is used.
+      // For a new item, this can be empty until the item is created.
+      menuItemId: modal.item?.id ?? '',
+
+      name,
+      description: addonDescription.trim(),
+
+      priceMinorUnits: Math.round(price * 100),
+
+      isActive: true,
+    };
+
+    setAddons(prev => [...prev, newAddon]);
+
+    setAddonInput('');
+    setAddonPrice('');
+    setAddonDescription('');
+    setSaveErr('');
+  };
+
+  const openModal = async (item?: ApiMenuItem) => {
     setModal({ open: true, item });
+
     setIsActive(item ? item.status === 'active' : true);
     setIsChef(item ? (item.tags ?? []).includes('chef') : false);
     setUploadFile(null);
@@ -227,6 +362,28 @@ export default function BranchMenuPage() {
     setGlbError('');
     setSaveMsg('');
     setSaveErr('');
+    setAddons([]);
+    setAddonInput('');
+    setAddonPrice('');
+    setAddonDescription('');
+
+    if (item?.id) {
+      try {
+        const existingAddons = await fetchMenuItemAddons(
+          item.id,
+          restaurantId
+        );
+
+        setAddons(existingAddons ?? []);
+      } catch (err) {
+        console.error('Failed to load addons:', err);
+        setAddons([]);
+      }
+    }
+
+    setIsActive(item ? item.status === 'active' : true);
+    setIsChef(item ? (item.tags ?? []).includes('chef') : false);
+
 
     let selectedCategory = '';
 
@@ -260,7 +417,11 @@ export default function BranchMenuPage() {
         categoryById?.id ??
         categoryByName?.id ??
         '';
-    } else {
+
+
+
+    }
+    else {
       selectedCategory = cats[0]?.id ?? '';
     }
 
@@ -298,31 +459,39 @@ export default function BranchMenuPage() {
     try {
       if (modal.item?.id) {
         const version = (modal.item as any).version ?? 1;
-        const raw = await updateMenuItem(modal.item.id, { 
-          name: form.name.trim(), 
-          description: form.description.trim(), 
-          price: parseFloat(form.price), 
-          categoryId: form.category, 
-          status: isActive ? 'active' : 'inactive', 
-          tags: isChef ? ['chef'] : [], 
-          prepTime: form.prepTime || '20 min', 
-          calories: form.calories ? parseInt(form.calories) : undefined 
-        }, version);
+        const raw = await updateMenuItem(
+          restaurantId,
+          modal.item.id,
+          {
+            name: form.name.trim(),
+            description: form.description.trim(),
+            price: parseFloat(form.price),
+            categoryId: form.category,
+            status: isActive ? 'active' : 'inactive',
+            tags: isChef ? ['chef'] : [],
+            prepTime: form.prepTime || '20 min',
+            calories: form.calories
+              ? parseInt(form.calories)
+              : undefined,
+            sizes: apiSizes,
+          },
+          version
+        );
         setItems(prev => prev.map(i => i.id === ((raw as any).id ?? (raw as any).itemId) ? normaliseItem(raw) : i));
         setSaveMsg('Item updated!');
-        if (uploadFile) { 
-          setSaveMsg('Getting image upload URL…'); 
-          const fetched = await fetchMenuItem(modal.item.id, restaurantId) as any; 
-          if (fetched.imageUrl) { 
-            setSaveMsg('Uploading image…'); 
-            await uploadToS3(fetched.imageUrl, uploadFile, uploadFile.type || 'image/png'); 
-            setSaveMsg('Image uploaded! ✓'); 
-          } 
+        if (uploadFile) {
+          setSaveMsg('Getting image upload URL…');
+          const fetched = await fetchMenuItem(modal.item.id, restaurantId) as any;
+          if (fetched.imageUrl) {
+            setSaveMsg('Uploading image…');
+            await uploadToS3(fetched.imageUrl, uploadFile, uploadFile.type || 'image/png');
+            setSaveMsg('Image uploaded! ✓');
+          }
         }
-        if (glbFile && !(modal.item as any).arModelKey) { 
-          setSaveErr('This item has no AR model slot. Use "Recreate & Upload Files" to create a fresh item with GLB.'); 
-          setSaving(false); 
-          return; 
+        if (glbFile && !(modal.item as any).arModelKey) {
+          setSaveErr('This item has no AR model slot. Use "Recreate & Upload Files" to create a fresh item with GLB.');
+          setSaving(false);
+          return;
         }
       } else {
         setSaveMsg('Creating item…');
@@ -336,19 +505,22 @@ export default function BranchMenuPage() {
             categoryId: form.category,
             isActive: true,
             prepTime: form.prepTime || undefined,
-            calories: form.calories ? parseInt(form.calories) : undefined,
+            calories: form.calories
+              ? parseInt(form.calories)
+              : undefined,
           },
           uploadFile,
-          glbFile
-        ); 
+          glbFile,
+          itemImages
+        );
         setItems(prev => [...prev, normaliseItem(raw)]);
         if (raw.arModelKey) { setGlbStatus('approved'); setSaveMsg('Item created with 3D model! ✓'); }
         else setSaveMsg('Item created!');
       }
       setTimeout(() => { setModal({ open: false }); loadItems(); setSaveMsg(''); }, 1400);
-    } catch (err: any) { 
-      setSaveErr(err?.message ?? 'Save failed.'); 
-      if (glbStatus === 'uploading') { setGlbStatus('error'); setGlbError(err?.message ?? 'Upload failed'); } 
+    } catch (err: any) {
+      setSaveErr(err?.message ?? 'Save failed.');
+      if (glbStatus === 'uploading') { setGlbStatus('error'); setGlbError(err?.message ?? 'Upload failed'); }
     } finally { setSaving(false); }
   };
 
@@ -367,23 +539,46 @@ export default function BranchMenuPage() {
       setDeleting(null);
     }
   };
-
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const apiSizes = sizes
+    .filter((size) => size.price !== '')
+    .map((size) => ({
+      name: size.name,
+      priceMinorUnits: Math.round(Number(size.price) * 100),
+    }));
   const handleRecreate = async () => {
     if (!modal.item) return;
-    if (!confirm('Deactivate old item and create fresh with files? Continue?')) return;
-    setSaving(true); setSaveErr(''); setSaveMsg('Deactivating old item…');
+
+    setSaving(true);
+    setSaveErr('');
+    setSaveMsg('Deactivating old item…');
+
     try {
-      const latest = await fetchMenuItem(modal.item.id, restaurantId) as any;
-      await updateMenuItem(modal.item.id, { 
-        name: latest.name, 
-        description: latest.description ?? '', 
-        categoryId: latest.categoryId, 
-        price: (latest.priceMinorUnits ?? 0) / 100, 
-        status: 'inactive' 
-      }, latest.version ?? 1);
-      setItems(prev => prev.filter(i => i.id !== modal.item!.id));
-      setSaveMsg('Creating fresh item with files…');
-      if (glbFile) setGlbStatus('uploading');
+      const latest = await fetchMenuItem(
+        modal.item.id,
+        restaurantId
+      ) as any;
+
+      // 1. Deactivate old item
+      await updateMenuItem(
+        latest.restaurantId,
+        latest.itemId ?? latest.id,
+        {
+          name: latest.name,
+          description: latest.description,
+          price: latest.price,
+          categoryId: latest.categoryId,
+          status: 'inactive',
+          tags: latest.tags ?? [],
+          prepTime: latest.prepTime,
+          calories: latest.calories,
+        },
+        latest.version ?? 1
+      );
+
+      // 2. Create NEW item with files
+      setSaveMsg('Creating fresh item…');
+
       const raw = await createMenuItemWithFiles(
         restaurantId,
         {
@@ -391,101 +586,124 @@ export default function BranchMenuPage() {
           description: form.description.trim(),
           price: parseFloat(form.price),
           categoryId: form.category,
-          isActive: true,
+          isActive,
           prepTime: form.prepTime || undefined,
-          calories: form.calories ? parseInt(form.calories) : undefined,
+          calories: form.calories
+            ? parseInt(form.calories)
+            : undefined,
         },
         uploadFile,
-        glbFile
-      ); 
-      setItems(prev => [...prev, normaliseItem(raw)]);
-      if (raw.arModelKey) { setGlbStatus('approved'); setSaveMsg('Recreated with 3D model! ✓'); }
-      else setSaveMsg('Recreated! ✓');
-      setTimeout(() => { setModal({ open: false }); loadItems(); }, 1500);
-    } catch (err: any) { 
-      setSaveErr(err?.message ?? 'Recreate failed.'); 
-      if (glbStatus === 'uploading') { setGlbStatus('error'); setGlbError(err?.message ?? 'Failed'); } 
-    } finally { setSaving(false); }
-  };
+        glbFile,
+        itemImages
+      );
 
-  const inputStyle = (focus = false): React.CSSProperties => ({ 
-    width: '100%', 
-    height: 42, 
-    borderRadius: 10, 
-    padding: '0 12px', 
-    background: colors.inputBg, 
-    border: `1.5px solid ${colors.inputBorder}`, 
-    fontSize: 13, 
-    color: colors.inputText, 
-    outline: 'none', 
-    boxSizing: 'border-box', 
-    fontFamily: 'sans-serif', 
-    transition: 'border-color 0.2s' 
+      setItems(prev => [
+        ...prev.filter(i => i.id !== modal.item!.id),
+        normaliseItem(raw),
+      ]);
+
+      setGlbStatus(
+        raw.arModelKey ? 'approved' : 'idle'
+      );
+
+      setSaveMsg(
+        raw.arModelKey
+          ? 'Recreated with 3D model! ✓'
+          : 'Recreated! ✓'
+      );
+
+      setTimeout(() => {
+        setModal({ open: false });
+        loadItems();
+      }, 1500);
+
+    } catch (err: any) {
+      setSaveErr(err?.message ?? 'Recreate failed.');
+      setGlbStatus('error');
+      setGlbError(err?.message ?? 'Failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const inputStyle = (focus = false): React.CSSProperties => ({
+    width: '100%',
+    height: 42,
+    borderRadius: 10,
+    padding: '0 12px',
+    background: colors.inputBg,
+    border: `1.5px solid ${colors.inputBorder}`,
+    fontSize: 13,
+    color: colors.inputText,
+    outline: 'none',
+    boxSizing: 'border-box',
+    fontFamily: 'sans-serif',
+    transition: 'border-color 0.2s'
   });
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      height: '100%', 
-      background: colors.bg 
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      background: colors.bg
     }}>
       {/* ── Top bar ───────────────────────────────────────────────────────── */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        padding: '16px 32px', 
-        background: colors.card, 
-        borderBottom: `1.5px solid ${colors.border}`, 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 32px',
+        background: colors.card,
+        borderBottom: `1.5px solid ${colors.border}`,
         flexShrink: 0,
         flexWrap: 'wrap',
         gap: 12,
       }}>
         <div>
-          <h1 style={{ 
-            fontSize: 20, 
-            fontWeight: 800, 
-            color: colors.text, 
-            margin: 0, 
-            fontFamily: 'Georgia, serif' 
+          <h1 style={{
+            fontSize: 20,
+            fontWeight: 800,
+            color: colors.text,
+            margin: 0,
+            fontFamily: 'Georgia, serif'
           }}>Menu Management</h1>
-          <p style={{ 
-            fontSize: 12, 
-            color: colors.muted, 
-            margin: '2px 0 0' 
+          <p style={{
+            fontSize: 12,
+            color: colors.muted,
+            margin: '2px 0 0'
           }}>Live API · {activeItems.length} active items</p>
         </div>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 10,
           flexWrap: 'wrap',
         }}>
           {/* Search */}
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ 
-              position: 'absolute', 
-              left: 12, 
-              top: '50%', 
-              transform: 'translateY(-50%)', 
-              color: colors.subtle, 
-              pointerEvents: 'none' 
+            <Search size={13} style={{
+              position: 'absolute',
+              left: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: colors.subtle,
+              pointerEvents: 'none'
             }} />
-            <input 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Search items…"
-              style={{ 
-                height: 36, 
-                paddingLeft: 36, 
-                paddingRight: 14, 
-                borderRadius: 10, 
-                width: 200, 
-                fontSize: 13, 
-                background: colors.inputBg, 
-                border: `1.5px solid ${colors.inputBorder}`, 
-                color: colors.inputText, 
+              style={{
+                height: 36,
+                paddingLeft: 36,
+                paddingRight: 14,
+                borderRadius: 10,
+                width: 200,
+                fontSize: 13,
+                background: colors.inputBg,
+                border: `1.5px solid ${colors.inputBorder}`,
+                color: colors.inputText,
                 outline: 'none',
                 transition: 'border-color 0.2s',
               }}
@@ -494,123 +712,138 @@ export default function BranchMenuPage() {
             />
           </div>
           <button onClick={loadItems} title="Refresh"
-            style={{ 
-              width: 36, 
-              height: 36, 
-              borderRadius: 10, 
-              background: colors.imageBg, 
-              border: `1.5px solid ${colors.imageBorder}`, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              cursor: 'pointer' 
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: colors.imageBg,
+              border: `1.5px solid ${colors.imageBorder}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
             }}>
             <RefreshCw size={14} color={colors.text} className={loadState === 'loading' ? 'animate-spin' : ''} />
           </button>
-          <button style={{ 
-            width: 36, 
-            height: 36, 
-            borderRadius: 10, 
-            background: colors.inputBg, 
-            border: `1.5px solid ${colors.inputBorder}`, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            cursor: 'pointer' 
+          <button style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: colors.inputBg,
+            border: `1.5px solid ${colors.inputBorder}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
           }}>
             <Bell size={15} color={colors.muted} />
           </button>
           <button onClick={() => openModal()}
-            style={{ 
-              height: 36, 
-              padding: '0 16px', 
-              borderRadius: 10, 
-              background: BRAND, 
-              color: '#fff', 
-              border: 'none', 
-              fontSize: 13, 
-              fontWeight: 700, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6, 
-              cursor: 'pointer', 
-              boxShadow: `0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(225,37,27,0.25)'}` 
-            }}>
+            style={{
+              height: 36,
+              padding: '0 16px',
+              borderRadius: 10,
+              background: colors.imageBg,
+              border: `1.5px solid ${colors.imageBorder}`,
+              color: BRAND,
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: 13,
+              gap:6,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          // style={{
+          //   height: 36,
+          //   padding: '0 16px',
+          //   borderRadius: 10,
+          //   background: BRAND,
+          //   color: '#fff',
+          //   border: 'none',
+          //   fontSize: 13,
+          //   fontWeight: 700,
+          //   display: 'flex',
+          //   alignItems: 'center',
+          //   gap: 6,
+          //   cursor: 'pointer',
+          //   boxShadow: `0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(225,37,27,0.25)'}`
+          // }}
+          >
             <Plus size={15} /> Add Item
           </button>
         </div>
       </div>
 
-      <div style={{ 
-        flex: 1, 
-        padding: '24px 32px', 
-        overflowY: 'auto', 
-        background: colors.bg, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: 20 
+      <div style={{
+        flex: 1,
+        padding: '24px 32px',
+        overflowY: 'auto',
+        background: colors.bg,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20
       }}>
 
         {/* Error */}
         {loadState === 'error' && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 10, 
-            padding: '14px 16px', 
-            background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-            border: `1.5px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`, 
-            borderRadius: 14 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '14px 16px',
+            background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+            border: `1.5px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+            borderRadius: 14
           }}>
             <AlertCircle size={16} color={colors.danger} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: colors.danger, margin: 0 }}>Failed to load menu items</p>
               <p style={{ fontSize: 12, color: colors.muted, margin: '2px 0 0' }}>{loadError}</p>
             </div>
-            <button onClick={loadItems} style={{ 
-              padding: '6px 14px', 
-              borderRadius: 8, 
-              background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-              border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`, 
-              color: colors.danger, 
-              fontSize: 12, 
-              fontWeight: 700, 
-              cursor: 'pointer' 
+            <button onClick={loadItems} style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+              border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+              color: colors.danger,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer'
             }}>Retry</button>
           </div>
         )}
 
         {/* Stats */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-          gap: 12, 
-          maxWidth: 360 
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+          maxWidth: 360
         }}>
           {[
             { label: 'Total Items', val: activeItems.length, color: colors.text },
             { label: 'Active', val: activeItems.length, color: BRAND },
           ].map(s => (
-            <div key={s.label} style={{ 
-              background: colors.card, 
-              border: `1.5px solid ${colors.border}`, 
-              borderRadius: 16, 
-              padding: '16px' 
+            <div key={s.label} style={{
+              background: colors.card,
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 16,
+              padding: '16px'
             }}>
-              <p style={{ 
-                fontSize: 10, 
-                color: colors.subtle, 
-                fontWeight: 700, 
-                letterSpacing: 2, 
-                textTransform: 'uppercase', 
-                margin: '0 0 6px' 
+              <p style={{
+                fontSize: 10,
+                color: colors.subtle,
+                fontWeight: 700,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                margin: '0 0 6px'
               }}>{s.label}</p>
-              <p style={{ 
-                fontSize: 28, 
-                fontWeight: 800, 
-                color: s.color, 
-                fontFamily: 'Georgia, serif', 
-                margin: 0 
+              <p style={{
+                fontSize: 28,
+                fontWeight: 800,
+                color: s.color,
+                fontFamily: 'Georgia, serif',
+                margin: 0
               }}>
                 {loadState === 'loading' ? '…' : s.val}
               </p>
@@ -622,16 +855,16 @@ export default function BranchMenuPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {[{ id: 'all', name: '🍽️ All' }, ...cats].map(cat => (
             <button key={cat.id} onClick={() => setCategory(cat.id)}
-              style={{ 
-                padding: '6px 16px', 
-                borderRadius: 20, 
-                border: `1.5px solid ${category === cat.id ? BRAND : colors.border}`, 
-                background: category === cat.id ? (isDark ? 'rgba(255,87,35,0.12)' : '#FFF0EE') : colors.card, 
-                color: category === cat.id ? BRAND : colors.muted, 
-                fontSize: 12, 
-                fontWeight: 700, 
-                cursor: 'pointer', 
-                transition: 'all 0.2s' 
+              style={{
+                padding: '6px 16px',
+                borderRadius: 20,
+                border: `1.5px solid ${category === cat.id ? BRAND : colors.border}`,
+                background: category === cat.id ? (isDark ? 'rgba(255,87,35,0.12)' : '#FFF0EE') : colors.card,
+                color: category === cat.id ? BRAND : colors.muted,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
               }}>
               {cat.name}
             </button>
@@ -640,19 +873,19 @@ export default function BranchMenuPage() {
 
         {/* Loading skeleton */}
         {loadState === 'loading' && (
-          <div style={{ 
-            background: colors.card, 
-            border: `1.5px solid ${colors.border}`, 
-            borderRadius: 16, 
-            overflow: 'hidden' 
+          <div style={{
+            background: colors.card,
+            border: `1.5px solid ${colors.border}`,
+            borderRadius: 16,
+            overflow: 'hidden'
           }}>
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 14, 
-                padding: '14px 20px', 
-                borderBottom: `1px solid ${colors.border}` 
+              <div key={i} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                padding: '14px 20px',
+                borderBottom: `1px solid ${colors.border}`
               }}>
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: colors.inputBg }} />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -666,55 +899,55 @@ export default function BranchMenuPage() {
 
         {/* Table */}
         {(loadState === 'success' || loadState === 'idle' || loadState === 'error') && (
-          <div style={{ 
-            background: colors.card, 
-            border: `1.5px solid ${colors.border}`, 
-            borderRadius: 16, 
-            overflow: 'hidden', 
-            boxShadow: `0 2px 8px ${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(137,28,28,0.05)'}` 
+          <div style={{
+            background: colors.card,
+            border: `1.5px solid ${colors.border}`,
+            borderRadius: 16,
+            overflow: 'hidden',
+            boxShadow: `0 2px 8px ${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(137,28,28,0.05)'}`
           }}>
             {/* Header */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '44px 1fr 120px 90px 80px 90px 80px', 
-              gap: 12, 
-              padding: '10px 20px', 
-              borderBottom: `1.5px solid ${colors.border}`, 
-              background: colors.card2 
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '44px 1fr 120px 90px 80px 90px 80px',
+              gap: 12,
+              padding: '10px 20px',
+              borderBottom: `1.5px solid ${colors.border}`,
+              background: colors.card2
             }}>
               {['', 'Item', 'Category', 'Price', 'Rating', 'Status', 'Actions'].map(h => (
-                <p key={h} style={{ 
-                  fontSize: 10, 
-                  color: colors.subtle, 
-                  fontWeight: 700, 
-                  letterSpacing: 2, 
-                  textTransform: 'uppercase', 
-                  margin: 0 
+                <p key={h} style={{
+                  fontSize: 10,
+                  color: colors.subtle,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  textTransform: 'uppercase',
+                  margin: 0
                 }}>{h}</p>
               ))}
             </div>
 
             {/* Empty */}
             {filtered.length === 0 && loadState === 'success' && (
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                padding: '48px 0', 
-                gap: 12 
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '48px 0',
+                gap: 12
               }}>
                 <span style={{ fontSize: 36, opacity: 0.2 }}>🍽️</span>
                 <p style={{ fontSize: 13, color: colors.subtle, margin: 0 }}>No items found</p>
-                <button onClick={() => openModal()} style={{ 
-                  padding: '8px 20px', 
-                  borderRadius: 24, 
-                  background: colors.imageBg, 
-                  border: `1.5px solid ${colors.imageBorder}`, 
-                  color: BRAND, 
-                  fontSize: 13, 
-                  fontWeight: 700, 
-                  cursor: 'pointer' 
+                <button onClick={() => openModal()} style={{
+                  padding: '8px 20px',
+                  borderRadius: 24,
+                  background: colors.imageBg,
+                  border: `1.5px solid ${colors.imageBorder}`,
+                  color: BRAND,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer'
                 }}>Add First Item</button>
               </div>
             )}
@@ -722,14 +955,14 @@ export default function BranchMenuPage() {
             {/* Rows */}
             {filtered.map((item, idx) => (
               <div key={item.id ?? `item-${idx}`}
-                style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: '44px 1fr 120px 90px 80px 90px 80px', 
-                  gap: 12, 
-                  padding: '12px 20px', 
-                  borderBottom: `1px solid ${colors.border}`, 
-                  alignItems: 'center', 
-                  transition: 'background 0.15s' 
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '44px 1fr 120px 90px 80px 90px 80px',
+                  gap: 12,
+                  padding: '12px 20px',
+                  borderBottom: `1px solid ${colors.border}`,
+                  alignItems: 'center',
+                  transition: 'background 0.15s'
                 }}
                 onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = colors.card2}
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}>
@@ -771,74 +1004,74 @@ export default function BranchMenuPage() {
                 {/* Name */}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <p style={{ 
-                      fontSize: 13, 
-                      fontWeight: 700, 
-                      color: colors.text, 
-                      margin: 0, 
-                      overflow: 'hidden', 
-                      textOverflow: 'ellipsis', 
-                      whiteSpace: 'nowrap' 
+                    <p style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: colors.text,
+                      margin: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>{item.name}</p>
                     {(item as any).arModelKey && (
-                      <span style={{ 
-                        fontSize: 9, 
-                        background: colors.glbBg, 
-                        border: `1px solid ${colors.glbBorder}`, 
-                        color: colors.glbText, 
-                        padding: '2px 6px', 
-                        borderRadius: 10, 
-                        fontWeight: 700, 
-                        flexShrink: 0 
+                      <span style={{
+                        fontSize: 9,
+                        background: colors.glbBg,
+                        border: `1px solid ${colors.glbBorder}`,
+                        color: colors.glbText,
+                        padding: '2px 6px',
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        flexShrink: 0
                       }}>3D</span>
                     )}
                   </div>
-                  <p style={{ 
-                    fontSize: 11, 
-                    color: colors.subtle, 
-                    margin: 0, 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
-                    whiteSpace: 'nowrap' 
+                  <p style={{
+                    fontSize: 11,
+                    color: colors.subtle,
+                    margin: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
                   }}>{item.description}</p>
                 </div>
 
                 <p style={{ fontSize: 12, color: colors.muted, margin: 0 }}>
                   {item.categoryName || item.category || "—"}
                 </p>
-                <p style={{ 
-                  fontSize: 13, 
-                  fontWeight: 700, 
-                  color: BRAND, 
-                  margin: 0, 
-                  fontFamily: 'Georgia, serif' 
+                <p style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: BRAND,
+                  margin: 0,
+                  fontFamily: 'Georgia, serif'
                 }}>{formatPrice(item.price)}</p>
-                <p style={{ 
-                  fontSize: 12, 
-                  color: colors.warning, 
-                  fontWeight: 600, 
-                  margin: 0 
+                <p style={{
+                  fontSize: 12,
+                  color: colors.warning,
+                  fontWeight: 600,
+                  margin: 0
                 }}>★ {item.rating?.toFixed(1) ?? '—'}</p>
 
                 {/* Status */}
                 <span style={{
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: 5, 
-                  padding: '4px 10px', 
-                  borderRadius: 20, 
-                  fontSize: 11, 
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  fontSize: 11,
                   fontWeight: 700,
                   background: item.status === 'active' ? colors.statusBg : colors.inactiveBg,
                   color: item.status === 'active' ? colors.statusText : colors.inactiveText,
                   border: `1px solid ${item.status === 'active' ? colors.statusBorder : colors.inactiveBorder}`,
                 }}>
-                  <span style={{ 
-                    width: 5, 
-                    height: 5, 
-                    borderRadius: '50%', 
-                    background: item.status === 'active' ? colors.activeDot : colors.inactiveDot, 
-                    display: 'inline-block' 
+                  <span style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    background: item.status === 'active' ? colors.activeDot : colors.inactiveDot,
+                    display: 'inline-block'
                   }} />
                   {item.status}
                 </span>
@@ -846,45 +1079,45 @@ export default function BranchMenuPage() {
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => openModal(item)}
-                    style={{ 
-                      width: 28, 
-                      height: 28, 
-                      borderRadius: 8, 
-                      background: colors.imageBg, 
-                      border: `1px solid ${colors.imageBorder}`, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      cursor: 'pointer', 
-                      transition: 'all 0.2s' 
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      background: colors.imageBg,
+                      border: `1px solid ${colors.imageBorder}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
                     }}
-                    onMouseEnter={e => { 
-                      const b = e.currentTarget as HTMLButtonElement; 
-                      b.style.background = isDark ? 'rgba(255,87,35,0.2)' : '#FFF0EE'; 
-                      b.style.borderColor = isDark ? 'rgba(255,87,35,0.3)' : '#FED0CC'; 
+                    onMouseEnter={e => {
+                      const b = e.currentTarget as HTMLButtonElement;
+                      b.style.background = isDark ? 'rgba(255,87,35,0.2)' : '#FFF0EE';
+                      b.style.borderColor = isDark ? 'rgba(255,87,35,0.3)' : '#FED0CC';
                     }}
-                    onMouseLeave={e => { 
-                      const b = e.currentTarget as HTMLButtonElement; 
-                      b.style.background = colors.imageBg; 
-                      b.style.borderColor = colors.imageBorder; 
+                    onMouseLeave={e => {
+                      const b = e.currentTarget as HTMLButtonElement;
+                      b.style.background = colors.imageBg;
+                      b.style.borderColor = colors.imageBorder;
                     }}>
                     <Edit2 size={12} color={colors.text} />
                   </button>
                   <button
                     onClick={() => setDeleteModal({ open: true, item })}
                     disabled={deleting === item.id}
-                    style={{ 
-                      width: 28, 
-                      height: 28, 
-                      borderRadius: 8, 
-                      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-                      border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      cursor: 'pointer', 
-                      opacity: deleting === item.id ? 0.4 : 1, 
-                      transition: 'all 0.2s' 
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+                      border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      opacity: deleting === item.id ? 0.4 : 1,
+                      transition: 'all 0.2s'
                     }}>
                     {deleting === item.id ? <Loader2 size={12} color={colors.subtle} className="animate-spin" /> : <Trash2 size={12} color={colors.danger} />}
                   </button>
@@ -894,20 +1127,20 @@ export default function BranchMenuPage() {
 
             {/* Footer */}
             {(loadState === 'success' || loadState === 'idle') && activeItems.length > 0 && (
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '10px 20px', 
-                borderTop: `1.5px solid ${colors.border}`, 
-                background: colors.card2 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 20px',
+                borderTop: `1.5px solid ${colors.border}`,
+                background: colors.card2
               }}>
                 <p style={{ fontSize: 11, color: colors.subtle, margin: 0 }}>Showing {filtered.length} of {activeItems.length} active items</p>
-                <p style={{ 
-                  fontSize: 11, 
-                  color: colors.subtle, 
-                  fontFamily: 'monospace', 
-                  margin: 0 
+                <p style={{
+                  fontSize: 11,
+                  color: colors.subtle,
+                  fontFamily: 'monospace',
+                  margin: 0
                 }}>Source: AWS API Gateway</p>
               </div>
             )}
@@ -917,90 +1150,90 @@ export default function BranchMenuPage() {
 
       {/* ── Modal ─────────────────────────────────────────────────────────── */}
       {modal.open && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: colors.modalOverlay, 
-          backdropFilter: 'blur(4px)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          zIndex: 50, 
-          padding: 24 
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: colors.modalOverlay,
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+          padding: 24
         }}
           onClick={e => e.target === e.currentTarget && setModal({ open: false })}>
-          <div style={{ 
-            background: colors.card, 
-            border: `1.5px solid ${colors.border}`, 
-            borderRadius: 24, 
-            width: 460, 
-            maxHeight: '90vh', 
-            overflowY: 'auto', 
-            padding: 24, 
-            boxShadow: `0 20px 60px ${colors.shadow}` 
+          <div style={{
+            background: colors.card,
+            border: `1.5px solid ${colors.border}`,
+            borderRadius: 24,
+            width: 460,
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: 24,
+            boxShadow: `0 20px 60px ${colors.shadow}`
           }}>
 
             {/* Modal header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
-                <h2 style={{ 
-                  fontSize: 18, 
-                  fontWeight: 800, 
-                  color: colors.text, 
-                  margin: 0, 
-                  fontFamily: 'Georgia, serif' 
+                <h2 style={{
+                  fontSize: 18,
+                  fontWeight: 800,
+                  color: colors.text,
+                  margin: 0,
+                  fontFamily: 'Georgia, serif'
                 }}>{modal.item ? 'Edit Menu Item' : 'Add Menu Item'}</h2>
-                <p style={{ 
-                  fontSize: 11, 
-                  color: colors.subtle, 
-                  margin: '2px 0 0' 
+                <p style={{
+                  fontSize: 11,
+                  color: colors.subtle,
+                  margin: '2px 0 0'
                 }}>{modal.item ? `ID: ${modal.item.id?.slice(0, 8)}…` : 'POST to AWS API Gateway'}</p>
               </div>
               <button onClick={() => setModal({ open: false })}
-                style={{ 
-                  width: 32, 
-                  height: 32, 
-                  borderRadius: 10, 
-                  background: colors.inputBg, 
-                  border: `1.5px solid ${colors.inputBorder}`, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  cursor: 'pointer' 
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: colors.inputBg,
+                  border: `1.5px solid ${colors.inputBorder}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
                 }}>
                 <X size={14} color={colors.muted} />
               </button>
             </div>
 
             {/* Alerts */}
-            {saveMsg && <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 8, 
-              padding: '10px 14px', 
-              background: colors.statusBg, 
-              border: `1px solid ${colors.statusBorder}`, 
-              borderRadius: 12, 
-              marginBottom: 14 
-            }}><CheckCircle size={14} color={colors.statusText} /><p style={{ 
-              fontSize: 12, 
-              color: colors.statusText, 
-              fontWeight: 600, 
-              margin: 0 
+            {saveMsg && <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              background: colors.statusBg,
+              border: `1px solid ${colors.statusBorder}`,
+              borderRadius: 12,
+              marginBottom: 14
+            }}><CheckCircle size={14} color={colors.statusText} /><p style={{
+              fontSize: 12,
+              color: colors.statusText,
+              fontWeight: 600,
+              margin: 0
             }}>{saveMsg}</p></div>}
-            {saveErr && <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 8, 
-              padding: '10px 14px', 
-              background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-              border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`, 
-              borderRadius: 12, 
-              marginBottom: 14 
-            }}><AlertCircle size={14} color={colors.danger} /><p style={{ 
-              fontSize: 12, 
-              color: colors.danger, 
-              margin: 0 
+            {saveErr && <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+              border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+              borderRadius: 12,
+              marginBottom: 14
+            }}><AlertCircle size={14} color={colors.danger} /><p style={{
+              fontSize: 12,
+              color: colors.danger,
+              margin: 0
             }}>{saveErr}</p></div>}
 
             {/* Item Name */}
@@ -1053,6 +1286,7 @@ export default function BranchMenuPage() {
               </div>
             </div>
 
+
             {/* Description */}
             <div style={{ marginBottom: 14 }}>
               <FieldLabel>Description</FieldLabel>
@@ -1060,6 +1294,247 @@ export default function BranchMenuPage() {
                 style={{ ...inputStyle(), height: 'auto', padding: '10px 12px', resize: 'none', fontFamily: 'sans-serif' } as React.CSSProperties}
                 onFocus={e => (e.target as HTMLTextAreaElement).style.borderColor = BRAND}
                 onBlur={e => (e.target as HTMLTextAreaElement).style.borderColor = colors.inputBorder} />
+            </div>
+
+            {/* Sizes */}
+            <div className="w-full min-w-0 mb-5">
+              <FieldLabel>Sizes</FieldLabel>
+
+              <div className="space-y-3 w-full">
+                {sizes.map((size, index) => (
+                  <div
+                    key={index}
+                    className="flex w-full min-w-0 gap-2 items-center"
+                  >
+                    {/* Size Name */}
+                    <input
+                      type="text"
+                      value={size.name}
+                      onChange={(e) => {
+                        const updated = [...sizes];
+
+                        updated[index] = {
+                          ...updated[index],
+                          name: e.target.value,
+                        };
+
+                        setSizes(updated);
+                      }}
+                      placeholder="Size name"
+                      className="flex-1 min-w-0 border rounded-lg px-3 py-2"
+                    />
+
+                    {/* Price */}
+                    <input
+                      type="number"
+                      value={size.price}
+                      onChange={(e) => {
+                        const updated = [...sizes];
+
+                        updated[index] = {
+                          ...updated[index],
+                          price: e.target.value,
+                        };
+
+                        setSizes(updated);
+                      }}
+                      placeholder="Price"
+                      className="flex-1 min-w-0 border rounded-lg px-3 py-2"
+                    />
+
+                    {/* Remove */}
+                    <button
+                      type="button"
+                      onClick={() => removeSize(index)}
+                      style={{
+                        height: 42,
+                        padding: '0 14px',
+                        borderRadius: 10,
+                        background: colors.imageBg,
+                        border: `1.5px solid ${colors.imageBorder}`,
+                        color: BRAND,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Size */}
+
+              <button
+                type="button"
+                onClick={addSize}
+                style={{
+                  height: 42,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  background: colors.imageBg,
+                  border: `1.5px solid ${colors.imageBorder}`,
+                  color: BRAND,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  marginTop: '10px',
+                }}
+              >
+                + Add Size
+              </button>
+            </div>
+
+            {/* ADD-ONS */}
+            <div style={{ marginBottom: 14 }}>
+              <FieldLabel>Add-ons</FieldLabel>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 100px',
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <input
+                  value={addonInput}
+                  onChange={e => setAddonInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addAddon();
+                    }
+                  }}
+                  placeholder="e.g. Extra Chocolate"
+                  style={inputStyle()}
+                />
+
+                <input
+                  type="number"
+                  value={addonPrice}
+                  onChange={e => setAddonPrice(e.target.value)}
+                  placeholder="Price"
+                  style={inputStyle()}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={addonDescription}
+                  onChange={e => setAddonDescription(e.target.value)}
+                  placeholder="Description"
+                  style={{
+                    ...inputStyle(),
+                    flex: 1,
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={addAddon}
+                  style={{
+                    height: 42,
+                    padding: '0 14px',
+                    borderRadius: 10,
+                    background: colors.imageBg,
+                    border: `1.5px solid ${colors.imageBorder}`,
+                    color: BRAND,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Add
+                </button>
+              </div>
+
+              {addons.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 7,
+                    marginTop: 10,
+                  }}
+                >
+                  {addons.map(addon => (
+                    <div
+                      key={addon.addOnId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '9px 11px',
+                        borderRadius: 12,
+                        background: colors.imageBg,
+                        border: `1px solid ${colors.imageBorder}`,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: colors.text,
+                          }}
+                        >
+                          {addon.name}
+                        </div>
+
+                        {addon.description && (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: colors.subtle,
+                              marginTop: 2,
+                            }}
+                          >
+                            {addon.description}
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: BRAND,
+                          }}
+                        >
+                          Rs. {(addon.priceMinorUnits / 100).toFixed(0)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAddons(prev =>
+                              prev.filter(a => a.addOnId !== addon.addOnId)
+                            )
+                          }
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: colors.danger,
+                            cursor: 'pointer',
+                            padding: 2,
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Prep + Calories */}
@@ -1081,17 +1556,17 @@ export default function BranchMenuPage() {
             {/* Image upload */}
             <div style={{ marginBottom: 14 }}>
               <FieldLabel extra={modal.item && !(modal.item as any).imageKey ? <span style={{ color: colors.warning, fontSize: 11 }}>— no image yet</span> : modal.item && (modal.item as any).imageKey ? <span style={{ color: colors.statusText, fontSize: 11 }}>✓ uploaded</span> : null}>Item Image</FieldLabel>
-              <label style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                gap: 8, 
-                padding: 20, 
-                borderRadius: 16, 
-                border: `2px dashed ${uploadName ? colors.imageBorder : colors.inputBorder}`, 
-                background: uploadName ? colors.imageBg : colors.inputBg, 
-                cursor: 'pointer', 
-                transition: 'all 0.2s' 
+              <label style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 20,
+                borderRadius: 16,
+                border: `2px dashed ${uploadName ? colors.imageBorder : colors.inputBorder}`,
+                background: uploadName ? colors.imageBg : colors.inputBg,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
               }}>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => {
@@ -1106,10 +1581,10 @@ export default function BranchMenuPage() {
                     }
                   }} />
                 <CloudUpload size={24} color={uploadName ? colors.text : colors.subtle} />
-                <span style={{ 
-                  fontSize: 12, 
-                  fontWeight: 600, 
-                  color: uploadName ? colors.text : colors.subtle 
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: uploadName ? colors.text : colors.subtle
                 }}>{uploadName ? `✓ ${uploadName}` : 'Click to upload · PNG, JPG'}</span>
               </label>
               {imagePreview && (
@@ -1135,131 +1610,270 @@ export default function BranchMenuPage() {
                 </div>
               )}
             </div>
+            <div style={{ marginBottom: 14 }}>
+              <FieldLabel>
+                Item Images
+                <span style={{
+                  color: colors.subtle,
+                  fontSize: 10,
+                  marginLeft: 6,
+                  textTransform: 'none',
+                  letterSpacing: 0,
+                }}>
+                  Multiple images allowed
+                </span>
+              </FieldLabel>
 
+              <label
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 20,
+                  borderRadius: 16,
+                  border: `2px dashed ${itemImages.length
+                    ? colors.imageBorder
+                    : colors.inputBorder
+                    }`,
+                  background: itemImages.length
+                    ? colors.imageBg
+                    : colors.inputBg,
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? []);
+
+                    setItemImages(files);
+
+                    setItemImagePreviews(
+                      files.map(file => URL.createObjectURL(file))
+                    );
+                  }}
+                />
+
+                <CloudUpload
+                  size={24}
+                  color={
+                    itemImages.length
+                      ? colors.text
+                      : colors.subtle
+                  }
+                />
+
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: itemImages.length
+                    ? colors.text
+                    : colors.subtle,
+                }}>
+                  {itemImages.length
+                    ? `${itemImages.length} image${itemImages.length > 1 ? 's' : ''} selected`
+                    : 'Click to upload multiple images'}
+                </span>
+
+                <span style={{
+                  fontSize: 10,
+                  color: colors.subtle,
+                }}>
+                  PNG, JPG, WEBP
+                </span>
+              </label>
+
+              {itemImagePreviews.length > 0 && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 8,
+                  marginTop: 12,
+                }}>
+                  {itemImagePreviews.map((src, index) => (
+                    <div
+                      key={src}
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        aspectRatio: '1',
+                        borderRadius: 10,
+                        overflow: 'hidden',
+                        border: `1px solid ${colors.border}`,
+                      }}
+                    >
+                      <Image
+                        src={src}
+                        alt={`Item image ${index + 1}`}
+                        fill
+                        unoptimized
+                        style={{
+                          objectFit: 'cover',
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemImages(prev =>
+                            prev.filter((_, i) => i !== index)
+                          );
+
+                          setItemImagePreviews(prev =>
+                            prev.filter((_, i) => i !== index)
+                          );
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          width: 22,
+                          height: 22,
+                          borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.65)',
+                          color: '#fff',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {/* GLB upload */}
             <div style={{ marginBottom: 14 }}>
               <FieldLabel extra={modal.item && !(modal.item as any).arModelKey ? <span style={{ color: colors.warning, fontSize: 11 }}>— no model yet</span> : modal.item && (modal.item as any).arModelKey ? <span style={{ color: colors.statusText, fontSize: 11 }}>✓ uploaded</span> : null}>3D AR Model (.glb)</FieldLabel>
               {glbStatus === 'idle' && (
-                <label style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  gap: 8, 
-                  padding: 20, 
-                  borderRadius: 16, 
-                  border: `2px dashed ${glbName ? colors.glbBorder : colors.inputBorder}`, 
-                  background: glbName ? colors.glbBg : colors.inputBg, 
-                  cursor: 'pointer', 
-                  transition: 'all 0.2s' 
+                <label style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 20,
+                  borderRadius: 16,
+                  border: `2px dashed ${glbName ? colors.glbBorder : colors.inputBorder}`,
+                  background: glbName ? colors.glbBg : colors.inputBg,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
                 }}>
                   <input type="file" accept=".glb,.gltf" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0] ?? null; setGlbFile(f); setGlbName(f?.name ?? null); setGlbError(''); }} />
                   <span style={{ fontSize: 24 }}>🫙</span>
-                  <span style={{ 
-                    fontSize: 12, 
-                    fontWeight: 600, 
-                    color: glbName ? colors.glbText : colors.subtle 
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: glbName ? colors.glbText : colors.subtle
                   }}>{glbName ? `✓ ${glbName}` : 'Click to upload · .glb / .gltf'}</span>
-                  {glbName && !modal.item && <span style={{ 
-                    fontSize: 11, 
-                    color: colors.glbText, 
-                    opacity: 0.7 
+                  {glbName && !modal.item && <span style={{
+                    fontSize: 11,
+                    color: colors.glbText,
+                    opacity: 0.7
                   }}>Will upload with item on Save</span>}
-                  {glbName && modal.item && <span style={{ 
-                    fontSize: 11, 
-                    color: colors.warning, 
-                    opacity: 0.8 
+                  {glbName && modal.item && <span style={{
+                    fontSize: 11,
+                    color: colors.warning,
+                    opacity: 0.8
                   }}>Use Recreate button below to attach GLB</span>}
                 </label>
               )}
-              {glbStatus === 'uploading' && <div style={{ 
-                padding: '14px 16px', 
-                borderRadius: 16, 
-                border: `2px dashed ${colors.glbBorder}`, 
-                background: colors.glbBg, 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 8 
-              }}><Loader2 size={13} color={colors.glbText} className="animate-spin" /><span style={{ 
-                fontSize: 12, 
-                color: colors.glbText, 
-                fontWeight: 600 
+              {glbStatus === 'uploading' && <div style={{
+                padding: '14px 16px',
+                borderRadius: 16,
+                border: `2px dashed ${colors.glbBorder}`,
+                background: colors.glbBg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}><Loader2 size={13} color={colors.glbText} className="animate-spin" /><span style={{
+                fontSize: 12,
+                color: colors.glbText,
+                fontWeight: 600
               }}>{saveMsg || 'Uploading 3D model…'}</span></div>}
-              {glbStatus === 'approved' && <div style={{ 
-                padding: '14px 16px', 
-                borderRadius: 16, 
-                border: `2px dashed ${colors.statusBorder}`, 
-                background: colors.statusBg, 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 10 
-              }}><CheckCircle size={20} color={colors.statusText} style={{ flexShrink: 0 }} /><div><p style={{ 
-                fontSize: 12, 
-                color: colors.statusText, 
-                fontWeight: 700, 
-                margin: 0 
-              }}>✓ 3D Model Uploaded</p><p style={{ 
-                fontSize: 11, 
-                color: colors.statusText, 
-                opacity: 0.6, 
-                margin: '2px 0 0' 
+              {glbStatus === 'approved' && <div style={{
+                padding: '14px 16px',
+                borderRadius: 16,
+                border: `2px dashed ${colors.statusBorder}`,
+                background: colors.statusBg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10
+              }}><CheckCircle size={20} color={colors.statusText} style={{ flexShrink: 0 }} /><div><p style={{
+                fontSize: 12,
+                color: colors.statusText,
+                fontWeight: 700,
+                margin: 0
+              }}>✓ 3D Model Uploaded</p><p style={{
+                fontSize: 11,
+                color: colors.statusText,
+                opacity: 0.6,
+                margin: '2px 0 0'
               }}>Refresh to see AR badge on item</p></div></div>}
-              {glbStatus === 'error' && <div style={{ 
-                padding: '14px 16px', 
-                borderRadius: 16, 
-                border: `2px dashed ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`, 
-                background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0' 
-              }}><div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><AlertCircle size={14} color={colors.danger} style={{ flexShrink: 0 }} /><p style={{ 
-                fontSize: 12, 
-                color: colors.danger, 
-                fontWeight: 700, 
-                margin: 0 
-              }}>Upload Error</p></div><p style={{ 
-                fontSize: 11, 
-                color: colors.muted, 
-                margin: '0 0 8px' 
-              }}>{glbError}</p><button onClick={() => { setGlbStatus('idle'); setGlbFile(null); setGlbName(null); }} style={{ 
-                fontSize: 11, 
-                color: colors.danger, 
-                background: 'none', 
-                border: 'none', 
-                cursor: 'pointer', 
-                textDecoration: 'underline', 
-                padding: 0 
+              {glbStatus === 'error' && <div style={{
+                padding: '14px 16px',
+                borderRadius: 16,
+                border: `2px dashed ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+                background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0'
+              }}><div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><AlertCircle size={14} color={colors.danger} style={{ flexShrink: 0 }} /><p style={{
+                fontSize: 12,
+                color: colors.danger,
+                fontWeight: 700,
+                margin: 0
+              }}>Upload Error</p></div><p style={{
+                fontSize: 11,
+                color: colors.muted,
+                margin: '0 0 8px'
+              }}>{glbError}</p><button onClick={() => { setGlbStatus('idle'); setGlbFile(null); setGlbName(null); }} style={{
+                fontSize: 11,
+                color: colors.danger,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0
               }}>Try again</button></div>}
             </div>
 
             {/* Recreate warning */}
             {modal.item && glbFile && (
-              <div style={{ 
-                marginBottom: 14, 
-                padding: '12px 14px', 
-                background: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
-                border: `1px solid ${isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A'}`, 
-                borderRadius: 14 
+              <div style={{
+                marginBottom: 14,
+                padding: '12px 14px',
+                background: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
+                border: `1px solid ${isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A'}`,
+                borderRadius: 14
               }}>
-                <p style={{ 
-                  fontSize: 11, 
-                  color: isDark ? '#fb923c' : '#92400e', 
-                  fontWeight: 700, 
-                  margin: '0 0 8px' 
+                <p style={{
+                  fontSize: 11,
+                  color: isDark ? '#fb923c' : '#92400e',
+                  fontWeight: 700,
+                  margin: '0 0 8px'
                 }}>⚠ GLB upload requires recreating the item.</p>
                 <button onClick={handleRecreate} disabled={saving}
-                  style={{ 
-                    width: '100%', 
-                    height: 36, 
-                    borderRadius: 10, 
-                    background: colors.warning, 
-                    color: '#fff', 
-                    border: 'none', 
-                    fontSize: 12, 
-                    fontWeight: 700, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    gap: 6, 
-                    cursor: 'pointer', 
-                    opacity: saving ? 0.6 : 1 
+                  style={{
+                    width: '100%',
+                    height: 36,
+                    borderRadius: 10,
+                    background: colors.warning,
+                    color: '#fff',
+                    border: 'none',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    opacity: saving ? 0.6 : 1
                   }}>
                   {saving ? <><Loader2 size={13} className="animate-spin" /> {saveMsg}</> : '🔄 Recreate & Upload Files'}
                 </button>
@@ -1281,37 +1895,38 @@ export default function BranchMenuPage() {
             {/* Actions */}
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={() => setModal({ open: false })}
-                style={{ 
-                  flex: 1, 
-                  height: 40, 
-                  borderRadius: 10, 
-                  background: colors.inputBg, 
-                  border: `1.5px solid ${colors.inputBorder}`, 
-                  color: colors.muted, 
-                  fontSize: 13, 
-                  fontWeight: 600, 
-                  cursor: 'pointer' 
+                style={{
+                  width: '50%',
+                  height: 40,
+                  borderRadius: 10,
+                  background: colors.inputBg,
+                  border: `1.5px solid ${colors.inputBorder}`,
+                  color: colors.muted,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}>
                 Cancel
               </button>
               <button onClick={saveItem} disabled={saving || glbStatus === 'uploading' || (cats.length === 0 && !modal.item)}
-                style={{ 
-                  flex: 2, 
-                  height: 40, 
-                  borderRadius: 10, 
-                  background: BRAND, 
-                  color: '#fff', 
-                  border: 'none', 
-                  fontSize: 13, 
-                  fontWeight: 700, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: 6, 
-                  cursor: 'pointer', 
-                  opacity: (saving || glbStatus === 'uploading' || (cats.length === 0 && !modal.item)) ? 0.5 : 1, 
-                  boxShadow: `0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(225,37,27,0.25)'}` 
-                }}>
+                style={{
+                  width: '50%',
+                  height: 40,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  background: colors.imageBg,
+                  border: `1.5px solid ${colors.imageBorder}`,
+                  color: BRAND,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  opacity: (saving || glbStatus === 'uploading' || (cats.length === 0 && !modal.item)) ? 0.5 : 1,
+                }}
+
+              >
                 {saving || glbStatus === 'uploading'
                   ? <><Loader2 size={14} className="animate-spin" /> {saveMsg || 'Saving…'}</>
                   : cats.length === 0 && !modal.item ? '⏳ Loading categories…'
@@ -1321,7 +1936,7 @@ export default function BranchMenuPage() {
           </div>
         </div>
       )}
-      
+
       <ConfirmDeleteModal
         open={deleteModal.open}
         title="Delete Menu Item"
@@ -1334,26 +1949,26 @@ export default function BranchMenuPage() {
         }}
         onConfirm={handleDelete}
       />
-      
+
       <style>{`
-        .animate-spin {
+                    .animate - spin {
           animation: spin 0.8s linear infinite;
         }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
+              @keyframes spin {
+                to {transform: rotate(360deg); }
         }
-        ::-webkit-scrollbar {
-          width: 6px;
+              ::-webkit-scrollbar {
+                width: 6px;
         }
-        ::-webkit-scrollbar-track {
-          background: ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
+              ::-webkit-scrollbar-track {
+                background: ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
         }
-        ::-webkit-scrollbar-thumb {
-          background: ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
-          border-radius: 3px;
+              ::-webkit-scrollbar-thumb {
+                background: ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+              border-radius: 3px;
         }
-        ::-webkit-scrollbar-thumb:hover {
-          background: ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'};
+              ::-webkit-scrollbar-thumb:hover {
+                background: ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'};
         }
       `}</style>
     </div>

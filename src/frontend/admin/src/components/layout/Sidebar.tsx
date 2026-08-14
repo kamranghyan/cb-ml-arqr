@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Building2, LogOut, Shield, Sun, Moon } from 'lucide-react';
+import { Building2, LogOut, Shield } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { visibleNav } from '@/components/navigation/nav-config';
@@ -11,7 +11,7 @@ import { ROLE_LABEL } from '@/lib/roles';
 import { clearAuthCookie } from '@/lib/auth';
 import { clearTokens } from '@/lib/cognito';
 import { fetchMyTenant, planUsage, type ApiTenant } from '@/lib/auth-api';
-import { getTheme, toggleTheme } from '@/lib/theme';
+import { getTheme } from '@/lib/theme';
 
 const BRAND = '#ff5723';
 
@@ -20,8 +20,8 @@ const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFFFFF',
   card: isDark ? '#1C1C1C' : '#ffffff',
   card2: isDark ? '#242424' : '#F9FAFB',
-  border: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB', // Light mode border
-  text: isDark ? '#F5F0E8' : '#111827', // Dark text for light mode
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB',
+  text: isDark ? '#F5F0E8' : '#111827',
   muted: isDark ? '#9CA3AF' : '#6B7280',
   subtle: isDark ? '#6B7280' : '#9CA3AF',
   brand: BRAND,
@@ -61,12 +61,6 @@ export default function Sidebar() {
     };
   }, []);
 
-  const handleToggleTheme = () => {
-    const newTheme = toggleTheme();
-    setIsDark(newTheme === 'dark');
-    window.dispatchEvent(new Event('themeChange'));
-  };
-
   useEffect(() => {
     if (role !== 'tenant') return;
     fetchMyTenant().then(setTenant).catch(() => setTenant(null));
@@ -97,7 +91,7 @@ export default function Sidebar() {
         borderBottom: `1px solid ${colors.border}`,
         background: colors.bg,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 3 }}>
           {role === 'admin' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Shield size={17} color={BRAND} />
@@ -123,30 +117,6 @@ export default function Sidebar() {
               </span>
             </div>
           )}
-          <button 
-            onClick={handleToggleTheme} 
-            aria-label="Toggle theme"
-            style={{ 
-              width: 28, 
-              height: 28, 
-              borderRadius: 8, 
-              border: `1px solid ${colors.border}`, 
-              background: colors.card2,
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              cursor: 'pointer', 
-              flexShrink: 0,
-              color: colors.muted,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {isDark ? (
-              <Sun size={14} color={colors.text} />
-            ) : (
-              <Moon size={14} color={colors.text} />
-            )}
-          </button>
         </div>
 
         {role === 'admin' ? (

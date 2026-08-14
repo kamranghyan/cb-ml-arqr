@@ -8,6 +8,7 @@ import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
 import Image from 'next/image';
+import GuestTopBar from '@/components/guest/GuestTopBar';
 
 const BRAND = '#ff5723';
 
@@ -162,7 +163,7 @@ export default function TrackingPage() {
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-
+      <GuestTopBar />
       {/* Cancel modal overlay */}
       {showCancel && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
@@ -190,7 +191,7 @@ export default function TrackingPage() {
       )}
 
       {/* Header */}
-      <div style={{ padding: '52px 20px 16px', background: D.bg }}>
+      <div style={{ padding: '35px 20px 16px', background: D.bg }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button onClick={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, background: D.card, border: `1.5px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ArrowLeft size={18} color={D.text} />

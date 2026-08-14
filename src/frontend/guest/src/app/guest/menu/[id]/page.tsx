@@ -10,6 +10,8 @@ import { useCartStore } from '@/lib/store';
 import { useFavoritesStore } from '@/lib/favorites-store';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
+import GuestTopBar from '@/components/guest/GuestTopBar';
+import BottomNav from '@/components/guest/BottomNav';
 
 const BRAND = '#ff5723';
 
@@ -167,7 +169,7 @@ export default function ItemDetailPage() {
 
   return (
     <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans', sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-
+      <GuestTopBar />
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 160px' }}>
 
         {/* ── Header — bare icons, no button chrome, matches Figma ── */}
@@ -349,7 +351,7 @@ export default function ItemDetailPage() {
       </div>
 
       {/* ── Bottom bar: quantity stepper + Add to Cart ── */}
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '18px 20px 32px', background: BRAND, display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: '18px 20px 32px', background: 'rgb(28, 28, 28)', display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(0,0,0,0.15)', borderRadius: 14, overflow: 'hidden', flexShrink: 0 }}>
           <button onClick={() => setQty(q => Math.max(1, q - 1))}
             style={{ width: 46, height: 54, background: '#f1f1f1', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND }}>
@@ -362,18 +364,19 @@ export default function ItemDetailPage() {
           </button>
         </div>
         <button onClick={handleAddToCart}
-          style={{ flex: 1, height: 54, borderRadius: 14, background: added ? '#22c55e' : '#e74f21', border: '1.5px solid rgba(0,0,0,0.15)', color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}>
+          style={{ flex: 1, height: 54, borderRadius: 14, background: '#e74f21', opacity: added ? '0.5' :"1", border: '1.5px solid rgba(0,0,0,0.15)', color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}>
           {added ? '✓ Added!' : 'Add to Cart'}
         </button>
       </div>
       {/* Total isn't on the Figma button itself, but it's shown here so the
           guest isn't blindsided at checkout — flagged in chat, remove if
           you'd rather match the mockup with zero additions. */}
-      <div style={{ position: 'fixed', bottom: 104, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, textAlign: 'center', pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', bottom: 80, left: '35%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, textAlign: 'center', pointerEvents: 'none' }}>
         <span style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 14px', borderRadius: 20 }}>
           Total: Rs. {finalPrice.toLocaleString()}
         </span>
       </div>
+      <BottomNav />
     </div>
   );
 }

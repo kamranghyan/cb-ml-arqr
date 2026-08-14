@@ -7,6 +7,8 @@ import dynamic from 'next/dynamic';
 import { fetchArModel } from '@/lib/ar-api';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
+import GuestTopBar from '@/components/guest/GuestTopBar';
+import BottomNav from '@/components/guest/BottomNav';
 
 const BRAND = '#ff5723';
 
@@ -88,9 +90,10 @@ export default function ARPageClient({
 
   return (
     <main style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans', sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', transition: 'background 0.25s' }}>
+      <GuestTopBar />
 
       {/* ── Header ── */}
-      <div style={{ background: BRAND, padding: '52px 20px 20px', flexShrink: 0 }}>
+      <div style={{ background: BRAND, padding: '35px 20px 20px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => router.back()}
             style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.18)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -157,7 +160,6 @@ export default function ARPageClient({
 
       {/* ── Content ── */}
       <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
-
         {/* Loading */}
         {loading && (
           <div style={{ width: '100%', height: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 24 }}>
@@ -216,7 +218,7 @@ export default function ARPageClient({
           </>
         )}
       </div>
-
+      <BottomNav />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 0.8s linear infinite}`}</style>
     </main>
   );

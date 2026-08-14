@@ -11,6 +11,10 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Menulay',
   },
+  icons: {
+    icon: '/fav_logo.png',  
+    apple: '/fav_logo.png', 
+  },
 };
 
 export const viewport: Viewport = {
@@ -30,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=Baloo+2:wght@500;600;700;800&display=swap"
           rel="stylesheet"
         />
-        
+
       </head>
       <body>{children}</body>
     </html>

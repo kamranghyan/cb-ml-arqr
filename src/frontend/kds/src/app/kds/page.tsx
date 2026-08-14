@@ -161,7 +161,6 @@ export default function KitchenDisplayPage() {
   const apiColor = apiState === 'live' ? TONE.green : apiState === 'error' ? TONE.danger : TONE.amber;
   const wsColor = wsState === 'connected' ? TONE.green : wsState === 'connecting' ? TONE.amber : TONE.danger;
 
-  // Mobile menu toggle
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
   return (
@@ -169,23 +168,23 @@ export default function KitchenDisplayPage() {
 
       {toast && <div style={{ position: 'fixed', top: 80, right: 20, zIndex: 50, background: D.card, border: `1.5px solid ${TONE.orange.border}`, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 24px rgba(255,87,35,0.15)', maxWidth: 320 }}><div style={{ width: 32, height: 32, borderRadius: 10, background: TONE.orange.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔔</div><p style={{ fontSize: 13, fontWeight: 600, color: D.text, margin: 0 }}>{toast}</p></div>}
 
-      {/* Header — Responsive */}
+      {/* Header */}
       <header style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '10px 16px',
+        padding: '10px 20px',
         background: BRAND,
         boxShadow: '0 2px 12px rgba(255,87,35,0.25)',
         flexShrink: 0,
-        flexWrap: 'wrap',
-        gap: '8px',
+        gap: '12px',
         position: 'sticky',
         top: 0,
-        zIndex: 10
+        zIndex: 10,
+        flexWrap: 'wrap',
       }}>
-        {/* Logo - Always visible */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Left - Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <img src='./Images/logo.png' alt="Menulay Logo" style={{ width: 120, height: 32, objectFit: 'contain' }} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <p style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0, fontFamily: "'Baloo 2', sans-serif", lineHeight: 1 }}>KDS</p>
@@ -193,28 +192,83 @@ export default function KitchenDisplayPage() {
           </div>
         </div>
 
-        {/* Mobile: Clock + Counts + Menu Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Clock - always visible on mobile */}
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>{clock || '00:00:00'}</p>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
-              {currentDate}
-            </p>        </div>
+        {/* Center - Status Badges (Desktop) */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8,
+          flex: '0 1 auto',
+        }} className="desktop-status">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: apiColor.bg, border: `1px solid ${apiColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+            {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
+            <span style={{ fontSize: 10, fontWeight: 700, color: apiColor.text, textTransform: 'uppercase' }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: wsColor.bg, border: `1px solid ${wsColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+            <Radio size={12} color={wsColor.text} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: wsColor.text, textTransform: 'uppercase' }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
+            {wsState === 'connected' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+          </div>
+        </div>
 
-          {/* Counts - visible on mobile */}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {[{ val: counts.pending, label: 'P' }, { val: counts.preparing, label: 'Pr' }, { val: counts.ready, label: 'R' }].map(s => (
-              <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: "'Baloo 2', sans-serif", lineHeight: 1 }}>{s.val}</span>
-                <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</span>
-              </div>
-            ))}
+        {/* Right - Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Desktop Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} className="desktop-controls">
+            {/* Counts */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {[{ val: counts.pending, label: 'P' }, { val: counts.preparing, label: 'Pr' }, { val: counts.ready, label: 'R' }].map(s => (
+                <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: "'Baloo 2', sans-serif", lineHeight: 1 }}>{s.val}</span>
+                  <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.2)' }} />
+
+            {/* Clock */}
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>{clock || '00:00:00'}</p>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', margin: 0 }}>{currentDate}</p>
+            </div>
+
+            <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.2)' }} />
+
+            {/* Audio Toggle */}
+            <button onClick={() => setAudio(!audio)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              {audio ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+
+            {/* Theme Toggle */}
+            <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+
+            {/* Logout */}
+            <button onClick={handleLogout} disabled={loggingOut} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              <LogOut size={16} /> {loggingOut ? 'Signing out…' : 'Sign Out'}
+            </button>
           </div>
 
-          {/* Hamburger Menu Toggle */}
-          <button onClick={toggleMobileMenu} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer' }}>
-            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+          {/* Mobile Menu Button - Always top right on mobile */}
+          <button 
+            onClick={toggleMobileMenu} 
+            style={{ 
+              display: 'none', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: 38, 
+              height: 38, 
+              borderRadius: 8, 
+              border: '1.5px solid rgba(255,255,255,0.2)', 
+              background: 'rgba(255,255,255,0.1)', 
+              color: '#fff', 
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+            className="mobile-menu-btn"
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </header>
@@ -224,45 +278,56 @@ export default function KitchenDisplayPage() {
         <div style={{
           background: D.card,
           borderBottom: `1px solid ${D.border}`,
-          padding: '12px 16px',
-          display: 'flex',
+          padding: '16px 20px',
+          display: 'none',
           flexDirection: 'column',
-          gap: 10,
+          gap: 12,
           position: 'sticky',
           top: 60,
           zIndex: 9,
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-        }}>
+        }} className="mobile-dropdown">
           {/* Status Badges */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: apiColor.bg, border: `1px solid ${apiColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
-              {apiState === 'live' ? <Wifi size={10} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={10} color={apiColor.text} /> : <RefreshCw size={10} color={apiColor.text} className="animate-spin" />}
-              <span style={{ fontSize: 9, fontWeight: 700, color: apiColor.text, textTransform: 'uppercase' }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
+              {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
+              <span style={{ fontSize: 10, fontWeight: 700, color: apiColor.text, textTransform: 'uppercase' }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: wsColor.bg, border: `1px solid ${wsColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
-              <Radio size={10} color={wsColor.text} />
-              <span style={{ fontSize: 9, fontWeight: 700, color: wsColor.text, textTransform: 'uppercase' }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
-              {wsState === 'connected' && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+              <Radio size={12} color={wsColor.text} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: wsColor.text, textTransform: 'uppercase' }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
+              {wsState === 'connected' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
             </div>
           </div>
-          <div className='flex gap-2'>
+          
+          {/* Compact counts for mobile */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[{ val: counts.pending, label: 'Pending' }, { val: counts.preparing, label: 'Preparing' }, { val: counts.ready, label: 'Ready' }].map(s => (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${D.border}` }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: D.text }}>{s.val}</span>
+                <span style={{ fontSize: 10, color: D.muted }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+          
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {/* Audio Toggle */}
-            <button onClick={() => setAudio(!audio)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`, background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0', color: audio ? D.text : BRAND, fontSize: 11, fontWeight: 700, cursor: 'pointer', width: 'fit-content' }}>
-              {audio ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            <button onClick={() => setAudio(!audio)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`, background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0', color: audio ? D.text : BRAND, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {audio ? <Volume2 size={16} /> : <VolumeX size={16} />} {audio ? 'Sound On' : 'Sound Off'}
             </button>
 
             {/* Theme Toggle */}
-            <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${D.border}`, background: D.card2, color: D.text, fontSize: 11, fontWeight: 700, cursor: 'pointer', width: 'fit-content' }}>
-              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+            <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${D.border}`, background: D.card2, color: D.text, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {isDark ? <Sun size={16} /> : <Moon size={16} />} {isDark ? 'Light' : 'Dark'}
+            </button>
+
+            {/* Logout */}
+            <button onClick={handleLogout} disabled={loggingOut} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #FFD0D0', background: '#FFF0F0', color: BRAND, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              <LogOut size={16} /> {loggingOut ? 'Signing out…' : 'Sign Out'}
             </button>
           </div>
-          {/* Logout */}
-          <button onClick={handleLogout} disabled={loggingOut} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1.5px solid #FFD0D0', background: '#FFF0F0', color: BRAND, fontSize: 11, fontWeight: 700, cursor: 'pointer', width: 'fit-content' }}>
-            <LogOut size={14} /> {loggingOut ? 'Signing out…' : 'Sign Out'}
-          </button>
         </div>
       )}
-
 
       {/* Poll bar */}
       <div style={{ height: 3, background: D.border, flexShrink: 0 }}><div style={{ height: '100%', background: BRAND, transition: 'width 0.2s', width: `${pollPct}%` }} /></div>
@@ -334,7 +399,7 @@ export default function KitchenDisplayPage() {
           alignContent: 'start',
           overflowY: 'auto'
         }}>
-          {filtered.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', gap: 12, border: `2px dashed ${D.border}`, borderRadius: 20, background: D.card }}><span style={{ fontSize: 32, opacity: 0.2 }}>✓</span><p style={{ fontSize: 13, color: D.muted, fontWeight: 600, margin: 0 }}>No orders in this category</p></div>}
+          {filtered.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', gap: 12, border: `2px dashed ${D.border}`, borderRadius: 20, background: D.card }}><span style={{ fontSize: 32, opacity: 0.2 }}>✔️</span><p style={{ fontSize: 13, color: D.muted, fontWeight: 600, margin: 0 }}>No orders in this category</p></div>}
 
           {filtered.map(order => {
             const pct = Math.min(100, (order.elapsedSeconds / order.maxSeconds) * 100);
@@ -395,7 +460,42 @@ export default function KitchenDisplayPage() {
           })}
         </div>
       )}
-      <style>{`.animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        .animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+        
+        /* Desktop: Show all controls, hide mobile elements */
+        @media (min-width: 768px) {
+          .desktop-controls { display: flex !important; }
+          .desktop-status { display: flex !important; }
+          .mobile-menu-btn { display: none !important; }
+          .mobile-dropdown { display: none !important; }
+        }
+        
+        /* Mobile: Hide desktop controls, show mobile elements */
+        @media (max-width: 767px) {
+          .desktop-controls { display: none !important; }
+          .desktop-status { display: none !important; }
+          .mobile-menu-btn { display: flex !important; }
+          .mobile-dropdown { display: flex !important; }
+          
+          /* Keep menu button in top right */
+          header {
+            padding: 8px 12px !important;
+          }
+          
+          header > div:last-child {
+            gap: 4px !important;
+          }
+        }
+        
+        /* Small mobile */
+        @media (max-width: 480px) {
+          header { padding: 6px 10px !important; gap: 6px !important; }
+          header img { width: 80px !important; height: 24px !important; }
+          .mobile-menu-btn { width: 32px !important; height: 32px !important; }
+          .mobile-menu-btn svg { width: 16px !important; height: 16px !important; }
+        }
+      `}</style>
     </div>
   );
 }

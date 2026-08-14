@@ -99,6 +99,11 @@ async function forward(req: NextRequest, path: string[]) {
   const res = await fetch(upstream, init);
   const text = await res.text();
 
+  console.log('========== MENU UPSTREAM RESPONSE ==========');
+  console.log('STATUS:', res.status);
+  console.log('BODY:', text);
+  console.log('============================================');
+
   try {
     return NextResponse.json(
       text ? JSON.parse(text) : {},
