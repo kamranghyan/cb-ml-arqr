@@ -18,6 +18,7 @@ export default function ProfilePage() {
   const { fullName, phone, setFullName, setPhone } = useGuestProfileStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [nameInput, setNameInput] = useState(fullName);
   const [phoneInput, setPhoneInput] = useState(phone);
@@ -34,100 +35,312 @@ export default function ProfilePage() {
   // ── QR Scanner Logic ──────────────────────────────────────────────
   useEffect(() => {
     if (!showScanner) return;
+
     startScanner();
-    return () => stopScanner();
+
+    return () => {
+      stopScanner();
+    };
   }, [showScanner]);
+
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const startScanner = async () => {
     setScanning(true);
     setScanError('');
-    
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        scanQRCode();
+
+      const video = videoRef.current;
+
+      if (!video) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
       }
+
+      video.srcObject = stream;
+
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
+
+      await video.play();
+
+      // Camera ko initialize hone ka thora time do
+      scanTimeoutRef.current = setTimeout(() => {
+        scanQRCode();
+      }, 500);
+
     } catch (err) {
       console.error('Camera error:', err);
-      setScanError('Unable to access camera. Please allow camera permissions.');
+      setScanError(
+        'Unable to access camera. Please allow camera permissions.'
+      );
       setScanning(false);
     }
   };
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!showScanner) return;
+
+    const initScanner = async () => {
+      setScanning(true);
+      setScanError('');
+
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera API is not supported');
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        const video = videoRef.current;
+
+        if (!video) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 1) {
+            resolve();
+          } else {
+            video.onloadedmetadata = () => resolve();
+          }
+        });
+
+        await video.play();
+
+        if (!cancelled) {
+          scanQRCode();
+        }
+
+      } catch (error) {
+        console.error('Camera error:', error);
+
+        if (!cancelled) {
+          setScanError(
+            'Unable to access camera. Please allow camera permissions.'
+          );
+          setScanning(false);
+        }
+      }
+    };
+
+    initScanner();
+
+    return () => {
+      cancelled = true;
+      stopScanner();
+    };
+  }, [showScanner]);
 
   const stopScanner = () => {
     setScanning(false);
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
+
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+
+    const video = videoRef.current;
+
+    if (video?.srcObject) {
+      const stream = video.srcObject as MediaStream;
+
       stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
+
+      video.srcObject = null;
     }
   };
 
   const scanQRCode = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
+
+    if (!video || !canvas) return;
+
+    const ctx = canvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+
     if (!ctx) return;
 
-    const scanInterval = setInterval(() => {
-      if (!scanning || !video.videoWidth) return;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      
-      if (code) {
-        clearInterval(scanInterval);
-        handleScanResult(code.data);
-      }
-    }, 200);
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+    }
 
-    return () => clearInterval(scanInterval);
+    scanIntervalRef.current = setInterval(() => {
+
+      // ❌ IMPORTANT:
+      // yahan `scanning` state check mat karo
+
+      if (
+        video.readyState < 2 ||
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+      ) {
+        return;
+      }
+
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        ctx.drawImage(
+          video,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        const imageData = ctx.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        const code = jsQR(
+          imageData.data,
+          imageData.width,
+          imageData.height,
+          {
+            inversionAttempts: 'attemptBoth',
+          }
+        );
+
+        if (code?.data) {
+          console.log('✅ QR CODE FOUND:', code.data);
+
+          if (scanIntervalRef.current) {
+            clearInterval(scanIntervalRef.current);
+            scanIntervalRef.current = null;
+          }
+
+          handleScanResult(code.data);
+        }
+
+      } catch (err) {
+        console.error('QR scan error:', err);
+      }
+
+    }, 200);
+  };
+
+  const onScanSuccess = (decodedText: string, decodedResult: any) => {
+    console.log('✅ QR Code detected!');
+    console.log('📦 Raw data:', decodedText);
+
+    // // 🔥 Show what was scanned
+    // alert('QR Scanned!\nData: ' + decodedText);
+
+    stopScanner();
+    
+    setShowScanner(false);
+    handleScanResult(decodedText);
   };
 
   const handleScanResult = (result: string) => {
-    stopScanner();
+    console.log('📦 Processing QR result:', result);
+
+    // 🔥 TEST: Show alert
+    alert('Processing QR: ' + result);
+
     setShowScanner(false);
-    
+    setScanning(false);
+
     try {
+      // Try to parse as JSON first
       const data = JSON.parse(result);
+      console.log('✅ Parsed as JSON:', data);
+
       if (data.restaurantId && data.tableId) {
+        console.log('✅ Setting session data:', {
+          rid: data.restaurantId,
+          tid: data.tableId,
+          table: data.tableNumber || ''
+        });
+
         sessionStorage.setItem('lm_rid', data.restaurantId);
         sessionStorage.setItem('lm_tid', data.tableId);
         sessionStorage.setItem('lm_table', data.tableNumber || '');
+
+        console.log('✅ Redirecting to /guest/menu');
         router.push('/guest/menu');
         return;
+      } else {
+        console.warn('⚠️ Missing restaurantId or tableId in JSON:', data);
+        setScanError('Invalid QR data. Missing restaurant or table info.');
       }
     } catch (e) {
+      console.log('Not JSON, trying URL...');
+      // Not JSON, try URL params
       try {
         const url = new URL(result);
+        console.log('✅ Parsed as URL:', url);
+
         const rid = url.searchParams.get('rid');
         const tid = url.searchParams.get('tid');
+
+        console.log('URL params:', { rid, tid });
+
         if (rid && tid) {
+          console.log('✅ Setting session from URL params');
           sessionStorage.setItem('lm_rid', rid);
           sessionStorage.setItem('lm_tid', tid);
           const tableNum = url.searchParams.get('table') || '';
           if (tableNum) sessionStorage.setItem('lm_table', tableNum);
+
+          console.log('✅ Redirecting to /guest/menu');
           router.push('/guest/menu');
           return;
+        } else {
+          console.warn('⚠️ Missing rid or tid in URL:', { rid, tid });
+          setScanError('Invalid QR URL. Missing restaurant or table info.');
         }
       } catch (err) {
-        console.error('Invalid QR code:', err);
-        setScanError('Invalid QR code. Please scan a valid table QR.');
+        console.error('❌ Invalid QR code:', err);
+        setScanError('Invalid QR code format. Please scan a valid table QR.');
+        setTimeout(() => {
+          setScanError('');
+          setShowScanner(true);
+        }, 2000);
       }
     }
   };
+
+
 
   const handleSave = () => {
     setFullName(nameInput.trim());
@@ -166,7 +379,7 @@ export default function ProfilePage() {
     <>
       <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
         <GuestTopBar />
-        
+
         {/* Header */}
         <div style={{ padding: '35px 20px 16px' }}>
           <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
@@ -421,4 +634,3 @@ export default function ProfilePage() {
     </>
   );
 }
-//
