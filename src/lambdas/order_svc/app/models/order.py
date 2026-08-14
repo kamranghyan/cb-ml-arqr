@@ -43,13 +43,26 @@ class OrderRequest(BaseModel):
     deliveryAddress:       Optional[str] = None
     contactPhone:          Optional[str] = None
 
+    customerName: Optional[str] = None
+    pickupTime: Optional[str] = None
+    deliveryFeeMinorUnits: int = Field(default=0, ge=0)
+
     @model_validator(mode="after")
     def validate_total_amount(self):
-        computed = sum(i.totalPriceMinorUnits for i in self.lineItems)
-        if self.totalAmountMinorUnits != computed:
+        items_total = sum(
+            item.totalPriceMinorUnits
+            for item in self.lineItems
+        )
+
+        expected_total = items_total + self.deliveryFeeMinorUnits
+
+        if self.totalAmountMinorUnits != expected_total:
             raise ValueError(
-                f"totalAmountMinorUnits {self.totalAmountMinorUnits} != sum of line items {computed}"
+                f"totalAmountMinorUnits {self.totalAmountMinorUnits} "
+                f"!= items total({items_total}) "
+                f"+ delivery fee({self.deliveryFeeMinorUnits})"
             )
+
         return self
 
 
@@ -87,6 +100,10 @@ class OrderRecord(BaseModel):
     deliveryAddress:           Optional[str] = None
     contactPhone:              Optional[str] = None
 
+    customerName: Optional[str] = None
+    pickupTime: Optional[str] = None
+    deliveryFeeMinorUnits: int = 0
+
     placedAt:                  str
     updatedAt:                 str
     ttl:                       int
@@ -102,9 +119,12 @@ class OrderRecord(BaseModel):
             tenantId=request.tenantId,
             restaurantId=request.restaurantId,
             tableId=request.tableId,
+            customerName=request.customerName,
+            pickupTime=request.pickupTime,
             status="RECEIVED",
             lineItems=[item.model_dump() for item in request.lineItems],
             totalAmountMinorUnits=request.totalAmountMinorUnits,
+            deliveryFeeMinorUnits=request.deliveryFeeMinorUnits,
             currencyCode=request.currencyCode,
             stepFunctionsExecutionArn=execution_arn,
             guestConnectionId=request.guestConnectionId,
