@@ -50,8 +50,8 @@ _log = get_logger("cognito-auth")
 
 # ── Cognito configuration (from env vars — overridable per environment) ────────
 _REGION       = os.environ.get("COGNITO_REGION",      "ap-south-1")
-_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-south-1_SCyQ50etN")
-_CLIENT_ID    = os.environ.get("COGNITO_CLIENT_ID",    "7903hkujl9qeq67toemi5qrhes")
+_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-south-1_RkmSFSjU4")
+_CLIENT_ID    = os.environ.get("COGNITO_CLIENT_ID",    "5c5e7traqqso952olhnuoife01")
 
 _JWKS_URL = (
     f"https://cognito-idp.{_REGION}.amazonaws.com/"

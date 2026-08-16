@@ -133,7 +133,7 @@ async def create_addon(
     user, tenant_id = scope
     body = await parse_body(request)
     coerce_bool(body, "isActive")
-    coerce_int(body, "price")
+    coerce_int(body, "priceMinorUnits")
     coerce_int(body, "sortOrder")
 
     # The relationship comes from the URL, not from the request body.
