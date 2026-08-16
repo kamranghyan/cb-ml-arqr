@@ -6,22 +6,9 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-  CognitoUserPoolId:
-    Type: String
-    Default: ap-south-1_SCyQ50etN
-  CognitoClientId:
-    Type: String
-    Default: 7903hkujl9qeq67toemi5qrhes
-  CognitoRegion:
-    Type: String
-    Default: ap-south-1
   LogLevel:
     Type: String
     Default: INFO
-  SharedLayerArn:
-    Type: String
-    Default: arn:aws:lambda:ap-south-1:833090513377:layer:menulay-shared-dev:7
-    Description: ARN of the menulay-shared layer (including version)
 
 Globals:
   Function:
@@ -31,6 +18,73 @@ Globals:
     MemorySize: 512
 
 Resources:
+  # ── Cognito User Pool Infrastructure ──
+  MenuLayUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub menulay-user-pool-${Environment}
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+
+      Schema:
+      - Name: display_name
+        AttributeDataType: String
+        Mutable: true
+        StringAttributeConstraints:
+          MinLength: "0"
+          MaxLength: "256"
+
+      - Name: tenant_id
+        AttributeDataType: String
+        Mutable: true
+        StringAttributeConstraints:
+          MinLength: "0"
+          MaxLength: "128"
+
+      - Name: restaurant_id
+        AttributeDataType: String
+        Mutable: true
+        StringAttributeConstraints:
+          MinLength: "0"
+          MaxLength: "128"
+
+  MenuLayUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub menulay-client-${Environment}
+      UserPoolId: !Ref MenuLayUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+
+  # ── Local Layer Resource definition ──
+  MenulaySharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub menulay-shared-${Environment}
+      ContentUri: ../layers/shared_layer
+      CompatibleRuntimes:
+        - python3.13
+
+    # ── Tenant DynamoDB Table ─────────────────────────────────────────
+  TenantTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub TenantTable-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenantId
+          KeyType: HASH
+
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -38,15 +92,15 @@ Resources:
       CodeUri: ./
       Handler: handler.lambda_handler
       Layers:
-        - !Ref SharedLayerArn
+        - !Ref MenulaySharedLayer
       Role: !GetAtt AuthFunctionRole.Arn
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !Ref LogLevel
-          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
-          COGNITO_CLIENT_ID: !Ref CognitoClientId
-          COGNITO_REGION: !Ref CognitoRegion
+          COGNITO_USER_POOL_ID: !Ref MenuLayUserPool
+          COGNITO_CLIENT_ID: !Ref MenuLayUserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
           TENANT_TABLE: !Sub TenantTable-${Environment}
           RESTAURANT_TABLE: !Sub RestaurantTable-${Environment}
       Events:
@@ -86,7 +140,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        # ── Cognito admin operations — ONLY this service gets these ──
+        # ── Cognito admin operations — Dynamic Reference ──
         - PolicyName: CognitoUserManagement
           PolicyDocument:
             Version: '2012-10-17'
@@ -105,7 +159,7 @@ Resources:
                   - cognito-idp:AdminListGroupsForUser
                   - cognito-idp:ListUsers
                   - cognito-idp:ListGroups
-                Resource: !Sub arn:aws:cognito-idp:${CognitoRegion}:${AWS::AccountId}:userpool/${CognitoUserPoolId}
+                Resource: !GetAtt MenuLayUserPool.Arn
               # Login / refresh are unauthenticated API calls on the client id.
               - Effect: Allow
                 Action:
@@ -147,3 +201,9 @@ Outputs:
     Value: !Sub https://${AuthApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
   AuthFunctionArn:
     Value: !GetAtt AuthFunction.Arn
+  UserPoolId:
+    Description: New Cognito User Pool ID
+    Value: !Ref MenuLayUserPool
+  UserPoolClientId:
+    Description: New Cognito App Client ID
+    Value: !Ref MenuLayUserPoolClient

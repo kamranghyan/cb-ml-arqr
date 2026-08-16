@@ -2,21 +2,17 @@ version = 0.1
 
 [default.global.parameters]
 stack_name = "auth-fastapi-dev"
+region = "ap-south-1"
 
 [default.build.parameters]
 cached   = true
 parallel = true
 
 [default.deploy.parameters]
-region            = "ap-south-1"
 confirm_changeset = true
 resolve_s3        = true
 capabilities      = "CAPABILITY_IAM"
-disable_rollback  = false
-parameter_overrides = [
-  "Environment=dev",
-  "CognitoUserPoolId=ap-south-1_SCyQ50etN",
-  "CognitoClientId=7903hkujl9qeq67toemi5qrhes",
-  "CognitoRegion=ap-south-1",
-  "SharedLayerArn=arn:aws:lambda:ap-south-1:833090513377:layer:menulay-shared-dev:7",
-]
+disable_rollback  = true
+parameter_overrides = "Environment=\"dev\" LogLevel=\"INFO\""
+s3_prefix = "auth-fastapi-dev"
+image_repositories = []

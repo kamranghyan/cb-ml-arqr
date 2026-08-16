@@ -12,7 +12,7 @@ Parameters:
     Default: TenantTable-dev
   AssetBucketName:
     Type: String
-    Default: menu-assets-dev-833090513377
+    Default: cb-ml-arqr-menu-assets-dev-990016797093
   CognitoRegion:
     Type: String
     Default: ap-south-1
@@ -170,6 +170,102 @@ Resources:
         - IndexName: menuItemId-index
           KeySchema:
             - AttributeName: menuItemId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  RestaurantTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "RestaurantTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: tenantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: restaurantId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: tenantId-index
+          KeySchema:
+            - AttributeName: tenantId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  CategoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "CategoryTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: categoryId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: displayOrder
+          AttributeType: N
+      KeySchema:
+        - AttributeName: categoryId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
+              KeyType: HASH
+            - AttributeName: displayOrder
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  ItemTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "ItemTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: itemId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: categoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: itemId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: categoryId-index
+          KeySchema:
+            - AttributeName: categoryId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  DiningTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "DiningTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tableId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tableId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
               KeyType: HASH
           Projection:
             ProjectionType: ALL
