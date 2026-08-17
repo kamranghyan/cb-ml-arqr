@@ -27,8 +27,8 @@ TABLE_CONN = os.environ["TABLE_CONN"]
 
 # ── Cognito config ─────────────────────────────────────────────────────────────
 REGION       = 'ap-south-1'
-USER_POOL_ID = 'ap-south-1_SCyQ50etN'
-CLIENT_ID    = '7903hkujl9qeq67toemi5qrhes'
+USER_POOL_ID = 'ap-south-1_RkmSFSjU4'
+CLIENT_ID    = '5c5e7traqqso952olhnuoife01'
 
 JWKS_URL = (
     f'https://cognito-idp.{REGION}.amazonaws.com/'
