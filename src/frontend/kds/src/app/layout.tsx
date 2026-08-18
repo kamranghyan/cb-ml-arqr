@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     title: 'Menulay',
   },
 };
-
+//
 export const viewport: Viewport = {
   themeColor: '#ffffff',
   width: 'device-width',
