@@ -7,48 +7,78 @@ import {
   RefreshCw, ChevronRight, Pause,
 } from 'lucide-react';
 import { fetchTenants, type ApiTenant, type PlanTier } from '@/lib/auth-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 const PLAN_ORDER: PlanTier[] = ['starter', 'professional', 'enterprise'];
 
 export default function AdminDashboard() {
-  const { isDark } = useTheme();
   const [tenants, setTenants] = useState<ApiTenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isDark, setIsDark] = useState(false);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,10 +117,15 @@ export default function AdminDashboard() {
       maxWidth: 1100,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -111,6 +146,7 @@ export default function AdminDashboard() {
               fontWeight: 800,
               color: colors.text,
               margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Platform Overview
             </h1>
@@ -118,6 +154,7 @@ export default function AdminDashboard() {
               color: colors.muted,
               fontSize: 13,
               margin: 0,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Customer companies on MenuLay and how much of their plan they use.
             </p>
@@ -129,23 +166,42 @@ export default function AdminDashboard() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 16px',
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
               background: colors.card2,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
               color: colors.text,
               whiteSpace: 'nowrap',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card2;
+              e.currentTarget.style.borderColor = colors.border;
             }}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Loading State */}
+      {/* ── Loading State ── */}
       {loading && (
         <div style={{
           display: 'flex',
@@ -156,11 +212,13 @@ export default function AdminDashboard() {
           color: colors.muted,
         }}>
           <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading platform data…</p>
+          <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+            Loading platform data…
+          </p>
         </div>
       )}
 
-      {/* Error State */}
+      {/* ── Error State ── */}
       {!loading && error && (
         <div style={{
           display: 'flex',
@@ -168,14 +226,14 @@ export default function AdminDashboard() {
           justifyContent: 'center',
           gap: 8,
           padding: '40px 20px',
-          color: accent.danger.text,
+          color: accents.danger.text,
         }}>
           <AlertCircle size={20} />
-          <span>{error}</span>
+          <span style={{ fontFamily: "'Poppins', sans-serif" }}>{error}</span>
         </div>
       )}
 
-      {/* Content */}
+      {/* ── Content ── */}
       {!loading && !error && (
         <>
           {/* Stats Grid */}
@@ -195,14 +253,14 @@ export default function AdminDashboard() {
               icon={<TrendingUp size={18} />}
               label="Active"
               value={active.length}
-              accent={accent.green.text}
+              accent={accents.green.text}
               colors={colors}
             />
             <Stat
               icon={<Pause size={18} />}
               label="Suspended"
               value={suspended.length}
-              accent={suspended.length ? accent.danger.text : undefined}
+              accent={suspended.length ? accents.danger.text : undefined}
               colors={colors}
             />
             <Stat
@@ -238,12 +296,14 @@ export default function AdminDashboard() {
                           fontWeight: 600,
                           color: colors.text,
                           textTransform: 'capitalize',
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {plan}
                         </span>
                         <span style={{
                           fontSize: 13,
                           color: colors.muted,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {count}
                         </span>
@@ -265,6 +325,7 @@ export default function AdminDashboard() {
                     fontSize: 13,
                     color: colors.muted,
                     margin: '0 0 10px',
+                    fontFamily: "'Poppins', sans-serif",
                   }}>
                     These companies cannot add restaurants until they upgrade.
                   </p>
@@ -282,14 +343,16 @@ export default function AdminDashboard() {
                         fontSize: 13,
                         fontWeight: 600,
                         color: colors.text,
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {t.companyName}
                       </span>
                       <span style={{
                         fontSize: 12,
-                        color: accent.danger.text,
+                        color: accents.danger.text,
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {t.restaurantCount}/{t.maxRestaurants} · {t.planTier}
                       </span>
@@ -322,12 +385,14 @@ export default function AdminDashboard() {
                           fontSize: 13,
                           fontWeight: 600,
                           color: colors.text,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {t.companyName}
                         </div>
                         <div style={{
                           fontSize: 12,
                           color: colors.subtle,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {t.email}
                         </div>
@@ -335,8 +400,9 @@ export default function AdminDashboard() {
                       <span style={{
                         fontSize: 11,
                         fontWeight: 700,
-                        color: t.isActive ? accent.green.text : accent.danger.text,
+                        color: t.isActive ? accents.green.text : accents.danger.text,
                         whiteSpace: 'nowrap',
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {t.isActive ? '● active' : '● suspended'}
                       </span>
@@ -354,6 +420,14 @@ export default function AdminDashboard() {
                   fontWeight: 700,
                   color: BRAND,
                   textDecoration: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
                 }}
               >
                 Manage tenants <ChevronRight size={14} />
@@ -379,7 +453,7 @@ function Stat({
   label: string;
   value: number;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -401,6 +475,7 @@ function Stat({
           fontWeight: 700,
           letterSpacing: 1,
           textTransform: 'uppercase',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {label}
         </span>
@@ -410,6 +485,7 @@ function Stat({
         fontWeight: 800,
         color: accent ?? colors.text,
         lineHeight: 1,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>
@@ -424,7 +500,7 @@ function Card({
 }: {
   title: string;
   children: React.ReactNode;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -438,6 +514,7 @@ function Card({
         fontWeight: 800,
         color: colors.text,
         margin: '0 0 14px',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {title}
       </h2>
@@ -446,7 +523,7 @@ function Card({
   );
 }
 
-function Bar({ pct, colors }: { pct: number; colors: any }) {
+function Bar({ pct, colors }: { pct: number; colors: ReturnType<typeof getColors> }) {
   return (
     <div style={{
       height: 6,
@@ -464,12 +541,13 @@ function Bar({ pct, colors }: { pct: number; colors: any }) {
   );
 }
 
-function Empty({ text, colors }: { text: string; colors: any }) {
+function Empty({ text, colors }: { text: string; colors: ReturnType<typeof getColors> }) {
   return (
     <p style={{
       fontSize: 13,
       color: colors.subtle,
       margin: 0,
+      fontFamily: "'Poppins', sans-serif",
     }}>
       {text}
     </p>

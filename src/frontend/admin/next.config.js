@@ -1,12 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-
+  reactStrictMode: false,
   async rewrites() {
     return [
       // AR assets proxy only — menu uses the API route proxy for auth headers
       {
-        source:      '/api/ar/:path*',
-        destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://987eskfgd8.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
+        source: '/api/ar/:path*',
+        //updated path
+        destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://hc3yry10t4.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
+        //old path
+        // destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://987eskfgd8.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
       },
     ]
   },
@@ -16,7 +19,7 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
-          { key: 'Cross-Origin-Opener-Policy',  value: 'same-origin-allow-popups' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
         ],
       },
@@ -25,8 +28,8 @@ const nextConfig = {
 
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: '*.s3.amazonaws.com'  },
-      { protocol: 'https', hostname: '*.cloudfront.net'    },
+      { protocol: 'https', hostname: '*.s3.amazonaws.com' },
+      { protocol: 'https', hostname: '*.cloudfront.net' },
     ],
   },
 

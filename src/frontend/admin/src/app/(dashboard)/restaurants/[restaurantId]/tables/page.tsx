@@ -6,72 +6,117 @@ import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Grid3x3, AlertCircle } from
 import {
   fetchTables, createTable, updateTable, deleteTable, type ApiTable,
 } from '@/lib/admin-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
+// ── Brand Color ──
 const BRAND = '#ff5723';
 
-// Theme colors
+// ── Theme-based colors (matching checkout page) ──
 const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFF8F1',
-  card: isDark ? '#1C1C1C' : '#ffffff',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
   card2: isDark ? '#242424' : '#F9FAFB',
   border: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
   text: isDark ? '#F5F0E8' : '#1A1A1A',
-  muted: isDark ? '#9CA3AF' : '#687780',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
   subtle: isDark ? '#6B7280' : '#9CA3AF',
-  inputBg: isDark ? '#1C1C1C' : '#ffffff',
-  inputBorder: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
-  inputText: isDark ? '#F5F0E8' : '#000000',
-  placeholder: isDark ? '#6B7280' : '#999999',
   brand: BRAND,
-  brandHover: '#e04a1a',
-  success: isDark ? '#4ade80' : '#0F9D58',
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+  green: isDark ? '#4ade80' : '#0F9D58',
   danger: isDark ? '#ff8a5c' : '#E1251B',
-  shadow: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(137,28,28,0.15)',
+  placeholder: isDark ? '#6B7280' : '#888888',
   modalOverlay: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)',
 });
 
 export default function TablesPage() {
-  const { isDark } = useTheme();
-  const colors = getColors(isDark);
   const restaurantId = String(useParams().restaurantId ?? '');
-
+  const [isDark, setIsDark] = useState(false);
   const [rows, setRows] = useState<ApiTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiTable }>({ open: false });
 
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+
   const say = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind }); setTimeout(() => setToast(null), 3500);
+    setToast({ msg, kind });
+    setTimeout(() => setToast(null), 3500);
   };
 
   const load = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true); setError('');
-    try { setRows(await fetchTables(restaurantId)); }
-    catch (e: any) { setError(e?.message ?? 'Could not load tables'); }
-    finally { setLoading(false); }
+    setLoading(true);
+    setError('');
+    try {
+      setRows(await fetchTables(restaurantId));
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not load tables');
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => { load(); }, [load]);
 
   async function onDelete(t: ApiTable) {
     if (!confirm(`Delete table "${t.tableNumber}"? Its QR code will stop working.`)) return;
-    try { await deleteTable(t.tableId, restaurantId); say('Table deleted'); load(); }
-    catch (e: any) { say(e.message, 'err'); }
+    try {
+      await deleteTable(t.tableId, restaurantId);
+      say('Table deleted');
+      load();
+    } catch (e: any) {
+      say(e.message, 'err');
+    }
   }
 
   const zones = Array.from(new Set(rows.map(r => r.zone).filter(Boolean)));
-//
+
   return (
     <div style={{
       padding: '24px 20px 40px',
       background: colors.bg,
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
       <style>{`
-        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        input::placeholder,
+        input::-webkit-input-placeholder,
+        input::-moz-placeholder {
+          color: ${colors.placeholder} !important;
+          opacity: 0.8;
+        }
+        input:focus {
+          outline: none;
+        }
         ::-webkit-scrollbar {
           width: 6px;
         }
@@ -87,36 +132,60 @@ export default function TablesPage() {
         }
       `}</style>
 
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         flexWrap: 'wrap',
         gap: 12,
-        marginBottom: 18
+        marginBottom: 18,
       }}>
         <p style={{
           color: colors.muted,
           fontSize: 14,
-          margin: 0
+          margin: 0,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           Physical tables in this branch. Each one gets its own QR code.
         </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+        }}>
           <button
             onClick={load}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '7px 14px',
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
-              background: colors.card2,
+              padding: '8px 14px',
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
+              background: colors.card,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
               color: colors.text,
+              fontFamily: "'Poppins', sans-serif",
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card;
+              e.currentTarget.style.borderColor = colors.border;
             }}
           >
             <RefreshCw size={14} /> Refresh
@@ -127,14 +196,29 @@ export default function TablesPage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '7px 14px',
+              padding: '8px 16px',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 10,
               background: BRAND,
               color: '#fff',
               fontWeight: 700,
               fontSize: 13,
               cursor: 'pointer',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#e64a1a';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = BRAND;
             }}
           >
             <Plus size={16} /> New Table
@@ -142,12 +226,13 @@ export default function TablesPage() {
         </div>
       </div>
 
+      {/* ── Stats ── */}
       {!loading && !error && rows.length > 0 && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
           gap: 12,
-          marginBottom: 16
+          marginBottom: 16,
         }}>
           <Stat label="Tables" value={rows.length} colors={colors} />
           <Stat label="Zones" value={zones.length} colors={colors} />
@@ -155,6 +240,7 @@ export default function TablesPage() {
         </div>
       )}
 
+      {/* ── Loading State ── */}
       {loading && (
         <div style={{
           display: 'flex',
@@ -165,10 +251,13 @@ export default function TablesPage() {
           color: colors.muted,
         }}>
           <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading tables…</p>
+          <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+            Loading tables…
+          </p>
         </div>
       )}
 
+      {/* ── Error State ── */}
       {!loading && error && (
         <div style={{
           display: 'flex',
@@ -182,6 +271,7 @@ export default function TablesPage() {
         </div>
       )}
 
+      {/* ── Empty State ── */}
       {!loading && !error && rows.length === 0 && (
         <div style={{
           display: 'flex',
@@ -192,13 +282,26 @@ export default function TablesPage() {
           color: colors.subtle,
         }}>
           <Grid3x3 size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-          <p style={{ margin: 0, fontWeight: 600, color: colors.muted }}>No tables yet.</p>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: colors.subtle }}>
+          <p style={{
+            margin: 0,
+            fontWeight: 600,
+            color: colors.muted,
+            fontFamily: "'Poppins', sans-serif",
+          }}>
+            No tables yet.
+          </p>
+          <p style={{
+            margin: '4px 0 0',
+            fontSize: 13,
+            color: colors.subtle,
+            fontFamily: "'Poppins', sans-serif",
+          }}>
             Add tables here, then print their QR codes from the QR tab.
           </p>
         </div>
       )}
 
+      {/* ── Tables Table ── */}
       {!loading && !error && rows.length > 0 && (
         <div style={{
           border: `1px solid ${colors.border}`,
@@ -211,6 +314,7 @@ export default function TablesPage() {
               width: '100%',
               borderCollapse: 'collapse',
               minWidth: 500,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               <thead style={{ background: colors.card2 }}>
                 <tr>
@@ -223,6 +327,7 @@ export default function TablesPage() {
                     color: colors.subtle,
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
                   }}>Table</th>
                   <th style={{
                     padding: '10px 12px',
@@ -233,6 +338,7 @@ export default function TablesPage() {
                     color: colors.subtle,
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
                   }}>Zone</th>
                   <th style={{
                     padding: '10px 12px',
@@ -243,6 +349,7 @@ export default function TablesPage() {
                     color: colors.subtle,
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
                   }}>Outlet</th>
                   <th style={{
                     padding: '10px 12px',
@@ -253,6 +360,7 @@ export default function TablesPage() {
                     color: colors.subtle,
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
                   }}>Seats</th>
                   <th style={{
                     padding: '10px 12px',
@@ -263,6 +371,7 @@ export default function TablesPage() {
                     color: colors.subtle,
                     textAlign: 'right',
                     whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
                   }}></th>
                 </tr>
               </thead>
@@ -274,21 +383,25 @@ export default function TablesPage() {
                       fontSize: 14,
                       fontWeight: 600,
                       color: colors.text,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>{t.tableNumber}</td>
                     <td style={{
                       padding: '11px 12px',
                       fontSize: 14,
                       color: colors.muted,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>{t.zone || '—'}</td>
                     <td style={{
                       padding: '11px 12px',
                       fontSize: 14,
                       color: colors.muted,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>{t.outlet || '—'}</td>
                     <td style={{
                       padding: '11px 12px',
                       fontSize: 14,
                       color: colors.text,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>{t.capacity}</td>
                     <td style={{
                       padding: '11px 12px',
@@ -296,6 +409,7 @@ export default function TablesPage() {
                       color: colors.text,
                       textAlign: 'right',
                       whiteSpace: 'nowrap',
+                      fontFamily: "'Poppins', sans-serif",
                     }}>
                       <button
                         onClick={() => setModal({ open: true, edit: t })}
@@ -304,14 +418,33 @@ export default function TablesPage() {
                           alignItems: 'center',
                           gap: 6,
                           padding: '6px 10px',
-                          border: `1px solid ${colors.border}`,
+                          border: `1.5px solid ${colors.border}`,
                           borderRadius: 8,
-                          background: colors.card2,
+                          background: colors.card,
                           fontWeight: 600,
                           fontSize: 13,
                           cursor: 'pointer',
                           color: colors.text,
                           marginRight: 6,
+                          fontFamily: "'Poppins', sans-serif",
+                          transition: 'all 0.2s ease',
+                          outline: 'none',
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                          e.currentTarget.style.borderColor = BRAND;
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.boxShadow = 'none';
+                          e.currentTarget.style.borderColor = colors.border;
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = colors.hoverBg;
+                          e.currentTarget.style.borderColor = BRAND;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = colors.card;
+                          e.currentTarget.style.borderColor = colors.border;
                         }}
                       >
                         <Edit2 size={14} />
@@ -323,13 +456,32 @@ export default function TablesPage() {
                           alignItems: 'center',
                           gap: 6,
                           padding: '6px 10px',
-                          border: `1px solid ${colors.border}`,
+                          border: `1.5px solid ${colors.border}`,
                           borderRadius: 8,
-                          background: colors.card2,
+                          background: colors.card,
                           fontWeight: 600,
                           fontSize: 13,
                           cursor: 'pointer',
                           color: colors.danger,
+                          fontFamily: "'Poppins', sans-serif",
+                          transition: 'all 0.2s ease',
+                          outline: 'none',
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                          e.currentTarget.style.borderColor = BRAND;
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.boxShadow = 'none';
+                          e.currentTarget.style.borderColor = colors.border;
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = colors.hoverBg;
+                          e.currentTarget.style.borderColor = BRAND;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = colors.card;
+                          e.currentTarget.style.borderColor = colors.border;
                         }}
                       >
                         <Trash2 size={14} />
@@ -343,6 +495,7 @@ export default function TablesPage() {
         </div>
       )}
 
+      {/* ── Table Modal ── */}
       {modal.open && (
         <TableModal
           restaurantId={restaurantId}
@@ -350,10 +503,12 @@ export default function TablesPage() {
           onClose={() => setModal({ open: false })}
           onSaved={() => { setModal({ open: false }); load(); }}
           say={say}
+          colors={colors}
           isDark={isDark}
         />
       )}
 
+      {/* ── Toast ── */}
       {toast && (
         <div style={{
           position: 'fixed',
@@ -361,11 +516,12 @@ export default function TablesPage() {
           right: 24,
           padding: '12px 18px',
           borderRadius: 10,
-          background: toast.kind === 'ok' ? colors.success : colors.danger,
+          background: toast.kind === 'ok' ? colors.green : colors.danger,
           color: '#fff',
           fontWeight: 600,
           fontSize: 14,
           zIndex: 100,
+          fontFamily: "'Poppins', sans-serif",
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         }}>
           {toast.msg}
@@ -375,12 +531,15 @@ export default function TablesPage() {
   );
 }
 
+// ── Table Modal ──
+
 function TableModal({
   restaurantId,
   edit,
   onClose,
   onSaved,
   say,
+  colors,
   isDark,
 }: {
   restaurantId: string;
@@ -388,9 +547,9 @@ function TableModal({
   onClose: () => void;
   onSaved: () => void;
   say: (m: string, k?: 'ok' | 'err') => void;
+  colors: ReturnType<typeof getColors>;
   isDark: boolean;
 }) {
-  const colors = getColors(isDark);
   const [f, setF] = useState({
     tableNumber: edit?.tableNumber ?? '',
     zone: edit?.zone ?? 'Main Hall',
@@ -403,25 +562,33 @@ function TableModal({
   async function save() {
     setSaving(true);
     try {
-      if (edit) { await updateTable(edit.tableId, f, restaurantId); say('Table updated'); }
-      else { await createTable(f, restaurantId); say('Table created'); }
+      if (edit) {
+        await updateTable(edit.tableId, f, restaurantId);
+        say('Table updated');
+      } else {
+        await createTable(f, restaurantId);
+        say('Table created');
+      }
       onSaved();
-    } catch (e: any) { say(e.message, 'err'); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      say(e.message, 'err');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  // Fixed: Properly typed as React.CSSProperties
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: '9px 11px',
-    border: `1px solid ${colors.inputBorder}`,
-    borderRadius: 8,
+    padding: '9px 12px',
+    border: `1.5px solid ${colors.border}`,
+    borderRadius: 10,
     fontSize: 14,
+    fontFamily: "'Poppins', sans-serif",
     boxSizing: 'border-box',
-    color: colors.inputText,
-    background: colors.inputBg,
+    color: colors.text,
+    background: colors.bg,
     outline: 'none',
-    transition: 'border-color 0.2s ease',
+    transition: 'all 0.2s ease',
   };
 
   const labelStyle: React.CSSProperties = {
@@ -430,49 +597,59 @@ function TableModal({
     fontWeight: 700,
     color: colors.muted,
     marginBottom: 5,
+    fontFamily: "'Poppins', sans-serif",
   };
 
-  // Handle focus and blur with proper typing
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.style.borderColor = BRAND;
+    e.currentTarget.style.borderColor = BRAND;
+    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.style.borderColor = colors.inputBorder;
+    e.currentTarget.style.borderColor = colors.border;
+    e.currentTarget.style.boxShadow = 'none';
   };
 
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed',
-      inset: 0,
-      background: colors.modalOverlay,
-      backdropFilter: 'blur(4px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 200,
-      padding: 16,
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: colors.card,
-        borderRadius: 14,
-        padding: 'clamp(20px, 3vw, 24px)',
-        width: '100%',
-        maxWidth: 420,
-        border: `1px solid ${colors.border}`,
-        boxShadow: `0 8px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)'}`,
-      }}>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: colors.modalOverlay,
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200,
+        padding: 16,
+        fontFamily: "'Poppins', sans-serif",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: colors.card,
+          borderRadius: 16,
+          padding: 'clamp(20px, 3vw, 24px)',
+          width: '100%',
+          maxWidth: 420,
+          border: `1px solid ${colors.border}`,
+          boxShadow: `0 8px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)'}`,
+        }}
+      >
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 18
+          marginBottom: 18,
         }}>
           <h3 style={{
             margin: 0,
             fontSize: 18,
-            fontWeight: 800,
+            fontWeight: 700,
             color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
           }}>
             {edit ? 'Edit Table' : 'New Table'}
           </h3>
@@ -481,21 +658,36 @@ function TableModal({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
-              padding: '4px',
+              justifyContent: 'center',
+              padding: 4,
               border: 'none',
               borderRadius: 8,
               background: 'transparent',
-              fontWeight: 600,
-              fontSize: 13,
               cursor: 'pointer',
               color: colors.muted,
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.color = colors.text;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = colors.muted;
             }}
           >
             <X size={18} />
           </button>
         </div>
-        <div style={{ display: 'grid', gap: 12 }}>
+
+        <div style={{ display: 'grid', gap: 14 }}>
           <div>
             <label style={labelStyle}>Table Number</label>
             <input
@@ -507,6 +699,7 @@ function TableModal({
               onBlur={handleBlur}
             />
           </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>Zone</label>
@@ -531,6 +724,7 @@ function TableModal({
               />
             </div>
           </div>
+
           <div>
             <label style={labelStyle}>Seats</label>
             <input
@@ -543,6 +737,7 @@ function TableModal({
               onBlur={handleBlur}
             />
           </div>
+
           <button
             onClick={save}
             disabled={saving || !f.tableNumber.trim()}
@@ -550,17 +745,37 @@ function TableModal({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 6,
-              padding: '10px 14px',
+              gap: 8,
+              padding: '10px 16px',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 10,
               background: BRAND,
               color: '#fff',
               fontWeight: 700,
               fontSize: 14,
               cursor: saving || !f.tableNumber.trim() ? 'not-allowed' : 'pointer',
+              fontFamily: "'Poppins', sans-serif",
               opacity: saving || !f.tableNumber.trim() ? 0.6 : 1,
               transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              if (!saving && f.tableNumber.trim()) {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              }
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              if (!saving && f.tableNumber.trim()) {
+                e.currentTarget.style.background = '#e64a1a';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!saving && f.tableNumber.trim()) {
+                e.currentTarget.style.background = BRAND;
+              }
             }}
           >
             {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
@@ -572,14 +787,16 @@ function TableModal({
   );
 }
 
+// ── Stat Component ──
+
 function Stat({
   label,
   value,
-  colors
+  colors,
 }: {
   label: string;
   value: number;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -594,13 +811,14 @@ function Stat({
         letterSpacing: 1,
         textTransform: 'uppercase',
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>{label}</div>
       <div style={{
         fontSize: 'clamp(18px, 2.5vw, 20px)',
         fontWeight: 800,
         color: colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>{value}</div>
     </div>
   );
 }
-

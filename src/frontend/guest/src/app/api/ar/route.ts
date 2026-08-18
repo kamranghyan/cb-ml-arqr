@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE  = `${process.env.NEXT_PUBLIC_AR_API_BASE ?? 'https://xn1byphl3m.execute-api.ap-south-1.amazonaws.com/dev'}/ar`;
+const API_BASE  = process.env.NEXT_PUBLIC_AR_API_BASE;
 const MENU_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev';
+  process.env.NEXT_PUBLIC_API_BASE
 
 // restaurantId → tenantId, resolved from the restaurant itself so nothing
 // about the tenant has to be configured in the guest build.

@@ -12,48 +12,78 @@ import {
 } from '@/lib/tenant-api';
 import { fetchMyTenant, planUsage, isAtPlanLimit, type ApiTenant } from '@/lib/auth-api';
 import { money } from '@/lib/support-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches Analytics page) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 export default function TenantDashboard() {
-  const { isDark } = useTheme();
   const [tenant, setTenant] = useState<ApiTenant | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [orders, setOrders] = useState<BranchOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isDark, setIsDark] = useState(false);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,7 +95,6 @@ export default function TenantDashboard() {
       ]);
       setTenant(t);
       setBranches(bs);
-      // Today's trading across every branch.
       setOrders(await fetchOrders(bs, '', 24));
     } catch (e: any) {
       setError(e?.message ?? 'Could not load your dashboard');
@@ -92,10 +121,15 @@ export default function TenantDashboard() {
       maxWidth: 1150,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -116,6 +150,7 @@ export default function TenantDashboard() {
               fontWeight: 800,
               color: colors.text,
               margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               {tenant?.companyName ?? 'Dashboard'}
             </h1>
@@ -123,6 +158,7 @@ export default function TenantDashboard() {
               color: colors.muted,
               fontSize: 13,
               margin: 0,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               The last 24 hours across all your restaurants.
             </p>
@@ -134,23 +170,42 @@ export default function TenantDashboard() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 16px',
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
               background: colors.card2,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
               color: colors.text,
               whiteSpace: 'nowrap',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card2;
+              e.currentTarget.style.borderColor = colors.border;
             }}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Loading State */}
+      {/* ── Loading State ── */}
       {loading && (
         <div style={{
           display: 'flex',
@@ -161,11 +216,13 @@ export default function TenantDashboard() {
           color: colors.muted,
         }}>
           <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading dashboard…</p>
+          <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+            Loading dashboard…
+          </p>
         </div>
       )}
 
-      {/* Error State */}
+      {/* ── Error State ── */}
       {!loading && error && (
         <div style={{
           display: 'flex',
@@ -173,14 +230,14 @@ export default function TenantDashboard() {
           justifyContent: 'center',
           gap: 8,
           padding: '40px 20px',
-          color: accent.danger.text,
+          color: accents.danger.text,
         }}>
           <AlertCircle size={20} />
-          <span>{error}</span>
+          <span style={{ fontFamily: "'Poppins', sans-serif" }}>{error}</span>
         </div>
       )}
 
-      {/* Main Content */}
+      {/* ── Main Content ── */}
       {!loading && !error && (
         <>
           {/* Plan Limit Warning */}
@@ -189,14 +246,15 @@ export default function TenantDashboard() {
               padding: '12px 16px',
               borderRadius: 10,
               marginBottom: 16,
-              background: isDark ? 'rgba(251,146,60,0.15)' : '#FFF7E6',
-              border: `1px solid ${isDark ? 'rgba(251,146,60,0.3)' : '#FFE0A3'}`,
-              color: isDark ? '#fb923c' : '#891C1C',
+              background: accents.orange.bg,
+              border: `1px solid ${accents.orange.border}`,
+              color: accents.orange.text,
               fontSize: 13,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
               flexWrap: 'wrap',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               <Lock size={15} />
               <span>
@@ -206,7 +264,7 @@ export default function TenantDashboard() {
             </div>
           )}
 
-          {/* Stats Grid */}
+          {/* ── Stats Grid ── */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
@@ -219,12 +277,14 @@ export default function TenantDashboard() {
               value={String(live.length)}
               accent={live.length ? BRAND : undefined}
               colors={colors}
+              isDark={isDark}
             />
             <Stat
               icon={<Receipt size={17} />}
               label="Orders (24h)"
               value={String(orders.length)}
               colors={colors}
+              isDark={isDark}
             />
             <Stat
               icon={<TrendingUp size={17} />}
@@ -232,23 +292,25 @@ export default function TenantDashboard() {
               value={money(revenue, currency)}
               accent={colors.text}
               colors={colors}
+              isDark={isDark}
             />
             <Stat
               icon={<Store size={17} />}
               label="Restaurants"
               value={tenant ? planUsage(tenant) : String(branches.length)}
               colors={colors}
+              isDark={isDark}
             />
           </div>
 
-          {/* Cards Grid */}
+          {/* ── Cards Grid ── */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
             gap: 16,
           }}>
             {/* By Restaurant Card */}
-            <Card title="By restaurant" href="/analytics" hrefLabel="See analytics" colors={colors}>
+            <Card title="By restaurant" href="/analytics" hrefLabel="See analytics" colors={colors} isDark={isDark}>
               {perBranch.length === 0 ? (
                 <Muted text="No orders in the last 24 hours." colors={colors} />
               ) : (
@@ -266,12 +328,14 @@ export default function TenantDashboard() {
                       fontSize: 13,
                       fontWeight: 600,
                       color: colors.text,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>
                       {b.branchName}
                     </span>
                     <span style={{
                       fontSize: 12,
                       color: colors.muted,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>
                       {b.orders} order{b.orders === 1 ? '' : 's'} · {money(b.revenue, currency)}
                     </span>
@@ -281,7 +345,7 @@ export default function TenantDashboard() {
             </Card>
 
             {/* Top Items Card */}
-            <Card title="Selling best" href="/analytics" hrefLabel="See analytics" colors={colors}>
+            <Card title="Selling best" href="/analytics" hrefLabel="See analytics" colors={colors} isDark={isDark}>
               {top.length === 0 ? (
                 <Muted text="Nothing sold yet today." colors={colors} />
               ) : (
@@ -298,12 +362,14 @@ export default function TenantDashboard() {
                           fontSize: 13,
                           fontWeight: 600,
                           color: colors.text,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {t.name}
                         </span>
                         <span style={{
                           fontSize: 13,
                           color: colors.muted,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {t.qty}
                         </span>
@@ -328,7 +394,7 @@ export default function TenantDashboard() {
             </Card>
 
             {/* Restaurants Card */}
-            <Card title="Your restaurants" href="/restaurants" hrefLabel="Manage" colors={colors}>
+            <Card title="Your restaurants" href="/restaurants" hrefLabel="Manage" colors={colors} isDark={isDark}>
               {branches.length === 0 ? (
                 <Muted text="Add your first restaurant to start taking orders." colors={colors} />
               ) : (
@@ -347,12 +413,14 @@ export default function TenantDashboard() {
                         fontSize: 13,
                         fontWeight: 600,
                         color: colors.text,
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {b.name}
                       </div>
                       <div style={{
                         fontSize: 12,
                         color: colors.subtle,
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {b.address?.city ?? '—'}
                       </div>
@@ -360,8 +428,9 @@ export default function TenantDashboard() {
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: b.isActive ? '#4ade80' : colors.subtle,
+                      color: b.isActive ? accents.green.text : colors.subtle,
                       whiteSpace: 'nowrap',
+                      fontFamily: "'Poppins', sans-serif",
                     }}>
                       {b.isActive ? '● open' : '● closed'}
                     </span>
@@ -384,12 +453,14 @@ function Stat({
   value,
   accent,
   colors,
+  isDark,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
 }) {
   return (
     <div style={{
@@ -411,6 +482,7 @@ function Stat({
           fontWeight: 700,
           letterSpacing: 1,
           textTransform: 'uppercase',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {label}
         </span>
@@ -420,6 +492,7 @@ function Stat({
         fontWeight: 800,
         color: accent ?? colors.text,
         lineHeight: 1.15,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>
@@ -433,12 +506,14 @@ function Card({
   hrefLabel,
   children,
   colors,
+  isDark,
 }: {
   title: string;
   href?: string;
   hrefLabel?: string;
   children: React.ReactNode;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
 }) {
   return (
     <div style={{
@@ -452,6 +527,7 @@ function Card({
         fontWeight: 800,
         color: colors.text,
         margin: '0 0 12px',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {title}
       </h2>
@@ -468,6 +544,14 @@ function Card({
             fontWeight: 700,
             color: BRAND,
             textDecoration: 'none',
+            fontFamily: "'Poppins', sans-serif",
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '0.8';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '1';
           }}
         >
           {hrefLabel} <ChevronRight size={14} />
@@ -477,7 +561,7 @@ function Card({
   );
 }
 
-function Muted({ text, colors }: { text: string; colors: any }) {
+function Muted({ text, colors }: { text: string; colors: ReturnType<typeof getColors> }) {
   return (
     <p style={{
       fontSize: 13,
@@ -485,6 +569,7 @@ function Muted({ text, colors }: { text: string; colors: any }) {
       margin: 0,
       padding: '12px 0',
       textAlign: 'center',
+      fontFamily: "'Poppins', sans-serif",
     }}>
       {text}
     </p>

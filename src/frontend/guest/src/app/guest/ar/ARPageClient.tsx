@@ -93,7 +93,7 @@ export default function ARPageClient({
       <GuestTopBar />
 
       {/* ── Header ── */}
-      <div style={{ background: BRAND, padding: '35px 20px 20px', flexShrink: 0 }}>
+      <div style={{ background: BRAND, padding: '20px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => router.back()}
             style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.18)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -212,7 +212,7 @@ export default function ARPageClient({
             <div style={{ borderRadius: 24, overflow: 'hidden', border: `1.5px solid ${D.border}`, boxShadow: '0 8px 32px rgba(255,87,35,0.12)' }}>
               <ARViewer glbUrl={glbUrl} itemName={itemName} emoji={emoji} />
             </div>
-            <p style={{ textAlign: 'center', fontSize: 12, color: D.sub, marginTop: 14 }}>
+            <p style={{ textAlign: 'center', fontSize: 12, color: D.sub, marginTop: 14, marginBottom:'100px' }}>
               Pinch to zoom · Drag to rotate · Tap AR to place in your space
             </p>
           </>

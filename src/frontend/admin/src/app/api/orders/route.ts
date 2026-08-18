@@ -12,8 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const ORDERS_BASE =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE ??
-  'https://s4qafzisc6.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_ORDERS_API_BASE
 
 function parseJwt(token: string): Record<string, unknown> {
   try {

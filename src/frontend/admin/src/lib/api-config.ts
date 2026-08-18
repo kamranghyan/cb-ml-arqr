@@ -129,8 +129,7 @@ export const RESTAURANT_ID_KDS =
   process.env.NEXT_PUBLIC_RESTAURANT_ID_KDS ?? 'r456'
 
 export const ORDERS_API_BASE =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE ??
-  'https://s4qafzisc6.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_ORDERS_API_BASE
 
 
 export const ORDERS_API = {

@@ -6,24 +6,44 @@ import {
 } from 'lucide-react';
 import { loadUser, type AuthUser } from '@/lib/cognito';
 import { PLAN_LABELS, type PlanTier } from '@/lib/auth-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 // Plan limits are enforced in auth_svc; this mirrors them so an admin can see
 // what each tier allows without reading the code.
@@ -34,25 +54,35 @@ const PLAN_LIMITS: Record<PlanTier, string> = {
 };
 
 export default function AdminSettings() {
-  const { isDark } = useTheme();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [copied, setCopied] = useState('');
+  const [isDark, setIsDark] = useState(false);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   useEffect(() => {
     setUser(loadUser());
@@ -68,13 +98,18 @@ export default function AdminSettings() {
     <div style={{
       background: colors.bg,
       padding: '16px 20px 40px',
-      maxWidth: 900,
+      // maxWidth: 900,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -86,6 +121,7 @@ export default function AdminSettings() {
           fontWeight: 800,
           color: colors.text,
           margin: 0,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           Settings
         </h1>
@@ -93,13 +129,14 @@ export default function AdminSettings() {
           color: colors.muted,
           fontSize: 14,
           margin: 0,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           Your account and how the platform is configured.
         </p>
       </div>
 
-      {/* ── Account ─────────────────────────────────────────────── */}
-      <Card icon={<Shield size={16} />} title="Your account" colors={colors}>
+      {/* ── Account Card ── */}
+      <Card icon={<Shield size={16} color={BRAND} />} title="Your account" colors={colors}>
         <Field label="Email" value={user?.email || '—'} colors={colors} />
         <Field label="Name" value={user?.displayName || '—'} colors={colors} />
         <Field label="Role" value="Platform administrator" colors={colors} />
@@ -107,6 +144,7 @@ export default function AdminSettings() {
           fontSize: 13,
           color: colors.muted,
           margin: '14px 0 0',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           A platform administrator is not tied to any company — that is what
           separates you from a company owner.
@@ -115,21 +153,29 @@ export default function AdminSettings() {
           fontSize: 13,
           color: colors.subtle,
           margin: '8px 0 0',
+          fontFamily: "'Poppins', sans-serif",
         }}>
-          To change your password, sign out and use <strong style={{ color: colors.text }}>Forgot password</strong>
+          To change your password, sign out and use{' '}
+          <strong style={{ color: colors.text, fontFamily: "'Poppins', sans-serif" }}>
+            Forgot password
+          </strong>
           {' '}on the sign-in screen.
         </p>
       </Card>
 
-      {/* ── Plans ───────────────────────────────────────────────── */}
-      <Card icon={<CreditCard size={16} />} title="Subscription plans" colors={colors}>
+      {/* ── Plans Card ── */}
+      <Card icon={<CreditCard size={16} color={BRAND} />} title="Subscription plans" colors={colors}>
         <p style={{
           fontSize: 13,
           color: colors.muted,
           margin: '0 0 14px',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           What each tier allows. Change a company&apos;s plan from the{' '}
-          <strong style={{ color: colors.text }}>Tenants</strong> page.
+          <strong style={{ color: colors.text, fontFamily: "'Poppins', sans-serif" }}>
+            Tenants
+          </strong>{' '}
+          page.
         </p>
         {(Object.keys(PLAN_LABELS) as PlanTier[]).map(p => (
           <div key={p} style={{
@@ -146,17 +192,19 @@ export default function AdminSettings() {
               fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: 0.5,
-              padding: '3px 9px',
+              padding: '3px 10px',
               borderRadius: 6,
-              background: `${BRAND}15`,
+              background: colors.brandBg,
               color: BRAND,
               whiteSpace: 'nowrap',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               {p}
             </span>
             <span style={{
               fontSize: 13,
               color: colors.muted,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               {PLAN_LIMITS[p]}
             </span>
@@ -164,12 +212,13 @@ export default function AdminSettings() {
         ))}
       </Card>
 
-      {/* ── Platform ────────────────────────────────────────────── */}
-      <Card icon={<Server size={16} />} title="Platform" colors={colors}>
+      {/* ── Platform Card ── */}
+      <Card icon={<Server size={16} color={BRAND} />} title="Platform" colors={colors}>
         <p style={{
           fontSize: 13,
           color: colors.muted,
           margin: '0 0 14px',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           Where this console is pointed. Handy when a customer reports an issue
           and you need to say which environment they are on.
@@ -180,7 +229,7 @@ export default function AdminSettings() {
           copied={copied}
           onCopy={copy}
           colors={colors}
-          accent={accent}
+          accents={accents}
         />
         <CopyField
           label="Auth API"
@@ -188,7 +237,7 @@ export default function AdminSettings() {
           copied={copied}
           onCopy={copy}
           colors={colors}
-          accent={accent}
+          accents={accents}
         />
         <CopyField
           label="Menu API"
@@ -196,7 +245,7 @@ export default function AdminSettings() {
           copied={copied}
           onCopy={copy}
           colors={colors}
-          accent={accent}
+          accents={accents}
         />
         <CopyField
           label="Orders API"
@@ -204,7 +253,7 @@ export default function AdminSettings() {
           copied={copied}
           onCopy={copy}
           colors={colors}
-          accent={accent}
+          accents={accents}
         />
         <CopyField
           label="Guest app"
@@ -212,12 +261,12 @@ export default function AdminSettings() {
           copied={copied}
           onCopy={copy}
           colors={colors}
-          accent={accent}
+          accents={accents}
         />
       </Card>
 
-      {/* ── Roles ───────────────────────────────────────────────── */}
-      <Card icon={<SettingsIcon size={16} />} title="Who can do what" colors={colors}>
+      {/* ── Roles Card ── */}
+      <Card icon={<SettingsIcon size={16} color={BRAND} />} title="Who can do what" colors={colors}>
         <RoleRow
           role="Platform admin"
           does="Creates companies, sets plans, suspends accounts, helps with support."
@@ -254,7 +303,7 @@ function Card({
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -269,7 +318,6 @@ function Card({
         alignItems: 'center',
         gap: 8,
         marginBottom: 14,
-        color: BRAND,
         flexWrap: 'wrap',
       }}>
         {icon}
@@ -278,6 +326,7 @@ function Card({
           fontWeight: 800,
           color: colors.text,
           margin: 0,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {title}
         </h2>
@@ -294,7 +343,7 @@ function Field({
 }: {
   label: string;
   value: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -307,6 +356,7 @@ function Field({
       <span style={{
         fontSize: 13,
         color: colors.muted,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {label}
       </span>
@@ -316,6 +366,7 @@ function Field({
         color: colors.text,
         wordBreak: 'break-word',
         textAlign: 'right',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </span>
@@ -329,14 +380,14 @@ function CopyField({
   copied,
   onCopy,
   colors,
-  accent,
+  accents,
 }: {
   label: string;
   value: string;
   copied: string;
   onCopy: (l: string, v: string) => void;
-  colors: any;
-  accent: any;
+  colors: ReturnType<typeof getColors>;
+  accents: ReturnType<typeof getAccents>;
 }) {
   return (
     <div style={{
@@ -352,6 +403,7 @@ function CopyField({
         fontSize: 13,
         color: colors.muted,
         whiteSpace: 'nowrap',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {label}
       </span>
@@ -374,24 +426,41 @@ function CopyField({
         onClick={() => onCopy(label, value)}
         style={{
           padding: 5,
-          border: `1px solid ${colors.border}`,
-          borderRadius: 6,
+          border: `1.5px solid ${colors.border}`,
+          borderRadius: 8,
           background: colors.card2,
           cursor: 'pointer',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          width: 28,
-          height: 28,
+          width: 30,
+          height: 30,
           transition: 'all 0.2s ease',
+          outline: 'none',
         }}
         title="Copy"
+        onFocus={(e) => {
+          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+          e.currentTarget.style.borderColor = BRAND;
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.boxShadow = 'none';
+          e.currentTarget.style.borderColor = colors.border;
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = colors.hoverBg;
+          e.currentTarget.style.borderColor = BRAND;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = colors.card2;
+          e.currentTarget.style.borderColor = colors.border;
+        }}
       >
         {copied === label ? (
-          <Check size={13} color={accent.green.text} />
+          <Check size={14} color={accents.green.text} />
         ) : (
-          <Copy size={13} color={colors.subtle} />
+          <Copy size={14} color={colors.subtle} />
         )}
       </button>
     </div>
@@ -405,7 +474,7 @@ function RoleRow({
 }: {
   role: string;
   does: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -417,12 +486,14 @@ function RoleRow({
         fontWeight: 700,
         color: colors.text,
         marginBottom: 2,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {role}
       </div>
       <div style={{
         fontSize: 13,
         color: colors.muted,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {does}
       </div>

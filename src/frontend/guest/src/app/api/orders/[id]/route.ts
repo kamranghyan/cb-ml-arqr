@@ -6,12 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const ORDERS_BASE =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE ??
-  'https://s4qafzisc6.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_ORDERS_API_BASE
 
 const MENU_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_API_BASE
 
 const tenantCache = new Map<string, { tenantId: string; at: number }>()
 const CACHE_TTL_MS = 5 * 60 * 1000

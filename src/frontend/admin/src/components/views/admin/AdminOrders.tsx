@@ -7,51 +7,81 @@ import {
   fetchOrdersForRestaurant, derivedStatus, isLive, money, timeAgo,
   STATUS_LABEL, STATUS_COLOR, type SupportOrder,
 } from '@/lib/support-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 const REFRESH_MS = 15000;
 
 export default function AdminOrders() {
-  const { isDark } = useTheme();
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [orders, setOrders] = useState<SupportOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastAt, setLastAt] = useState<Date | null>(null);
+  const [isDark, setIsDark] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   const load = useCallback(async (quiet = false) => {
     if (!scope.tenantId || !scope.restaurantId) {
@@ -94,10 +124,15 @@ export default function AdminOrders() {
       maxWidth: 1150,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -118,6 +153,7 @@ export default function AdminOrders() {
               fontWeight: 800,
               color: colors.text,
               margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Kitchen Orders
             </h1>
@@ -125,6 +161,7 @@ export default function AdminOrders() {
               color: colors.muted,
               fontSize: 13,
               margin: 0,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               What a branch is cooking right now. Read-only — the kitchen screen
               is where orders actually move.
@@ -141,6 +178,7 @@ export default function AdminOrders() {
                 fontSize: 12,
                 color: colors.subtle,
                 whiteSpace: 'nowrap',
+                fontFamily: "'Poppins', sans-serif",
               }}>
                 updated {lastAt.toLocaleTimeString()}
               </span>
@@ -152,25 +190,46 @@ export default function AdminOrders() {
                 alignItems: 'center',
                 gap: 6,
                 padding: '8px 16px',
-                border: `1px solid ${colors.border}`,
-                borderRadius: 8,
+                border: `1.5px solid ${colors.border}`,
+                borderRadius: 10,
                 background: colors.card2,
                 fontWeight: 600,
                 fontSize: 13,
                 cursor: 'pointer',
                 color: colors.text,
                 whiteSpace: 'nowrap',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = colors.border;
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = colors.hoverBg;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = colors.card2;
+                e.currentTarget.style.borderColor = colors.border;
               }}
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
               Refresh
             </button>
           </div>
         </div>
       </div>
 
+      {/* ── Scope Picker ── */}
       <ScopePicker value={scope} onChange={setScope} />
 
+      {/* ── Empty State (No Restaurant Selected) ── */}
       {!scope.restaurantId && (
         <Empty
           icon={<ChefHat size={28} />}
@@ -180,6 +239,7 @@ export default function AdminOrders() {
         />
       )}
 
+      {/* ── Loading State ── */}
       {scope.restaurantId && loading && (
         <div style={{
           display: 'flex',
@@ -190,10 +250,17 @@ export default function AdminOrders() {
           color: colors.muted,
         }}>
           <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading orders…</p>
+          <p style={{ 
+            marginTop: 12, 
+            fontSize: 14, 
+            fontFamily: "'Poppins', sans-serif" 
+          }}>
+            Loading orders…
+          </p>
         </div>
       )}
 
+      {/* ── Error State ── */}
       {scope.restaurantId && !loading && error && (
         <div style={{
           display: 'flex',
@@ -201,13 +268,14 @@ export default function AdminOrders() {
           justifyContent: 'center',
           gap: 8,
           padding: '40px 20px',
-          color: accent.danger.text,
+          color: accents.danger.text,
         }}>
           <AlertCircle size={20} />
-          <span>{error}</span>
+          <span style={{ fontFamily: "'Poppins', sans-serif" }}>{error}</span>
         </div>
       )}
 
+      {/* ── Content ── */}
       {scope.restaurantId && !loading && !error && (
         <>
           {/* Stats */}
@@ -236,7 +304,7 @@ export default function AdminOrders() {
             <Stat
               label="Ready"
               value={byStatus('ready').length}
-              accent={accent.green.text}
+              accent={accents.green.text}
               colors={colors}
             />
           </div>
@@ -263,6 +331,7 @@ export default function AdminOrders() {
                     order={o}
                     currency={scope.currency}
                     colors={colors}
+                    isDark={isDark}
                   />
                 ))}
             </div>
@@ -279,10 +348,12 @@ function OrderCard({
   order,
   currency,
   colors,
+  isDark,
 }: {
   order: SupportOrder;
   currency: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
 }) {
   const status = derivedStatus(order);
   const statusColor = STATUS_COLOR[status] || '#9CA3AF';
@@ -310,6 +381,7 @@ function OrderCard({
             fontSize: 15,
             fontWeight: 800,
             color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
           }}>
             Table {order.tableId || '—'}
           </div>
@@ -320,6 +392,7 @@ function OrderCard({
             alignItems: 'center',
             gap: 4,
             flexWrap: 'wrap',
+            fontFamily: "'Poppins', sans-serif",
           }}>
             <Clock size={11} />
             <span>{timeAgo(order.placedAt ?? order.createdAt)}</span>
@@ -332,10 +405,11 @@ function OrderCard({
           letterSpacing: 0.5,
           padding: '4px 9px',
           borderRadius: 6,
-          background: `${statusColor}15`,
+          background: isDark ? `${statusColor}15` : `${statusColor}10`,
           color: statusColor,
           whiteSpace: 'nowrap',
           flexShrink: 0,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {STATUS_LABEL[status]}
         </span>
@@ -355,6 +429,7 @@ function OrderCard({
             marginBottom: 5,
             gap: 8,
             flexWrap: 'wrap',
+            fontFamily: "'Poppins', sans-serif",
           }}>
             <span style={{
               color: colors.text,
@@ -380,8 +455,9 @@ function OrderCard({
         display: 'flex',
         justifyContent: 'space-between',
         fontSize: 14,
-        fontWeight: 800,
+        fontWeight: 700,
         color: colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         <span>Total</span>
         <span>{money(order.totalAmountMinorUnits, currency)}</span>
@@ -401,7 +477,7 @@ function Stat({
   label: string;
   value: number;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -416,6 +492,7 @@ function Stat({
         letterSpacing: 1,
         textTransform: 'uppercase',
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {label}
       </div>
@@ -423,6 +500,7 @@ function Stat({
         fontSize: 'clamp(18px, 2.5vw, 22px)',
         fontWeight: 800,
         color: accent ?? colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>
@@ -441,7 +519,7 @@ function Empty({
   icon: React.ReactNode;
   title: string;
   text: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -457,6 +535,7 @@ function Empty({
         margin: 0,
         fontWeight: 600,
         color: colors.muted,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {title}
       </p>
@@ -464,6 +543,7 @@ function Empty({
         margin: '4px 0 0',
         fontSize: 13,
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {text}
       </p>

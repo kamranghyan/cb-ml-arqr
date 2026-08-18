@@ -12,19 +12,25 @@ import {
   ORDER_TYPE_LABEL, ORDER_TYPE_COLOR,
   type OrderStatus, type OrderType,
 } from '@/lib/support-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
 
 const RANGES = [
   { label: 'Last 4 hours', hours: 4 },
@@ -36,7 +42,6 @@ const FILTERS: (OrderStatus | 'all')[] =
   ['all', 'delivered', 'cancelled', 'ready', 'preparing', 'pending'];
 
 export default function TenantHistory() {
-  const { isDark } = useTheme();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [hours, setHours] = useState(24);
@@ -49,18 +54,33 @@ export default function TenantHistory() {
   const [typeFilter, setTypeFilter] = useState<OrderType | 'all'>('all');
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
   const [printingAll, setPrintingAll] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
 
   useEffect(() => {
     fetchMyBranches()
@@ -114,23 +134,28 @@ export default function TenantHistory() {
 
   const hasActiveFilters = filter !== 'all' || typeFilter !== 'all' || query.trim() !== '';
 
-// Get branch name safely - check all possible ID fields
-const getBranchName = (id: string) => {
-  if (!id || !branches || branches.length === 0) return '';
-  
-  // Try to find the branch by checking all possible ID fields
-  const branch = branches.find(b => {
-    const branchObj = b as any;
-    return branchObj._id === id || 
-           branchObj.id === id || 
-           branchObj.branchId === id ||
-           branchObj.branch_id === id ||
-           branchObj.restaurantId === id ||
-           branchObj.companyId === id;
-  });
-  
-  return branch?.name || '';
-};
+  // Get branch name safely - check all possible ID fields
+  const getBranchName = (id: string) => {
+    if (!id || !branches || branches.length === 0) return '';
+    
+    const branch = branches.find(b => {
+      const branchObj = b as any;
+      return branchObj._id === id || 
+             branchObj.id === id || 
+             branchObj.branchId === id ||
+             branchObj.branch_id === id ||
+             branchObj.restaurantId === id ||
+             branchObj.companyId === id;
+    });
+    
+    return branch?.name || '';
+  };
+
+  // Truncate text function
+  const truncate = (text: string, maxLength: number = 30) => {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '…' : text;
+  };
 
   // Print single order function
   const handlePrintOrder = (order: BranchOrder) => {
@@ -321,9 +346,12 @@ const getBranchName = (id: string) => {
       maxWidth: 1150,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
       <style>{`
-        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
         .print-btn {
           background: transparent;
           border: none;
@@ -341,602 +369,793 @@ const getBranchName = (id: string) => {
           opacity: 0.5;
           cursor: not-allowed;
         }
+        /* ── Truncate styles ── */
+        .truncate-cell {
+          max-width: 150px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .truncate-cell-sm {
+          max-width: 100px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .truncate-cell-lg {
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       `}</style>
 
-      {/* Main Content */}
+      {/* ── Header ── */}
       <div style={{
-        background: colors.bg,
-        padding: '16px 20px 40px',
-        maxWidth: 1150,
-        margin: '0 auto',
-        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        marginBottom: 18,
       }}>
-        {/* Header */}
         <div style={{
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 12,
-          marginBottom: 18,
         }}>
+          <div>
+            <h1 style={{
+              fontSize: 'clamp(20px, 3vw, 26px)',
+              fontWeight: 800,
+              color: colors.text,
+              margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Order History
+            </h1>
+            <p style={{
+              color: colors.muted,
+              fontSize: 13,
+              margin: 0,
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Everything your restaurants have served recently.
+            </p>
+          </div>
           <div style={{
             display: 'flex',
-            flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
+            gap: 10,
             flexWrap: 'wrap',
-            gap: 12,
           }}>
-            <div>
-              <h1 style={{
-                fontSize: 'clamp(20px, 3vw, 26px)',
-                fontWeight: 800,
-                color: colors.text,
-                margin: '0 0 2px',
-              }}>
-                Order History
-              </h1>
-              <p style={{
-                color: colors.muted,
+            <button
+              onClick={handlePrintAll}
+              disabled={shown.length === 0 || printingAll}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 18px',
+                borderRadius: 10,
+                border: `1.5px solid ${shown.length === 0 ? colors.border : BRAND}`,
+                background: shown.length === 0 ? colors.card2 : BRAND,
+                fontWeight: 600,
                 fontSize: 13,
-                margin: 0,
-              }}>
-                Everything your restaurants have served recently.
-              </p>
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}>
-              <button
-                onClick={handlePrintAll}
-                disabled={shown.length === 0 || printingAll}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 18px',
-                  border: `1.5px solid ${shown.length === 0 ? colors.border : BRAND}`,
-                  borderRadius: 8,
-                  background: shown.length === 0 ? colors.card2 : BRAND,
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: shown.length === 0 ? 'not-allowed' : 'pointer',
-                  color: shown.length === 0 ? colors.subtle : '#fff',
-                  whiteSpace: 'nowrap',
-                  opacity: shown.length === 0 ? 0.5 : 1,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (shown.length > 0) {
-                    e.currentTarget.style.background = '#e04a1a';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (shown.length > 0) {
-                    e.currentTarget.style.background = BRAND;
-                  }
-                }}
-              >
-                {printingAll ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-                <span>{printingAll ? 'Printing…' : 'Print All'}</span>
-              </button>
-              <button
-                onClick={load}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 16px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 8,
-                  background: colors.card2,
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  color: colors.text,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <RefreshCw size={14} className={loadingO ? 'animate-spin' : ''} />
-                Refresh
-              </button>
-            </div>
+                cursor: shown.length === 0 ? 'not-allowed' : 'pointer',
+                color: shown.length === 0 ? colors.subtle : '#fff',
+                whiteSpace: 'nowrap',
+                opacity: shown.length === 0 ? 0.5 : 1,
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                fontFamily: "'Poppins', sans-serif",
+              }}
+              onFocus={(e) => {
+                if (shown.length > 0) {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                }
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                if (shown.length > 0) {
+                  e.currentTarget.style.background = '#e64a1a';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (shown.length > 0) {
+                  e.currentTarget.style.background = BRAND;
+                }
+              }}
+            >
+              {printingAll ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Printer size={16} />}
+              <span>{printingAll ? 'Printing…' : 'Print All'}</span>
+            </button>
+            <button
+              onClick={load}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                border: `1.5px solid ${colors.border}`,
+                borderRadius: 10,
+                background: colors.card2,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                color: colors.text,
+                whiteSpace: 'nowrap',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = colors.border;
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = colors.hoverBg;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = colors.card2;
+                e.currentTarget.style.borderColor = colors.border;
+              }}
+            >
+              <RefreshCw size={14} style={loadingO ? { animation: 'spin 1s linear infinite' } : {}} />
+              Refresh
+            </button>
           </div>
         </div>
+      </div>
 
-        <BranchPicker branches={branches} value={branchId}
-          onChange={setBranchId} loading={loadingB} />
+      {/* ── Branch Picker ── */}
+      <BranchPicker 
+        branches={branches} 
+        value={branchId}
+        onChange={setBranchId} 
+        loading={loadingB} 
+      />
 
-        {!loadingB && branches.length > 0 && (
-          <>
-            {/* Filters Row */}
+      {!loadingB && branches.length > 0 && (
+        <>
+          {/* ── Filters Row ── */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            marginBottom: 16,
+          }}>
+            {/* Time Range & Clear Filters */}
             <div style={{
               display: 'flex',
-              flexDirection: 'column',
+              flexWrap: 'wrap',
               gap: 10,
-              marginBottom: 16,
+              alignItems: 'center',
             }}>
-              {/* Time Range & Clear Filters */}
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 10,
-                alignItems: 'center',
-              }}>
-                <select
-                  value={hours}
-                  onChange={e => setHours(Number(e.target.value))}
+              <select
+                value={hours}
+                onChange={e => setHours(Number(e.target.value))}
+                style={{
+                  padding: '7px 12px',
+                  border: `1.5px solid ${colors.border}`,
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontFamily: "'Poppins', sans-serif",
+                  fontWeight: 500,
+                  background: colors.card2,
+                  color: colors.text,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                  e.currentTarget.style.borderColor = BRAND;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = colors.border;
+                }}
+              >
+                {RANGES.map(r => <option key={r.hours} value={r.hours}>{r.label}</option>)}
+              </select>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
                   style={{
-                    padding: '7px 10px',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 8,
-                    fontSize: 13,
-                    background: colors.card2,
-                    color: colors.text,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    border: `1.5px solid ${colors.border}`,
+                    fontSize: 12,
+                    fontWeight: 600,
                     cursor: 'pointer',
+                    background: colors.card2,
+                    color: colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = colors.border;
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = colors.hoverBg;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = colors.card2;
+                    e.currentTarget.style.borderColor = colors.border;
                   }}
                 >
-                  {RANGES.map(r => <option key={r.hours} value={r.hours}>{r.label}</option>)}
-                </select>
+                  <X size={14} /> Clear filters
+                </button>
+              )}
+            </div>
 
-                {hasActiveFilters && (
-                  <button
-                    onClick={clearFilters}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '6px 12px',
-                      borderRadius: 20,
-                      border: `1px solid ${colors.border}`,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      background: colors.card2,
-                      color: colors.muted,
-                    }}
-                  >
-                    <X size={14} /> Clear filters
-                  </button>
-                )}
-              </div>
-
-              {/* Status Filters */}
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 6,
-              }}>
-                {FILTERS.map(f => (
+            {/* Status Filters */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+            }}>
+              {FILTERS.map(f => {
+                const active = filter === f;
+                return (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
                     style={{
                       padding: '6px 14px',
                       borderRadius: 20,
-                      border: `1px solid ${filter === f ? BRAND : colors.border}`,
+                      border: `1.5px solid ${active ? BRAND : colors.border}`,
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: 'pointer',
-                      background: filter === f ? BRAND : colors.card2,
-                      color: filter === f ? '#fff' : colors.muted,
+                      background: active ? BRAND : colors.card2,
+                      color: active ? '#fff' : colors.muted,
                       transition: 'all 0.2s ease',
+                      fontFamily: "'Poppins', sans-serif",
+                      outline: 'none',
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = colors.hoverBg;
+                        e.currentTarget.style.color = colors.text;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = colors.card2;
+                        e.currentTarget.style.color = colors.muted;
+                      }
                     }}
                   >
                     {f === 'all' ? 'All' : STATUS_LABEL[f]}
                   </button>
-                ))}
-              </div>
+                );
+              })}
+            </div>
 
-              {/* Type Filters & Search */}
+            {/* Type Filters & Search */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 10,
+              alignItems: 'center',
+            }}>
               <div style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: 10,
-                alignItems: 'center',
+                gap: 6,
               }}>
-                <div style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 6,
-                }}>
-                  {(['all', 'dine_in', 'pickup', 'delivery'] as const).map(t => (
+                {(['all', 'dine_in', 'pickup', 'delivery'] as const).map(t => {
+                  const active = typeFilter === t;
+                  return (
                     <button
                       key={t}
                       onClick={() => setTypeFilter(t)}
                       style={{
                         padding: '6px 14px',
                         borderRadius: 20,
-                        border: `1px solid ${typeFilter === t ? colors.text : colors.border}`,
+                        border: `1.5px solid ${active ? colors.text : colors.border}`,
                         fontSize: 12,
                         fontWeight: 700,
                         cursor: 'pointer',
-                        background: typeFilter === t ? colors.text : colors.card2,
-                        color: typeFilter === t ? '#fff' : colors.muted,
+                        background: active ? colors.text : colors.card2,
+                        color: active ? '#fff' : colors.muted,
                         transition: 'all 0.2s ease',
+                        fontFamily: "'Poppins', sans-serif",
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = colors.hoverBg;
+                          e.currentTarget.style.color = colors.text;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = colors.card2;
+                          e.currentTarget.style.color = colors.muted;
+                        }
                       }}
                     >
                       {t === 'all' ? 'Any type' : ORDER_TYPE_LABEL[t]}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
 
-                <div style={{
-                  position: 'relative',
-                  flex: '1',
-                  minWidth: 180,
-                  maxWidth: '100%',
-                }}>
-                  <Search size={14} color={colors.subtle} style={{
-                    position: 'absolute',
-                    left: 10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                  }} />
-                  <input
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="Search orders, items, tables..."
-                    style={{
-                      width: '100%',
-                      padding: '8px 11px 8px 30px',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      boxSizing: 'border-box',
-                      background: colors.card2,
-                      color: colors.text,
-                    }}
-                  />
-                </div>
+              <div style={{
+                position: 'relative',
+                flex: '1',
+                minWidth: 180,
+                maxWidth: '100%',
+              }}>
+                <Search size={14} color={colors.subtle} style={{
+                  position: 'absolute',
+                  left: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                }} />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search orders, items, tables..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 11px 8px 30px',
+                    border: `1.5px solid ${colors.border}`,
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontFamily: "'Poppins', sans-serif",
+                    boxSizing: 'border-box',
+                    background: colors.card2,
+                    color: colors.text,
+                    outline: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = colors.border;
+                  }}
+                />
               </div>
             </div>
+          </div>
 
-            {/* Loading State */}
-            {loadingO && (
+          {/* ── Loading State ── */}
+          {loadingO && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '60px 20px',
+              color: colors.muted,
+            }}>
+              <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
+              <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+                Loading orders…
+              </p>
+            </div>
+          )}
+
+          {/* ── Error State ── */}
+          {!loadingO && error && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              padding: '40px 20px',
+              color: BRAND,
+            }}>
+              <AlertCircle size={20} />
+              <span style={{ fontFamily: "'Poppins', sans-serif" }}>{error}</span>
+            </div>
+          )}
+
+          {/* ── Content ── */}
+          {!loadingO && !error && (
+            <>
+              {/* Stats */}
               <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '60px 20px',
-                color: colors.muted,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                gap: 12,
+                marginBottom: 16,
               }}>
-                <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-                <p style={{ marginTop: 12, fontSize: 14 }}>Loading orders…</p>
+                <Stat
+                  label="Orders"
+                  value={String(shown.length)}
+                  colors={colors}
+                />
+                <Stat
+                  label="Revenue"
+                  value={money(revenueOf(shown), currency)}
+                  accent={colors.text}
+                  colors={colors}
+                />
+                <Stat
+                  label="Cancelled"
+                  value={String(shown.filter(o => derivedStatus(o) === 'cancelled').length)}
+                  colors={colors}
+                />
               </div>
-            )}
 
-            {/* Error State */}
-            {!loadingO && error && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '40px 20px',
-                color: BRAND,
-              }}>
-                <AlertCircle size={20} />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Content */}
-            {!loadingO && !error && (
-              <>
-                {/* Stats */}
+              {/* ── Empty State ── */}
+              {shown.length === 0 ? (
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-                  gap: 12,
-                  marginBottom: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '60px 20px',
+                  color: colors.subtle,
                 }}>
-                  <Stat
-                    label="Orders"
-                    value={String(shown.length)}
-                    colors={colors}
-                  />
-                  <Stat
-                    label="Revenue"
-                    value={money(revenueOf(shown), currency)}
-                    accent={colors.text}
-                    colors={colors}
-                  />
-                  <Stat
-                    label="Cancelled"
-                    value={String(shown.filter(o => derivedStatus(o) === 'cancelled').length)}
-                    colors={colors}
-                  />
-                </div>
-
-                {/* Empty State */}
-                {shown.length === 0 ? (
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '60px 20px',
+                  <Receipt size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
+                  <p style={{ 
+                    margin: 0, 
+                    fontWeight: 600, 
+                    color: colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    Nothing here
+                  </p>
+                  <p style={{ 
+                    margin: '4px 0 0', 
+                    fontSize: 13, 
                     color: colors.subtle,
+                    fontFamily: "'Poppins', sans-serif",
                   }}>
-                    <Receipt size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-                    <p style={{ margin: 0, fontWeight: 600, color: colors.muted }}>
-                      Nothing here
-                    </p>
-                    <p style={{ margin: '4px 0 0', fontSize: 13, color: colors.subtle }}>
-                      {query || filter !== 'all' || typeFilter !== 'all'
-                        ? 'No orders match those filters.'
-                        : 'No orders in this time window.'}
-                    </p>
-                  </div>
-                ) : (
-                  // Orders Table
+                    {query || filter !== 'all' || typeFilter !== 'all'
+                      ? 'No orders match those filters.'
+                      : 'No orders in this time window.'}
+                  </p>
+                </div>
+              ) : (
+                /* ── Orders Table ── */
+                <div style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: colors.card,
+                }}>
                   <div style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    background: colors.card,
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
                   }}>
-                    {/* Table wrapper with horizontal scroll for mobile */}
-                    <div style={{
-                      overflowX: 'auto',
-                      WebkitOverflowScrolling: 'touch',
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      minWidth: 700,
                     }}>
-                      <table style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        minWidth: 700,
-                      }}>
-                        <thead style={{ background: colors.card2 }}>
-                          <tr>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Placed</th>
-                            {showBranch && <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Restaurant</th>}
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Type</th>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Going to</th>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Items</th>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Total</th>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'left',
-                              whiteSpace: 'nowrap',
-                            }}>Status</th>
-                            <th style={{
-                              padding: '10px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: 1,
-                              textTransform: 'uppercase',
-                              color: colors.subtle,
-                              textAlign: 'center',
-                              whiteSpace: 'nowrap',
-                            }}>Print</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {shown.map(o => {
-                            const s = derivedStatus(o);
-                            const n = (o.lineItems ?? []).reduce((x, li) => x + li.quantity, 0);
-                            const isPrinting = printingOrderId === o.orderId;
-                            return (
-                              <tr key={o.orderId} style={{
-                                borderTop: `1px solid ${colors.border}`,
+                      <thead style={{ background: colors.card2 }}>
+                        <tr>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Placed</th>
+                          {showBranch && <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Restaurant</th>}
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Type</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Going to</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Items</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Total</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Status</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Print</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map(o => {
+                          const s = derivedStatus(o);
+                          const n = (o.lineItems ?? []).reduce((x, li) => x + li.quantity, 0);
+                          const isPrinting = printingOrderId === o.orderId;
+                          return (
+                            <tr key={o.orderId} style={{
+                              borderTop: `1px solid ${colors.border}`,
+                            }}>
+                              {/* ── Placed ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                color: colors.text,
+                                whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
-                                <td style={{
-                                  padding: '11px 12px',
-                                  fontSize: 14,
-                                  color: colors.text,
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  {o.placedAt ? new Date(o.placedAt).toLocaleString() : '—'}
-                                </td>
-                                {showBranch && (
-                                  <td style={{
-                                    padding: '11px 12px',
-                                    fontSize: 14,
-                                    color: colors.muted,
-                                    whiteSpace: 'nowrap',
-                                  }}>
-                                    {o.branchName}
-                                  </td>
-                                )}
-                                <td style={{
-                                  padding: '11px 12px',
-                                  fontSize: 14,
-                                  color: colors.text,
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  <span style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 0.4,
-                                    padding: '3px 8px',
-                                    borderRadius: 6,
-                                    background: `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15`,
-                                    color: ORDER_TYPE_COLOR[orderTypeOf(o)],
-                                    whiteSpace: 'nowrap',
-                                  }}>
-                                    {ORDER_TYPE_LABEL[orderTypeOf(o)]}
-                                  </span>
-                                </td>
+                                {o.placedAt ? new Date(o.placedAt).toLocaleString() : '—'}
+                              </td>
+
+                              {/* ── Restaurant ── */}
+                              {showBranch && (
                                 <td style={{
                                   padding: '11px 12px',
                                   fontSize: 14,
                                   color: colors.muted,
                                   whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
+                                  maxWidth: '120px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
                                 }}>
-                                  {destinationOf(o)}
+                                  {truncate(o.branchName, 15)}
                                 </td>
-                                <td style={{
-                                  padding: '11px 12px',
-                                  fontSize: 14,
-                                  color: colors.muted,
-                                  maxWidth: 200,
-                                }}>
-                                  <div style={{ whiteSpace: 'normal' }}>
-                                    {n} item{n === 1 ? '' : 's'}
-                                    <span style={{
-                                      color: colors.subtle,
-                                      fontSize: 12,
-                                      display: 'block',
-                                    }}>
-                                      {(o.lineItems ?? []).slice(0, 2).map(li => li.name).join(', ')}
-                                      {(o.lineItems ?? []).length > 2 ? '…' : ''}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td style={{
-                                  padding: '11px 12px',
-                                  fontSize: 14,
+                              )}
+
+                              {/* ── Type ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                color: colors.text,
+                                whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                <span style={{
+                                  fontSize: 11,
                                   fontWeight: 700,
-                                  color: colors.text,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.4,
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  background: isDark ? `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15` : `${ORDER_TYPE_COLOR[orderTypeOf(o)]}10`,
+                                  color: ORDER_TYPE_COLOR[orderTypeOf(o)],
                                   whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
                                 }}>
-                                  {money(o.totalAmountMinorUnits, o.currency)}
-                                </td>
-                                <td style={{
-                                  padding: '11px 12px',
-                                  fontSize: 14,
-                                  color: colors.text,
+                                  {ORDER_TYPE_LABEL[orderTypeOf(o)]}
+                                </span>
+                              </td>
+
+                              {/* ── Going to ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                color: colors.muted,
+                                whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
+                                maxWidth: '120px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {truncate(destinationOf(o), 15)}
+                              </td>
+
+                              {/* ── Items ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                color: colors.muted,
+                                maxWidth: '180px',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                <div style={{ 
                                   whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
                                 }}>
+                                  {n} item{n === 1 ? '' : 's'}
                                   <span style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 0.5,
-                                    padding: '3px 8px',
-                                    borderRadius: 6,
-                                    background: `${STATUS_COLOR[s]}15`,
-                                    color: STATUS_COLOR[s],
+                                    color: colors.subtle,
+                                    fontSize: 12,
+                                    display: 'block',
+                                    fontFamily: "'Poppins', sans-serif",
                                     whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
                                   }}>
-                                    {STATUS_LABEL[s]}
+                                    {truncate((o.lineItems ?? []).slice(0, 2).map(li => li.name).join(', '), 25)}
+                                    {(o.lineItems ?? []).length > 2 ? '…' : ''}
                                   </span>
-                                </td>
-                                <td style={{
-                                  padding: '11px 12px',
-                                  textAlign: 'center',
+                                </div>
+                              </td>
+
+                              {/* ── Total ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: colors.text,
+                                whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                {money(o.totalAmountMinorUnits, o.currency)}
+                              </td>
+
+                              {/* ── Status ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                fontSize: 14,
+                                color: colors.text,
+                                whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                <span style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.5,
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  background: isDark ? `${STATUS_COLOR[s]}15` : `${STATUS_COLOR[s]}10`,
+                                  color: STATUS_COLOR[s],
                                   whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
                                 }}>
-                                  <button
-                                    onClick={() => handlePrintOrder(o)}
-                                    disabled={isPrinting}
-                                    className="print-btn"
-                                    title="Print this order"
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: isPrinting ? 'not-allowed' : 'pointer',
-                                      padding: '6px 10px',
-                                      borderRadius: 6,
-                                      transition: 'all 0.2s',
-                                      color: isPrinting ? colors.subtle : colors.muted,
-                                      opacity: isPrinting ? 0.5 : 1,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      if (!isPrinting) {
-                                        e.currentTarget.style.background = colors.card2;
-                                        e.currentTarget.style.color = BRAND;
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (!isPrinting) {
-                                        e.currentTarget.style.background = 'transparent';
-                                        e.currentTarget.style.color = colors.muted;
-                                      }
-                                    }}
-                                  >
-                                    {isPrinting ? (
-                                      <Loader2 size={16} className="animate-spin" />
-                                    ) : (
-                                      <Printer size={16} />
-                                    )}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                  {STATUS_LABEL[s]}
+                                </span>
+                              </td>
+
+                              {/* ── Print ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                <button
+                                  onClick={() => handlePrintOrder(o)}
+                                  disabled={isPrinting}
+                                  className="print-btn"
+                                  title="Print this order"
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: isPrinting ? 'not-allowed' : 'pointer',
+                                    padding: '6px 10px',
+                                    borderRadius: 6,
+                                    transition: 'all 0.2s',
+                                    color: isPrinting ? colors.subtle : colors.muted,
+                                    opacity: isPrinting ? 0.5 : 1,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isPrinting) {
+                                      e.currentTarget.style.background = colors.card2;
+                                      e.currentTarget.style.color = BRAND;
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isPrinting) {
+                                      e.currentTarget.style.background = 'transparent';
+                                      e.currentTarget.style.color = colors.muted;
+                                    }
+                                  }}
+                                >
+                                  {isPrinting ? (
+                                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                  ) : (
+                                    <Printer size={16} />
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────────────
+// ── Stat Component ──────────────────────────────────────────────────
 
 function Stat({
   label,
@@ -947,7 +1166,7 @@ function Stat({
   label: string;
   value: string;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -962,6 +1181,7 @@ function Stat({
         letterSpacing: 1,
         textTransform: 'uppercase',
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {label}
       </div>
@@ -969,6 +1189,7 @@ function Stat({
         fontSize: 'clamp(18px, 2.5vw, 20px)',
         fontWeight: 800,
         color: accent ?? colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>

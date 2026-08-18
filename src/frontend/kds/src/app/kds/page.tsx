@@ -110,16 +110,15 @@ export default function KitchenDisplayPage() {
   const filtered = orders.filter(o => { if (filter === 'all') return o.status !== 'delivered'; if (filter === 'delivered') return o.status === 'delivered'; return o.status === filter; }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
   const counts = { pending: orders.filter(o => o.status === 'new').length, preparing: orders.filter(o => o.status === 'preparing').length, ready: orders.filter(o => o.status === 'ready').length };
   const [currentDate, setCurrentDate] = useState('')
+  
   useEffect(() => {
     const tick = () => {
       const now = new Date()
-
       setClock(
         [now.getHours(), now.getMinutes(), now.getSeconds()]
           .map(x => String(x).padStart(2, '0'))
           .join(':')
       )
-
       setCurrentDate(
         now.toLocaleDateString('en-US', {
           weekday: 'short',
@@ -128,20 +127,19 @@ export default function KitchenDisplayPage() {
         })
       )
     }
-
     tick()
-
     const id = setInterval(tick, 1000)
-
     return () => clearInterval(id)
   }, [])
+
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
   } : {
-    bg: '#FFFFFF', card: '#ffffff', card2: '#F9FAFB', border: '#F0EBE6',
+    bg: '#FFFFFF', card: '#FFFFFF', card2: '#F9FAFB', border: '#F0EBE6',
     text: '#000000', muted: '#6B6B6B', subtle: '#9CA3AF',
   };
+
   const TONE = {
     green: isDark ? { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' } : { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
     amber: isDark ? { bg: 'rgba(217,119,6,0.15)', border: 'rgba(217,119,6,0.35)', text: '#fbbf24' } : { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
@@ -151,6 +149,7 @@ export default function KitchenDisplayPage() {
     purple: isDark ? { bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.3)', text: '#a78bfa' } : { bg: '#FAF5FF', border: '#DDD6FE', text: '#7c3aed' },
     gray: isDark ? { bg: D.card2, border: D.border, text: D.subtle } : { bg: '#F9FAFB', border: '#E5E7EB', text: '#9CA3AF' },
   };
+
   const BTN_CFG: Record<KdsStatus, { label: string; bg: string; color: string; border: string }[]> = {
     new: [{ label: '✓ Accept', bg: TONE.blue.bg, color: TONE.blue.text, border: TONE.blue.border }, { label: '🔥 Preparing', bg: TONE.orange.bg, color: TONE.orange.text, border: TONE.orange.border }],
     preparing: [{ label: '🔔 Mark Ready', bg: TONE.green.bg, color: TONE.green.text, border: TONE.green.border }],
@@ -164,11 +163,54 @@ export default function KitchenDisplayPage() {
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
   return (
-    <div style={{ minHeight: '100dvh', background: D.bg, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans,sans-serif', transition: 'background 0.25s' }}>
+    <div style={{ 
+      minHeight: '100dvh', 
+      background: D.bg, 
+      display: 'flex', 
+      flexDirection: 'column', 
+      fontFamily: "'Poppins', sans-serif", 
+      transition: 'background 0.25s' 
+    }}>
 
-      {toast && <div style={{ position: 'fixed', top: 80, right: 20, zIndex: 50, background: D.card, border: `1.5px solid ${TONE.orange.border}`, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 24px rgba(255,87,35,0.15)', maxWidth: 320 }}><div style={{ width: 32, height: 32, borderRadius: 10, background: TONE.orange.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔔</div><p style={{ fontSize: 13, fontWeight: 600, color: D.text, margin: 0 }}>{toast}</p></div>}
+      {toast && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 80, 
+          right: 20, 
+          zIndex: 50, 
+          background: D.card, 
+          border: `1.5px solid ${TONE.orange.border}`, 
+          borderRadius: 18, 
+          padding: '12px 16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          boxShadow: '0 8px 24px rgba(255,87,35,0.15)', 
+          maxWidth: 320,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <div style={{ 
+            width: 32, 
+            height: 32, 
+            borderRadius: 10, 
+            background: TONE.orange.bg, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            fontSize: 16, 
+            flexShrink: 0 
+          }}>🔔</div>
+          <p style={{ 
+            fontSize: 13, 
+            fontWeight: 600, 
+            color: D.text, 
+            margin: 0,
+            fontFamily: "'Poppins', sans-serif",
+          }}>{toast}</p>
+        </div>
+      )}
 
-      {/* Header */}
+      {/* ── Header ── */}
       <header style={{
         display: 'flex',
         alignItems: 'center',
@@ -182,13 +224,29 @@ export default function KitchenDisplayPage() {
         top: 0,
         zIndex: 10,
         flexWrap: 'wrap',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {/* Left - Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <img src='./Images/logo.png' alt="Menulay Logo" style={{ width: 120, height: 32, objectFit: 'contain' }} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <p style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0, fontFamily: "'Baloo 2', sans-serif", lineHeight: 1 }}>KDS</p>
-            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 8, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}>Kitchen Display</p>
+            <p style={{ 
+              color: '#fff', 
+              fontSize: 16, 
+              fontWeight: 700, 
+              margin: 0, 
+              fontFamily: "'Poppins', sans-serif", 
+              lineHeight: 1 
+            }}>KDS</p>
+            <p style={{ 
+              color: 'rgba(255,255,255,0.7)', 
+              fontSize: 8, 
+              fontWeight: 700, 
+              letterSpacing: 1, 
+              textTransform: 'uppercase', 
+              margin: 0,
+              fontFamily: "'Poppins', sans-serif",
+            }}>Kitchen Display</p>
           </div>
         </div>
 
@@ -198,14 +256,43 @@ export default function KitchenDisplayPage() {
           alignItems: 'center', 
           gap: 8,
           flex: '0 1 auto',
+          fontFamily: "'Poppins', sans-serif",
         }} className="desktop-status">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: apiColor.bg, border: `1px solid ${apiColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6, 
+            background: apiColor.bg, 
+            border: `1px solid ${apiColor.border}`, 
+            borderRadius: 16, 
+            padding: '4px 10px' 
+          }}>
             {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
-            <span style={{ fontSize: 10, fontWeight: 700, color: apiColor.text, textTransform: 'uppercase' }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
+            <span style={{ 
+              fontSize: 10, 
+              fontWeight: 700, 
+              color: apiColor.text, 
+              textTransform: 'uppercase',
+              fontFamily: "'Poppins', sans-serif",
+            }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: wsColor.bg, border: `1px solid ${wsColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6, 
+            background: wsColor.bg, 
+            border: `1px solid ${wsColor.border}`, 
+            borderRadius: 16, 
+            padding: '4px 10px' 
+          }}>
             <Radio size={12} color={wsColor.text} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: wsColor.text, textTransform: 'uppercase' }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
+            <span style={{ 
+              fontSize: 10, 
+              fontWeight: 700, 
+              color: wsColor.text, 
+              textTransform: 'uppercase',
+              fontFamily: "'Poppins', sans-serif",
+            }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
             {wsState === 'connected' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
           </div>
         </div>
@@ -213,13 +300,34 @@ export default function KitchenDisplayPage() {
         {/* Right - Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Desktop Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} className="desktop-controls">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Poppins', sans-serif" }} className="desktop-controls">
             {/* Counts */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               {[{ val: counts.pending, label: 'P' }, { val: counts.preparing, label: 'Pr' }, { val: counts.ready, label: 'R' }].map(s => (
-                <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: "'Baloo 2', sans-serif", lineHeight: 1 }}>{s.val}</span>
-                  <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</span>
+                <div key={s.label} style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  padding: '2px 8px', 
+                  borderRadius: 8, 
+                  background: 'rgba(255,255,255,0.12)', 
+                  border: '1px solid rgba(255,255,255,0.15)' 
+                }}>
+                  <span style={{ 
+                    fontSize: 16, 
+                    fontWeight: 700, 
+                    color: '#fff', 
+                    fontFamily: "'Poppins', sans-serif", 
+                    lineHeight: 1 
+                  }}>{s.val}</span>
+                  <span style={{ 
+                    fontSize: 7, 
+                    color: 'rgba(255,255,255,0.6)', 
+                    fontWeight: 700, 
+                    textTransform: 'uppercase', 
+                    letterSpacing: 0.5,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>{s.label}</span>
                 </div>
               ))}
             </div>
@@ -228,29 +336,139 @@ export default function KitchenDisplayPage() {
 
             {/* Clock */}
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>{clock || '00:00:00'}</p>
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', margin: 0 }}>{currentDate}</p>
+              <p style={{ 
+                fontFamily: 'monospace', 
+                fontSize: 18, 
+                fontWeight: 800, 
+                color: '#fff', 
+                margin: 0, 
+                lineHeight: 1 
+              }}>{clock || '00:00:00'}</p>
+              <p style={{ 
+                fontSize: 10, 
+                color: 'rgba(255,255,255,0.5)', 
+                margin: 0,
+                fontFamily: "'Poppins', sans-serif",
+              }}>{currentDate}</p>
             </div>
 
             <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.2)' }} />
 
             {/* Audio Toggle */}
-            <button onClick={() => setAudio(!audio)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={() => setAudio(!audio)} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                padding: '6px 10px', 
+                borderRadius: 8, 
+                border: '1.5px solid rgba(255,255,255,0.2)', 
+                background: 'rgba(255,255,255,0.08)', 
+                color: '#fff', 
+                fontSize: 11, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.3)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+              }}
+            >
               {audio ? <Volume2 size={16} /> : <VolumeX size={16} />}
             </button>
 
             {/* Theme Toggle */}
-            <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={toggle} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                padding: '6px 10px', 
+                borderRadius: 8, 
+                border: '1.5px solid rgba(255,255,255,0.2)', 
+                background: 'rgba(255,255,255,0.08)', 
+                color: '#fff', 
+                fontSize: 11, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.3)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+              }}
+            >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
             {/* Logout */}
-            <button onClick={handleLogout} disabled={loggingOut} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={handleLogout} 
+              disabled={loggingOut} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                padding: '6px 12px', 
+                borderRadius: 8, 
+                border: '1.5px solid rgba(255,255,255,0.2)', 
+                background: 'rgba(255,255,255,0.08)', 
+                color: '#fff', 
+                fontSize: 11, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                opacity: loggingOut ? 0.6 : 1,
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                if (!loggingOut) {
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.3)';
+                }
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                if (!loggingOut) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loggingOut) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                }
+              }}
+            >
               <LogOut size={16} /> {loggingOut ? 'Signing out…' : 'Sign Out'}
             </button>
           </div>
 
-          {/* Mobile Menu Button - Always top right on mobile */}
+          {/* Mobile Menu Button */}
           <button 
             onClick={toggleMobileMenu} 
             style={{ 
@@ -264,16 +482,30 @@ export default function KitchenDisplayPage() {
               background: 'rgba(255,255,255,0.1)', 
               color: '#fff', 
               cursor: 'pointer',
-              flexShrink: 0
+              flexShrink: 0,
+              transition: 'all 0.2s ease',
+              outline: 'none',
             }}
             className="mobile-menu-btn"
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.3)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            }}
           >
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Menu Dropdown */}
+      {/* ── Mobile Menu Dropdown ── */}
       {mobileMenuOpen && (
         <div style={{
           background: D.card,
@@ -285,17 +517,46 @@ export default function KitchenDisplayPage() {
           position: 'sticky',
           top: 60,
           zIndex: 9,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          fontFamily: "'Poppins', sans-serif",
         }} className="mobile-dropdown">
           {/* Status Badges */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: apiColor.bg, border: `1px solid ${apiColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6, 
+              background: apiColor.bg, 
+              border: `1px solid ${apiColor.border}`, 
+              borderRadius: 16, 
+              padding: '4px 10px' 
+            }}>
               {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
-              <span style={{ fontSize: 10, fontWeight: 700, color: apiColor.text, textTransform: 'uppercase' }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
+              <span style={{ 
+                fontSize: 10, 
+                fontWeight: 700, 
+                color: apiColor.text, 
+                textTransform: 'uppercase',
+                fontFamily: "'Poppins', sans-serif",
+              }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: wsColor.bg, border: `1px solid ${wsColor.border}`, borderRadius: 16, padding: '4px 10px' }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6, 
+              background: wsColor.bg, 
+              border: `1px solid ${wsColor.border}`, 
+              borderRadius: 16, 
+              padding: '4px 10px' 
+            }}>
               <Radio size={12} color={wsColor.text} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: wsColor.text, textTransform: 'uppercase' }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
+              <span style={{ 
+                fontSize: 10, 
+                fontWeight: 700, 
+                color: wsColor.text, 
+                textTransform: 'uppercase',
+                fontFamily: "'Poppins', sans-serif",
+              }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
               {wsState === 'connected' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
             </div>
           </div>
@@ -303,7 +564,16 @@ export default function KitchenDisplayPage() {
           {/* Compact counts for mobile */}
           <div style={{ display: 'flex', gap: 8 }}>
             {[{ val: counts.pending, label: 'Pending' }, { val: counts.preparing, label: 'Preparing' }, { val: counts.ready, label: 'Ready' }].map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${D.border}` }}>
+              <div key={s.label} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                padding: '4px 10px', 
+                borderRadius: 8, 
+                background: 'rgba(255,255,255,0.05)', 
+                border: `1px solid ${D.border}`,
+                fontFamily: "'Poppins', sans-serif",
+              }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: D.text }}>{s.val}</span>
                 <span style={{ fontSize: 10, color: D.muted }}>{s.label}</span>
               </div>
@@ -312,30 +582,152 @@ export default function KitchenDisplayPage() {
           
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {/* Audio Toggle */}
-            <button onClick={() => setAudio(!audio)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`, background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0', color: audio ? D.text : BRAND, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={() => setAudio(!audio)} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                padding: '8px 14px', 
+                borderRadius: 8, 
+                border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`, 
+                background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0', 
+                color: audio ? D.text : BRAND, 
+                fontSize: 12, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               {audio ? <Volume2 size={16} /> : <VolumeX size={16} />} {audio ? 'Sound On' : 'Sound Off'}
             </button>
 
             {/* Theme Toggle */}
-            <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${D.border}`, background: D.card2, color: D.text, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={toggle} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                padding: '8px 14px', 
+                borderRadius: 8, 
+                border: `1.5px solid ${D.border}`, 
+                background: D.card2, 
+                color: D.text, 
+                fontSize: 12, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               {isDark ? <Sun size={16} /> : <Moon size={16} />} {isDark ? 'Light' : 'Dark'}
             </button>
 
             {/* Logout */}
-            <button onClick={handleLogout} disabled={loggingOut} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #FFD0D0', background: '#FFF0F0', color: BRAND, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            <button 
+              onClick={handleLogout} 
+              disabled={loggingOut} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                padding: '8px 14px', 
+                borderRadius: 8, 
+                border: '1.5px solid #FFD0D0', 
+                background: '#FFF0F0', 
+                color: BRAND, 
+                fontSize: 12, 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                opacity: loggingOut ? 0.6 : 1,
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                if (!loggingOut) {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                }
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <LogOut size={16} /> {loggingOut ? 'Signing out…' : 'Sign Out'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Poll bar */}
-      <div style={{ height: 3, background: D.border, flexShrink: 0 }}><div style={{ height: '100%', background: BRAND, transition: 'width 0.2s', width: `${pollPct}%` }} /></div>
+      {/* ── Poll bar ── */}
+      <div style={{ height: 3, background: D.border, flexShrink: 0 }}>
+        <div style={{ height: '100%', background: BRAND, transition: 'width 0.2s', width: `${pollPct}%` }} />
+      </div>
 
-      {/* API error */}
-      {apiState === 'error' && <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: TONE.danger.bg, borderBottom: `1px solid ${TONE.danger.border}`, flexShrink: 0 }}><WifiOff size={14} color={TONE.danger.text} /><p style={{ fontSize: 12, color: TONE.danger.text, flex: 1, margin: 0 }}>{apiError}</p><button onClick={() => loadOrders()} style={{ padding: '4px 14px', borderRadius: 8, background: TONE.danger.bg, border: `1px solid ${TONE.danger.border}`, color: TONE.danger.text, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Retry</button></div>}
+      {/* ── API error ── */}
+      {apiState === 'error' && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          padding: '10px 16px', 
+          background: TONE.danger.bg, 
+          borderBottom: `1px solid ${TONE.danger.border}`, 
+          flexShrink: 0,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <WifiOff size={14} color={TONE.danger.text} />
+          <p style={{ 
+            fontSize: 12, 
+            color: TONE.danger.text, 
+            flex: 1, 
+            margin: 0,
+            fontFamily: "'Poppins', sans-serif",
+          }}>{apiError}</p>
+          <button 
+            onClick={() => loadOrders()} 
+            style={{ 
+              padding: '4px 14px', 
+              borderRadius: 8, 
+              background: TONE.danger.bg, 
+              border: `1px solid ${TONE.danger.border}`, 
+              color: TONE.danger.text, 
+              fontSize: 12, 
+              fontWeight: 700, 
+              cursor: 'pointer',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
-      {/* Filter bar - Responsive */}
+      {/* ── Filter bar ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -345,50 +737,148 @@ export default function KitchenDisplayPage() {
         borderBottom: `1.5px solid ${D.border}`,
         flexShrink: 0,
         overflowX: 'auto',
-        flexWrap: 'nowrap'
+        flexWrap: 'nowrap',
+        fontFamily: "'Poppins', sans-serif",
       }}>
-        {([{ key: 'all', label: 'All' }, { key: 'new', label: '🟠 New' }, { key: 'preparing', label: '🔵 Prep' }, { key: 'ready', label: '🟢 Ready' }] as const).map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+        {([{ key: 'all', label: 'All' }, { key: 'new', label: '🟠 New' }, { key: 'preparing', label: '🔵 Prep' }, { key: 'ready', label: '🟢 Ready' }] as const).map(f => {
+          const active = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: 16,
+                border: `1.5px solid ${active ? BRAND : D.border}`,
+                background: active ? TONE.danger.bg : D.card,
+                color: active ? BRAND : D.muted,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                fontFamily: "'Poppins', sans-serif",
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = D.card;
+                }
+              }}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+        <div style={{ width: 1, height: 16, background: D.border, margin: '0 4px', flexShrink: 0 }} />
+        <button 
+          onClick={() => setFilter('delivered')} 
+          style={{
             padding: '4px 12px',
             borderRadius: 16,
-            border: `1.5px solid ${filter === f.key ? BRAND : D.border}`,
-            background: filter === f.key ? TONE.danger.bg : D.card,
-            color: filter === f.key ? BRAND : D.muted,
+            border: `1.5px solid ${filter === 'delivered' ? '#7c3aed' : D.border}`,
+            background: filter === 'delivered' ? TONE.purple.bg : D.card,
+            color: filter === 'delivered' ? TONE.purple.text : D.muted,
             fontSize: 11,
             fontWeight: 700,
             cursor: 'pointer',
             transition: 'all 0.2s',
             whiteSpace: 'nowrap',
-            flexShrink: 0
-          }}>{f.label}</button>
-        ))}
-        <div style={{ width: 1, height: 16, background: D.border, margin: '0 4px', flexShrink: 0 }} />
-        <button onClick={() => setFilter('delivered')} style={{
-          padding: '4px 12px',
-          borderRadius: 16,
-          border: `1.5px solid ${filter === 'delivered' ? '#7c3aed' : D.border}`,
-          background: filter === 'delivered' ? TONE.purple.bg : D.card,
-          color: filter === 'delivered' ? TONE.purple.text : D.muted,
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        }}>✓ Done</button>
+            flexShrink: 0,
+            fontFamily: "'Poppins', sans-serif",
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onMouseEnter={(e) => {
+            if (filter !== 'delivered') {
+              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (filter !== 'delivered') {
+              e.currentTarget.style.background = D.card;
+            }
+          }}
+        >
+          ✓ Done
+        </button>
       </div>
 
-      {/* WS log - Responsive */}
-      {wsLog.length > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', background: TONE.green.bg, borderBottom: `1px solid ${TONE.green.border}`, flexShrink: 0, overflow: 'hidden' }}>
-        <Radio size={10} color={TONE.green.text} style={{ flexShrink: 0 }} />
-        <p style={{ fontSize: 9, color: TONE.green.text, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, margin: 0 }}>{wsLog[0]}</p>
-        <span style={{ fontSize: 8, color: D.subtle, flexShrink: 0 }}>{wsLog.length}</span>
-      </div>}
+      {/* ── WS log ── */}
+      {wsLog.length > 0 && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8, 
+          padding: '4px 12px', 
+          background: TONE.green.bg, 
+          borderBottom: `1px solid ${TONE.green.border}`, 
+          flexShrink: 0, 
+          overflow: 'hidden',
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <Radio size={10} color={TONE.green.text} style={{ flexShrink: 0 }} />
+          <p style={{ 
+            fontSize: 9, 
+            color: TONE.green.text, 
+            fontFamily: 'monospace', 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis', 
+            whiteSpace: 'nowrap', 
+            flex: 1, 
+            margin: 0 
+          }}>{wsLog[0]}</p>
+          <span style={{ fontSize: 8, color: D.subtle, flexShrink: 0 }}>{wsLog.length}</span>
+        </div>
+      )}
 
-      {/* Loading */}
-      {apiState === 'loading' && orders.length === 0 && <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '20px' }}><div style={{ width: 40, height: 40, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /><p style={{ fontSize: 14, color: D.muted, fontWeight: 600 }}>Loading orders…</p></div>}
+      {/* ── Loading ── */}
+      {apiState === 'loading' && orders.length === 0 && (
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          gap: 16, 
+          padding: '20px',
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <div style={{ 
+            width: 40, 
+            height: 40, 
+            border: `3px solid ${BRAND}`, 
+            borderTopColor: 'transparent', 
+            borderRadius: '50%', 
+            animation: 'spin 0.8s linear infinite' 
+          }} />
+          <p style={{ 
+            fontSize: 14, 
+            color: D.muted, 
+            fontWeight: 600,
+            fontFamily: "'Poppins', sans-serif",
+          }}>Loading orders…</p>
+        </div>
+      )}
 
-      {/* Grid - Responsive */}
+      {/* ── Grid ── */}
       {(apiState !== 'loading' || orders.length > 0) && (
         <div style={{
           flex: 1,
@@ -397,13 +887,38 @@ export default function KitchenDisplayPage() {
           gap: 12,
           padding: '12px',
           alignContent: 'start',
-          overflowY: 'auto'
+          overflowY: 'auto',
         }}>
-          {filtered.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', gap: 12, border: `2px dashed ${D.border}`, borderRadius: 20, background: D.card }}><span style={{ fontSize: 32, opacity: 0.2 }}>✔️</span><p style={{ fontSize: 13, color: D.muted, fontWeight: 600, margin: 0 }}>No orders in this category</p></div>}
+          {filtered.length === 0 && (
+            <div style={{ 
+              gridColumn: '1/-1', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: '40px 16px', 
+              gap: 12, 
+              border: `2px dashed ${D.border}`, 
+              borderRadius: 20, 
+              background: D.card,
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              <span style={{ fontSize: 32, opacity: 0.2 }}>✔️</span>
+              <p style={{ 
+                fontSize: 13, 
+                color: D.muted, 
+                fontWeight: 600, 
+                margin: 0,
+                fontFamily: "'Poppins', sans-serif",
+              }}>No orders in this category</p>
+            </div>
+          )}
 
           {filtered.map(order => {
             const pct = Math.min(100, (order.elapsedSeconds / order.maxSeconds) * 100);
-            const isUrgent = pct >= 90; const isAdvancing = advancing === order.id; const allDone = order.items.every(i => i.done);
+            const isUrgent = pct >= 90; 
+            const isAdvancing = advancing === order.id; 
+            const allDone = order.items.every(i => i.done);
             return (
               <div key={order.id} style={{
                 background: D.card,
@@ -414,44 +929,197 @@ export default function KitchenDisplayPage() {
                 boxShadow: isUrgent ? '0 0 0 3px rgba(255,87,35,0.08),0 4px 16px rgba(255,87,35,0.08)' : (isDark ? 'none' : '0 2px 12px rgba(0,0,0,0.06)'),
                 transition: 'all 0.2s',
                 overflow: 'hidden',
-                minWidth: 0
+                minWidth: 0,
+                fontFamily: "'Poppins', sans-serif",
               }}>
                 <div style={{ height: 4, background: STRIP_COLOR[order.status] }} />
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: `1px solid ${D.border}` }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'flex-start', 
+                  justifyContent: 'space-between', 
+                  padding: '10px 14px 8px', 
+                  borderBottom: `1px solid ${D.border}` 
+                }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 800, color: D.text, margin: 0 }}>#{order.id}</p>
-                      {allDone && order.status !== 'delivered' && <span style={{ fontSize: 8, background: TONE.green.bg, border: `1px solid ${TONE.green.border}`, color: TONE.green.text, padding: '1px 6px', borderRadius: 12, fontWeight: 700 }}>DONE</span>}
+                      <p style={{ 
+                        fontFamily: 'monospace', 
+                        fontSize: 12, 
+                        fontWeight: 800, 
+                        color: D.text, 
+                        margin: 0 
+                      }}>#{order.id}</p>
+                      {allDone && order.status !== 'delivered' && (
+                        <span style={{ 
+                          fontSize: 8, 
+                          background: TONE.green.bg, 
+                          border: `1px solid ${TONE.green.border}`, 
+                          color: TONE.green.text, 
+                          padding: '1px 6px', 
+                          borderRadius: 12, 
+                          fontWeight: 700,
+                          fontFamily: "'Poppins', sans-serif",
+                        }}>DONE</span>
+                      )}
                     </div>
-                    <p style={{ fontSize: 10, color: D.muted, margin: '2px 0 0' }}>🪑 Table {order.table} · {order.zone}</p>
+                    <p style={{ 
+                      fontSize: 10, 
+                      color: D.muted, 
+                      margin: '2px 0 0',
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>🪑 Table {order.table} · {order.zone}</p>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, margin: 0 }} className={timerColorClass(order.elapsedSeconds, order.maxSeconds)}>{formatTimer(order.elapsedSeconds)}</p>
-                    <p style={{ fontSize: 9, color: D.subtle, margin: '1px 0 0' }}>{order.placedAt}</p>
+                    <p style={{ 
+                      fontFamily: 'monospace', 
+                      fontSize: 18, 
+                      fontWeight: 800, 
+                      margin: 0 
+                    }} className={timerColorClass(order.elapsedSeconds, order.maxSeconds)}>
+                      {formatTimer(order.elapsedSeconds)}
+                    </p>
+                    <p style={{ 
+                      fontSize: 9, 
+                      color: D.subtle, 
+                      margin: '1px 0 0',
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>{order.placedAt}</p>
                   </div>
                 </div>
-                <div style={{ height: 3, background: D.border }}><div style={{ height: '100%', borderRadius: 4, transition: 'width 1s', width: `${pct}%`, background: timerBarColor(order.elapsedSeconds, order.maxSeconds) }} /></div>
+                <div style={{ height: 3, background: D.border }}>
+                  <div style={{ 
+                    height: '100%', 
+                    borderRadius: 4, 
+                    transition: 'width 1s', 
+                    width: `${pct}%`, 
+                    background: timerBarColor(order.elapsedSeconds, order.maxSeconds) 
+                  }} />
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px', flex: 1 }}>
                   {order.items.map((dish, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{dish.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: dish.done ? D.subtle : D.text, textDecoration: dish.done ? 'line-through' : 'none' }}>{dish.name}</p>
-                        {dish.mods && <p style={{ fontSize: 9, color: D.subtle, margin: 0 }}>{dish.mods}</p>}
+                        <p style={{ 
+                          fontSize: 11, 
+                          fontWeight: 700, 
+                          margin: 0, 
+                          overflow: 'hidden', 
+                          textOverflow: 'ellipsis', 
+                          whiteSpace: 'nowrap', 
+                          color: dish.done ? D.subtle : D.text, 
+                          textDecoration: dish.done ? 'line-through' : 'none',
+                          fontFamily: "'Poppins', sans-serif",
+                        }}>{dish.name}</p>
+                        {dish.mods && <p style={{ 
+                          fontSize: 9, 
+                          color: D.subtle, 
+                          margin: 0,
+                          fontFamily: "'Poppins', sans-serif",
+                        }}>{dish.mods}</p>}
                       </div>
-                      <span style={{ fontSize: 11, color: D.muted, fontWeight: 600, flexShrink: 0 }}>×{dish.qty}</span>
-                      <button onClick={() => toggleDish(order.id, i)} style={{ width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${dish.done ? BRAND : D.border}`, background: dish.done ? BRAND : D.card, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s' }}>
+                      <span style={{ 
+                        fontSize: 11, 
+                        color: D.muted, 
+                        fontWeight: 600, 
+                        flexShrink: 0,
+                        fontFamily: "'Poppins', sans-serif",
+                      }}>×{dish.qty}</span>
+                      <button 
+                        onClick={() => toggleDish(order.id, i)} 
+                        style={{ 
+                          width: 20, 
+                          height: 20, 
+                          borderRadius: 5, 
+                          border: `1.5px solid ${dish.done ? BRAND : D.border}`, 
+                          background: dish.done ? BRAND : D.card, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          cursor: 'pointer', 
+                          flexShrink: 0, 
+                          transition: 'all 0.2s',
+                          outline: 'none',
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
                         {dish.done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 800 }}>✓</span>}
                       </button>
                     </div>
                   ))}
                 </div>
-                {order.note && <div style={{ margin: '0 10px 6px', padding: '6px 10px', background: TONE.amber.bg, border: `1px solid ${TONE.amber.border}`, borderRadius: 10, display: 'flex', alignItems: 'flex-start', gap: 4 }}><span style={{ color: TONE.amber.text, fontSize: 10, marginTop: 1 }}>⚠</span><p style={{ fontSize: 9, color: TONE.amber.text, lineHeight: 1.4, margin: 0, fontWeight: 600 }}>{order.note}</p></div>}
+                {order.note && (
+                  <div style={{ 
+                    margin: '0 10px 6px', 
+                    padding: '6px 10px', 
+                    background: TONE.amber.bg, 
+                    border: `1px solid ${TONE.amber.border}`, 
+                    borderRadius: 10, 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    gap: 4,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    <span style={{ color: TONE.amber.text, fontSize: 10, marginTop: 1 }}>⚠</span>
+                    <p style={{ 
+                      fontSize: 9, 
+                      color: TONE.amber.text, 
+                      lineHeight: 1.4, 
+                      margin: 0, 
+                      fontWeight: 600,
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>{order.note}</p>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, padding: '8px 10px 10px', borderTop: `1px solid ${D.border}` }}>
                   {BTN_CFG[order.status].map((btn, i) => (
-                    <button key={btn.label} onClick={() => i === 0 && advanceOrder(order.id)} disabled={order.status === 'delivered' || isAdvancing}
-                      style={{ flex: 1, height: 32, borderRadius: 8, border: `1.5px solid ${btn.border}`, background: btn.bg, color: btn.color, fontSize: 10, fontWeight: 700, cursor: order.status === 'delivered' ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all 0.2s', opacity: (order.status === 'delivered' || isAdvancing) ? 0.5 : 1 }}>
-                      {isAdvancing && i === 0 ? <div style={{ width: 12, height: 12, border: `2px solid ${btn.color}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> : btn.label}
+                    <button
+                      key={btn.label}
+                      onClick={() => i === 0 && advanceOrder(order.id)}
+                      disabled={order.status === 'delivered' || isAdvancing}
+                      style={{
+                        flex: 1,
+                        height: 32,
+                        borderRadius: 8,
+                        border: `1.5px solid ${btn.border}`,
+                        background: btn.bg,
+                        color: btn.color,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: order.status === 'delivered' ? 'default' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        transition: 'all 0.2s',
+                        opacity: (order.status === 'delivered' || isAdvancing) ? 0.5 : 1,
+                        fontFamily: "'Poppins', sans-serif",
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => {
+                        if (order.status !== 'delivered' && !isAdvancing) {
+                          e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                        }
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      {isAdvancing && i === 0 ? 
+                        <div style={{ 
+                          width: 12, 
+                          height: 12, 
+                          border: `2px solid ${btn.color}`, 
+                          borderTopColor: 'transparent', 
+                          borderRadius: '50%', 
+                          animation: 'spin 0.8s linear infinite' 
+                        }} /> : btn.label
+                      }
                     </button>
                   ))}
                 </div>
@@ -460,6 +1128,7 @@ export default function KitchenDisplayPage() {
           })}
         </div>
       )}
+
       <style>{`
         .animate-spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
         
@@ -478,7 +1147,6 @@ export default function KitchenDisplayPage() {
           .mobile-menu-btn { display: flex !important; }
           .mobile-dropdown { display: flex !important; }
           
-          /* Keep menu button in top right */
           header {
             padding: 8px 12px !important;
           }

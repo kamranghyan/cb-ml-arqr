@@ -7,8 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const BASE =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE ??
-  'https://s4qafzisc6.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_ORDERS_API_BASE
 
 type Scope = { tenantId: string; restaurantId: string; auth: string }
 

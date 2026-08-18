@@ -15,7 +15,7 @@ import { getTheme } from '@/lib/theme';
 
 const BRAND = '#ff5723';
 
-// Define colors based on theme
+// ── Colors matching checkout page ──
 const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFFFFF',
   card: isDark ? '#1C1C1C' : '#ffffff',
@@ -38,7 +38,7 @@ export default function Sidebar() {
   const [tenant, setTenant] = useState<ApiTenant | null>(null);
   const [isDark, setIsDark] = useState(false);
 
-  // Listen for theme changes
+  // ── Theme listener ──
   useEffect(() => {
     const updateTheme = () => {
       const theme = getTheme();
@@ -84,6 +84,7 @@ export default function Sidebar() {
       borderRight: `1px solid ${colors.border}`,
       width: 240,
       flexShrink: 0,
+      fontFamily: "'Poppins', sans-serif",
     }}>
       {/* Who and where */}
       <div style={{ 
@@ -99,7 +100,7 @@ export default function Sidebar() {
                 fontSize: 15, 
                 fontWeight: 700, 
                 color: colors.text, 
-                fontFamily: "'Baloo 2', sans-serif" 
+                fontFamily: "'Poppins', sans-serif" 
               }}>
                 MenuLay
               </span>
@@ -111,7 +112,7 @@ export default function Sidebar() {
                 fontSize: 15, 
                 fontWeight: 700, 
                 color: colors.text, 
-                fontFamily: "'Baloo 2', sans-serif" 
+                fontFamily: "'Poppins', sans-serif" 
               }}>
                 {tenant?.companyName ?? '…'}
               </span>
@@ -120,11 +121,21 @@ export default function Sidebar() {
         </div>
 
         {role === 'admin' ? (
-          <div style={{ fontSize: 12, color: colors.muted }}>Platform console</div>
+          <div style={{ 
+            fontSize: 12, 
+            color: colors.muted,
+            fontFamily: "'Poppins', sans-serif" 
+          }}>
+            Platform console
+          </div>
         ) : (
           <>
             {tenant && (
-              <div style={{ fontSize: 12, color: colors.muted }}>
+              <div style={{ 
+                fontSize: 12, 
+                color: colors.muted,
+                fontFamily: "'Poppins', sans-serif" 
+              }}>
                 <span style={{
                   fontSize: 10, 
                   fontWeight: 700, 
@@ -135,6 +146,7 @@ export default function Sidebar() {
                   background: colors.brandBg, 
                   color: BRAND, 
                   marginRight: 6,
+                  fontFamily: "'Poppins', sans-serif",
                 }}>
                   {tenant.planTier}
                 </span>
@@ -150,6 +162,7 @@ export default function Sidebar() {
                 color: BRAND, 
                 fontSize: 12, 
                 fontWeight: 600,
+                fontFamily: "'Poppins', sans-serif",
               }}>
                 Account suspended — contact support.
               </div>
@@ -174,7 +187,10 @@ export default function Sidebar() {
               textTransform: 'uppercase', 
               color: colors.subtle,
               margin: '0 0 6px 12px',
-            }}>{section}</p>
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              {section}
+            </p>
 
             {items.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -192,9 +208,11 @@ export default function Sidebar() {
                     textDecoration: 'none', 
                     fontSize: 13.5,
                     fontWeight: active ? 700 : 500,
-                    color: active ? BRAND : colors.muted,
-                    background: active ? colors.activeBg : 'transparent',
+                    // 🔥 SELECTED: BRAND bg with white text (both themes)
+                    color: active ? '#FFFFFF' : colors.muted,
+                    background: active ? BRAND : 'transparent',
                     transition: 'all 0.2s ease',
+                    fontFamily: "'Poppins', sans-serif",
                   }}
                   onMouseEnter={(e) => {
                     if (!active) {
@@ -207,8 +225,16 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <Icon size={16} color={active ? BRAND : colors.muted} />
-                  <span style={{ color: active ? BRAND : colors.muted }}>
+                  <Icon 
+                    size={16} 
+                    // 🔥 Selected icon: white, else muted
+                    color={active ? '#FFFFFF' : colors.muted} 
+                  />
+                  <span style={{ 
+                    // 🔥 Selected text: white, else muted
+                    color: active ? '#FFFFFF' : colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
                     {label}
                   </span>
                 </Link>
@@ -227,14 +253,16 @@ export default function Sidebar() {
         <div style={{ 
           fontSize: 13, 
           fontWeight: 600, 
-          color: colors.text 
+          color: colors.text,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {user?.displayName || user?.email}
         </div>
         <div style={{ 
           fontSize: 11, 
           color: colors.subtle, 
-          marginBottom: 8 
+          marginBottom: 8,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {role ? ROLE_LABEL[role] : ''}
         </div>
@@ -245,6 +273,7 @@ export default function Sidebar() {
             alignItems: 'center', 
             gap: 8, 
             width: '100%',
+            marginBottom:'70px',
             padding: '8px 12px', 
             border: `1px solid ${colors.border}`, 
             borderRadius: 8,
@@ -252,6 +281,7 @@ export default function Sidebar() {
             cursor: 'pointer', 
             fontSize: 13, 
             color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
             transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {

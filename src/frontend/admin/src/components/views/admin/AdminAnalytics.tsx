@@ -10,29 +10,48 @@ import ScopePicker, { EMPTY_SCOPE, type Scope } from '@/components/ScopePicker';
 import {
   fetchOrdersForRestaurant, derivedStatus, money, type SupportOrder,
 } from '@/lib/support-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 const PLANS: PlanTier[] = ['starter', 'professional', 'enterprise'];
 
 export default function AdminAnalytics() {
-  const { isDark } = useTheme();
   // ── Platform-wide (no scope needed) ────────────────────────────────
   const [tenants, setTenants] = useState<ApiTenant[]>([]);
   const [loadingT, setLoadT] = useState(true);
@@ -42,22 +61,33 @@ export default function AdminAnalytics() {
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [orders, setOrders] = useState<SupportOrder[]>([]);
   const [loadingO, setLoadO] = useState(false);
+  const [isDark, setIsDark] = useState(false);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   const loadTenants = useCallback(async () => {
     setLoadT(true);
@@ -123,10 +153,15 @@ export default function AdminAnalytics() {
       maxWidth: 1150,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -147,6 +182,7 @@ export default function AdminAnalytics() {
               fontWeight: 800,
               color: colors.text,
               margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Analytics
             </h1>
@@ -154,6 +190,7 @@ export default function AdminAnalytics() {
               color: colors.muted,
               fontSize: 13,
               margin: 0,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               How the platform is doing, and how any one branch is trading.
             </p>
@@ -165,23 +202,42 @@ export default function AdminAnalytics() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 16px',
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
               background: colors.card2,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
               color: colors.text,
               whiteSpace: 'nowrap',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card2;
+              e.currentTarget.style.borderColor = colors.border;
             }}
           >
-            <RefreshCw size={14} className={loadingT ? 'animate-spin' : ''} />
+            <RefreshCw size={14} style={loadingT ? { animation: 'spin 1s linear infinite' } : {}} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* ── Platform ─────────────────────────────────────────────── */}
+      {/* ── Platform Section ── */}
       <h2 style={{
         fontSize: 12,
         fontWeight: 800,
@@ -189,6 +245,7 @@ export default function AdminAnalytics() {
         textTransform: 'uppercase',
         color: colors.subtle,
         margin: '0 0 12px',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         Platform
       </h2>
@@ -203,7 +260,9 @@ export default function AdminAnalytics() {
           color: colors.muted,
         }}>
           <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading platform data…</p>
+          <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+            Loading platform data…
+          </p>
         </div>
       )}
 
@@ -214,10 +273,10 @@ export default function AdminAnalytics() {
           justifyContent: 'center',
           gap: 8,
           padding: '30px 20px',
-          color: accent.danger.text,
+          color: accents.danger.text,
         }}>
           <AlertCircle size={18} />
-          <span>{errorT}</span>
+          <span style={{ fontFamily: "'Poppins', sans-serif" }}>{errorT}</span>
         </div>
       )}
 
@@ -240,14 +299,14 @@ export default function AdminAnalytics() {
               icon={<TrendingUp size={17} />}
               label="Active"
               value={String(active.length)}
-              accent={accent.green.text}
+              accent={accents.green.text}
               colors={colors}
             />
             <Stat
               icon={<Pause size={17} />}
               label="Suspended"
               value={String(tenants.length - active.length)}
-              accent={tenants.length - active.length ? accent.danger.text : undefined}
+              accent={tenants.length - active.length ? accents.danger.text : undefined}
               colors={colors}
             />
             <Stat
@@ -284,12 +343,14 @@ export default function AdminAnalytics() {
                           fontWeight: 600,
                           textTransform: 'capitalize',
                           color: colors.text,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {p}
                         </span>
                         <span style={{
                           fontSize: 13,
                           color: colors.muted,
+                          fontFamily: "'Poppins', sans-serif",
                         }}>
                           {n} · {pct}%
                         </span>
@@ -310,7 +371,7 @@ export default function AdminAnalytics() {
                     key={t.tenantId}
                     left={t.companyName}
                     right={`${t.restaurantCount}/${t.maxRestaurants} · ${t.planTier}`}
-                    rightColor={accent.danger.text}
+                    rightColor={accents.danger.text}
                     colors={colors}
                   />
                 ))
@@ -338,7 +399,7 @@ export default function AdminAnalytics() {
         </>
       )}
 
-      {/* ── One branch ───────────────────────────────────────────── */}
+      {/* ── One Branch Section ── */}
       <h2 style={{
         fontSize: 12,
         fontWeight: 800,
@@ -346,6 +407,7 @@ export default function AdminAnalytics() {
         textTransform: 'uppercase',
         color: colors.subtle,
         margin: '0 0 12px',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         A single branch — last 24 hours
       </h2>
@@ -370,7 +432,9 @@ export default function AdminAnalytics() {
           color: colors.muted,
         }}>
           <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: 12, fontSize: 14 }}>Loading orders…</p>
+          <p style={{ marginTop: 12, fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+            Loading orders…
+          </p>
         </div>
       )}
 
@@ -393,7 +457,7 @@ export default function AdminAnalytics() {
               icon={<TrendingUp size={17} />}
               label="Revenue"
               value={money(revenue, scope.currency)}
-              accent={accent.green.text}
+              accent={accents.green.text}
               colors={colors}
             />
             <Stat
@@ -428,12 +492,14 @@ export default function AdminAnalytics() {
                         fontSize: 13,
                         fontWeight: 600,
                         color: colors.text,
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {name}
                       </span>
                       <span style={{
                         fontSize: 13,
                         color: colors.muted,
+                        fontFamily: "'Poppins', sans-serif",
                       }}>
                         {qty}
                       </span>
@@ -463,7 +529,7 @@ function Stat({
   label: string;
   value: string;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -485,6 +551,7 @@ function Stat({
           fontWeight: 700,
           letterSpacing: 1,
           textTransform: 'uppercase',
+          fontFamily: "'Poppins', sans-serif",
         }}>
           {label}
         </span>
@@ -494,6 +561,7 @@ function Stat({
         fontWeight: 800,
         color: accent ?? colors.text,
         lineHeight: 1,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>
@@ -508,7 +576,7 @@ function Card({
 }: {
   title: string;
   children: React.ReactNode;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -522,6 +590,7 @@ function Card({
         fontWeight: 800,
         color: colors.text,
         margin: '0 0 14px',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {title}
       </h3>
@@ -530,7 +599,7 @@ function Card({
   );
 }
 
-function Bar({ pct, colors }: { pct: number; colors: any }) {
+function Bar({ pct, colors }: { pct: number; colors: ReturnType<typeof getColors> }) {
   return (
     <div style={{
       height: 6,
@@ -557,7 +626,7 @@ function Row({
   left: string;
   right: string;
   rightColor?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -573,6 +642,7 @@ function Row({
         fontSize: 13,
         fontWeight: 600,
         color: colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {left}
       </span>
@@ -581,6 +651,7 @@ function Row({
         color: rightColor ?? colors.muted,
         fontWeight: 700,
         whiteSpace: 'nowrap',
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {right}
       </span>
@@ -588,12 +659,13 @@ function Row({
   );
 }
 
-function Muted({ text, colors }: { text: string; colors: any }) {
+function Muted({ text, colors }: { text: string; colors: ReturnType<typeof getColors> }) {
   return (
     <p style={{
       fontSize: 13,
       color: colors.subtle,
       margin: '0 0 14px',
+      fontFamily: "'Poppins', sans-serif",
     }}>
       {text}
     </p>

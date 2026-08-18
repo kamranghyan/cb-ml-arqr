@@ -18,12 +18,11 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 
 const REGION    = 'ap-south-1'
-const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '7903hkujl9qeq67toemi5qrhes'
+const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID
 
 // auth_svc — the service that owns login, registration and tenants.
 const AUTH_API =
-  process.env.NEXT_PUBLIC_AUTH_API_BASE ??
-  'https://REPLACE-ME.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_AUTH_API_BASE
 
 const client = new CognitoIdentityProviderClient({ region: REGION })
 

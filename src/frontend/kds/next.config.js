@@ -6,7 +6,9 @@ const nextConfig = {
       // AR assets proxy only — menu uses the API route proxy for auth headers
       {
         source:      '/api/ar/:path*',
-        destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://987eskfgd8.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://hc3yry10t4.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
+
+        // destination: `${process.env.NEXT_PUBLIC_AR_BASE ?? 'https://987eskfgd8.execute-api.ap-south-1.amazonaws.com/Prod'}/ar/:path*`,
       },
     ]
   },

@@ -10,8 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_API_BASE
 
 // restaurantId → tenantId. Restaurants rarely change owners, so a short-lived
 // in-memory cache saves a lookup on every menu request.

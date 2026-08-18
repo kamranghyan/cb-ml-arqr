@@ -1,31 +1,30 @@
 'use client';
 
 import { Store, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import type { Branch } from '@/lib/tenant-api';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches your KDS page) ──────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-};
 
-/**
- * Which branch an owner is looking at. Unlike the admin's picker, the company
- * is already known from the token — and an owner can look across all their
- * branches at once, which is the point of owning several.
- *
- * Rendered as chips rather than a dropdown: a handful of branches is the
- * normal case, and seeing them all at once is faster than opening a menu.
- */
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  chipText: isDark ? '#9CA3AF' : '#000000', // ✅ Chip text color
+  labelText: isDark ? '#9CA3AF' : '#000000', // ✅ Label text color
+  subtle: isDark ? '#6B7280' : '#9CA3AF',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
 export default function BranchPicker({
   branches,
   value,
@@ -39,20 +38,86 @@ export default function BranchPicker({
   loading?: boolean;
   allowAll?: boolean;
 }) {
+  const [isDark, setIsDark] = useState(false);
+
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+
+  // ── Loading State ──
   if (loading) {
     return (
-      <div className="flex items-center gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4 text-[#9CA3AF]">
-        <Loader2 size={15} className="animate-spin" />
-        <span className="text-sm">Loading your restaurants…</span>
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+          background: colors.card,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 12,
+          padding: '12px 16px',
+          marginBottom: 16,
+          color: colors.muted,
+          fontFamily: "'Poppins', sans-serif",
+        }}
+      >
+        <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+        <span style={{ fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+          Loading your restaurants…
+        </span>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
+  // ── Empty State ──
   if (branches.length === 0) {
     return (
-      <div className="flex items-center gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4 text-[#6B7280]">
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+          background: colors.card,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 12,
+          padding: '12px 16px',
+          marginBottom: 16,
+          color: colors.subtle,
+          fontFamily: "'Poppins', sans-serif",
+        }}
+      >
         <Store size={15} />
-        <span className="text-sm">No restaurants yet — add one to start taking orders.</span>
+        <span style={{ fontSize: 14, fontFamily: "'Poppins', sans-serif" }}>
+          No restaurants yet — add one to start taking orders.
+        </span>
       </div>
     );
   }
@@ -61,17 +126,58 @@ export default function BranchPicker({
   if (branches.length === 1 && !allowAll) return null;
 
   return (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 flex-wrap bg-[#1C1C1C] border border-[rgba(255,255,255,0.08)] rounded-xl px-3.5 py-3 mb-4">
-      <div className="flex items-center gap-1.5 text-[#9CA3AF] flex-shrink-0">
-        <Store size={15} />
-        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider hidden xs:inline">
+    <div 
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        flexWrap: 'wrap',
+        background: colors.card,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 12,
+        padding: '12px 16px',
+        marginBottom: 16,
+        fontFamily: "'Poppins', sans-serif",
+      }}
+    >
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: colors.labelText, // ✅ Light: Black, Dark: #9CA3AF
+          flexShrink: 0,
+        }}
+      >
+        <Store size={15} color={colors.labelText} /> {/* ✅ Store icon bhi black */}
+        <span 
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            fontFamily: "'Poppins', sans-serif",
+            color: colors.labelText, // ✅ Light: Black, Dark: #9CA3AF
+          }}
+        >
           Restaurant
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 flex-1">
+      <div 
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          flex: 1,
+        }}
+      >
         {allowAll && (
-          <Chip active={value === ''} onClick={() => onChange('')}>
+          <Chip 
+            active={value === ''} 
+            onClick={() => onChange('')}
+            colors={colors}
+          >
             All branches
           </Chip>
         )}
@@ -80,10 +186,13 @@ export default function BranchPicker({
             key={b.restaurantId}
             active={value === b.restaurantId}
             onClick={() => onChange(b.restaurantId)}
+            colors={colors}
           >
             {b.name}
             {!b.isActive && (
-              <span className="opacity-60 font-medium"> · closed</span>
+              <span style={{ opacity: 0.6, fontWeight: 500 }}>
+                {' '}· closed
+              </span>
             )}
           </Chip>
         ))}
@@ -92,20 +201,66 @@ export default function BranchPicker({
   );
 }
 
-function Chip({ active, onClick, children }: {
-  active: boolean; onClick: () => void; children: React.ReactNode;
+// ── Chip Component ──
+function Chip({ 
+  active, 
+  onClick, 
+  children,
+  colors,
+}: {
+  active: boolean; 
+  onClick: () => void; 
+  children: React.ReactNode;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`
-        px-3.5 py-1.5 rounded-full cursor-pointer text-xs font-bold transition-all duration-200
-        whitespace-nowrap
-        ${active
-          ? 'bg-[#ff5723] text-white border border-[#ff5723] shadow-[0_0_12px_rgba(255,87,35,0.25)]'
-          : 'bg-[#242424] text-[#9CA3AF] border border-[rgba(255,255,255,0.08)] hover:bg-[#2A2A2A] hover:text-[#F5F0E8]'
+      style={{
+        padding: '6px 14px',
+        borderRadius: 9999,
+        cursor: 'pointer',
+        fontSize: 12,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        transition: 'all 0.2s ease',
+        fontFamily: "'Poppins', sans-serif",
+        border: 'none',
+        outline: 'none',
+        background: active ? BRAND : colors.card2,
+        color: active ? '#FFFFFF' : colors.chipText, // ✅ Light: Black, Dark: #9CA3AF
+        boxShadow: active 
+          ? `0 0 16px rgba(255,87,35,0.25)` 
+          : 'none',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.boxShadow = active 
+          ? `0 0 16px rgba(255,87,35,0.25), 0 0 0 3px ${colors.focusRing}`
+          : `0 0 0 3px ${colors.focusRing}`;
+        if (!active) {
+          e.currentTarget.style.color = colors.chipText;
         }
-      `}
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.boxShadow = active 
+          ? `0 0 16px rgba(255,87,35,0.25)` 
+          : 'none';
+        if (!active) {
+          e.currentTarget.style.color = colors.chipText;
+        }
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = colors.hoverBg;
+          e.currentTarget.style.color = colors.chipText;
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = colors.card2;
+          e.currentTarget.style.color = colors.chipText;
+        }
+      }}
     >
       {children}
     </button>

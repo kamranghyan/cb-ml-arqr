@@ -10,33 +10,62 @@ import {
   planUsage, PLAN_LABELS,
   type ApiTenant, type PlanTier,
 } from '@/lib/auth-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const GREEN = '#16a34a';
 
-function useD() {
-  const { isDark } = useTheme();
-  const D = isDark ? {
-    bg: '#111111', card: '#1C1C1C', border: 'rgba(255,255,255,0.08)',
-    text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
-  } : {
-    bg: '#FFFFFF', card: '#fff', border: '#F0EBE6',
-    text: '#000000', muted: '#6B6B6B', subtle: '#9CA3AF',
-  };
-  return { isDark, D };
-}
-type DShape = ReturnType<typeof useD>['D'];
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+  green: isDark ? '#4ade80' : '#16a34a',
+  placeholder: isDark ? '#6B7280' : '#888888', // ✅ Light: dark gray
+});
 
 type Toast = { msg: string; kind: 'ok' | 'err' } | null;
 
 export default function TenantsView() {
-  const { D } = useD();
-  const [rows, setRows]       = useState<ApiTenant[]>([]);
+  const [rows, setRows] = useState<ApiTenant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-  const [toast, setToast]     = useState<Toast>(null);
-  const [modal, setModal]     = useState<{ open: boolean; edit?: ApiTenant }>({ open: false });
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState<Toast>(null);
+  const [modal, setModal] = useState<{ open: boolean; edit?: ApiTenant }>({ open: false });
+  const [isDark, setIsDark] = useState(false);
+
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
 
   const showToast = (msg: string, kind: 'ok' | 'err' = 'ok') => {
     setToast({ msg, kind });
@@ -44,7 +73,8 @@ export default function TenantsView() {
   };
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
       setRows(await fetchTenants());
     } catch (e: any) {
@@ -87,52 +117,197 @@ export default function TenantsView() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{
+      padding: '24px',
+      maxWidth: 1100,
+      margin: '0 auto',
+      fontFamily: "'Poppins', sans-serif",
+      background: colors.bg,
+      minHeight: '100vh',
+    }}>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        /* ── All inputs placeholder color ── */
+        input::placeholder,
+        input::-webkit-input-placeholder,
+        input::-moz-placeholder {
+          color: ${colors.placeholder} !important;
+          opacity: 0.8;
+        }
+        input:focus {
+          outline: none;
+        }
+        /* ── Password input placeholder (light gray in light mode) ── */
+        input[type="password"]::placeholder,
+        input[type="password"]::-webkit-input-placeholder,
+        input[type="password"]::-moz-placeholder {
+          color: ${isDark ? '#6B7280' : '#AAAAAA'} !important;
+          opacity: 0.8;
+        }
+        select option:disabled {
+          color: ${colors.placeholder};
+        }
+        select:focus {
+          outline: none;
+        }
+      `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+      {/* ── Header ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: D.text, margin: '0 0 4px', fontFamily: "'Baloo 2', sans-serif" }}>
+          <h1 style={{
+            fontSize: 'clamp(20px, 3vw, 24px)',
+            fontWeight: 700,
+            color: colors.text,
+            margin: '0 0 4px',
+            fontFamily: "'Poppins', sans-serif",
+          }}>
             Tenants
           </h1>
-          <p style={{ color: D.muted, fontSize: 14, margin: 0 }}>
+          <p style={{
+            color: colors.muted,
+            fontSize: 14,
+            margin: 0,
+            fontFamily: "'Poppins', sans-serif",
+          }}>
             Customer companies on the platform. Each one manages its own restaurants.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} style={btnGhost(D)}>
-            <RefreshCw size={14} /> Refresh
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+        }}>
+          <button
+            onClick={load}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
+              background: colors.card,
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: 'pointer',
+              color: colors.text,
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card;
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+          >
+            <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
+            Refresh
           </button>
-          <button onClick={() => setModal({ open: true })} style={btn(BRAND)}>
+          <button
+            onClick={() => setModal({ open: true })}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              border: 'none',
+              borderRadius: 10,
+              background: BRAND,
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#e64a1a';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = BRAND;
+            }}
+          >
             <Plus size={16} /> New Tenant
           </button>
         </div>
       </div>
 
-      {/* Summary */}
+      {/* ── Summary Stats ── */}
       {!loading && !error && rows.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-          <Stat label="Tenants" value={rows.length} D={D} />
-          <Stat label="Active"  value={rows.filter(r => r.isActive).length} D={D} />
-          <Stat label="Restaurants"
-                value={rows.reduce((s, r) => s + (r.restaurantCount ?? 0), 0)} D={D} />
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          marginBottom: 18,
+          flexWrap: 'wrap',
+        }}>
+          <Stat label="Tenants" value={rows.length} colors={colors} />
+          <Stat label="Active" value={rows.filter(r => r.isActive).length} colors={colors} />
+          <Stat label="Restaurants" value={rows.reduce((s, r) => s + (r.restaurantCount ?? 0), 0)} colors={colors} />
         </div>
       )}
 
+      {/* ── Loading State ── */}
       {loading && (
-        <div style={{ padding: 60, textAlign: 'center', color: D.muted }}>
-          <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} /> Loading tenants…
+        <div style={{
+          padding: '60px',
+          textAlign: 'center',
+          color: colors.muted,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
+          <p style={{ marginTop: 12 }}>Loading tenants…</p>
         </div>
       )}
 
+      {/* ── Error State ── */}
       {!loading && error && (
-        <div style={{ padding: 40, textAlign: 'center', color: BRAND }}>
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          color: BRAND,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
           <AlertCircle size={20} /> {error}
         </div>
       )}
 
+      {/* ── Empty State ── */}
       {!loading && !error && rows.length === 0 && (
-        <div style={{ padding: 60, textAlign: 'center', color: D.subtle }}>
+        <div style={{
+          padding: '60px',
+          textAlign: 'center',
+          color: colors.subtle,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
           <Building2 size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
           <p style={{ margin: 0, fontWeight: 600 }}>No tenants yet.</p>
           <p style={{ margin: '4px 0 0', fontSize: 13 }}>
@@ -141,47 +316,239 @@ export default function TenantsView() {
         </div>
       )}
 
+      {/* ── Tenants Table ── */}
       {!loading && !error && rows.length > 0 && (
-        <div style={{ border: `1px solid ${D.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ background: D.bg }}>
+        <div style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}>
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontFamily: "'Poppins', sans-serif",
+          }}>
+            <thead style={{ background: colors.card2 }}>
               <tr>
-                <th style={th(D)}>Company</th>
-                <th style={th(D)}>Owner</th>
-                <th style={th(D)}>Plan</th>
-                <th style={th(D)}>Usage</th>
-                <th style={th(D)}>Status</th>
-                <th style={th(D)}></th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'left',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Company</th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'left',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Owner</th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'left',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Plan</th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'left',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Usage</th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'left',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Status</th>
+                <th style={{
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.subtle,
+                  textAlign: 'right',
+                  fontFamily: "'Poppins', sans-serif",
+                }}></th>
               </tr>
             </thead>
             <tbody>
               {rows.map(t => (
-                <tr key={t.tenantId} style={{ borderTop: `1px solid ${D.border}` }}>
-                  <td style={{ ...cell(D), fontWeight: 600 }}>{t.companyName}</td>
-                  <td style={{ ...cell(D), color: D.muted }}>{t.email}</td>
-                  <td style={cell(D)}>
-                    <span style={planBadge(t.planTier)}>{t.planTier}</span>
+                <tr key={t.tenantId} style={{ borderTop: `1px solid ${colors.border}` }}>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: colors.text,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>{t.companyName}</td>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 14,
+                    color: colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>{t.email}</td>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 14,
+                    color: colors.text,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    <span style={planBadge(t.planTier, isDark)}>{t.planTier}</span>
                   </td>
-                  <td style={{ ...cell(D), color: D.muted, fontSize: 13 }}>{planUsage(t)}</td>
-                  <td style={cell(D)}>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 13,
+                    color: colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>{planUsage(t)}</td>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 14,
+                    color: colors.text,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
                     <span style={{
-                      fontSize: 12, fontWeight: 700,
-                      color: t.isActive ? GREEN : BRAND,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: t.isActive ? colors.green : BRAND,
+                      fontFamily: "'Poppins', sans-serif",
                     }}>
                       {t.isActive ? '● active' : '● suspended'}
                     </span>
                   </td>
-                  <td style={{ ...cell(D), textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => toggleActive(t)} style={{ ...iconBtn(D), marginRight: 6 }}
-                            title={t.isActive ? 'Suspend' : 'Activate'}>
+                  <td style={{
+                    padding: '11px 12px',
+                    fontSize: 14,
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    <button
+                      onClick={() => toggleActive(t)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px 8px',
+                        marginRight: 6,
+                        border: `1.5px solid ${colors.border}`,
+                        borderRadius: 8,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: colors.muted,
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                      }}
+                      title={t.isActive ? 'Suspend' : 'Activate'}
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = colors.hoverBg;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                    >
                       {t.isActive ? <Pause size={14} /> : <Play size={14} />}
                     </button>
-                    <button onClick={() => setModal({ open: true, edit: t })}
-                            style={{ ...iconBtn(D), marginRight: 6 }} title="Edit plan">
+                    <button
+                      onClick={() => setModal({ open: true, edit: t })}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px 8px',
+                        marginRight: 6,
+                        border: `1.5px solid ${colors.border}`,
+                        borderRadius: 8,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: colors.muted,
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                      }}
+                      title="Edit plan"
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = colors.hoverBg;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                    >
                       <Edit2 size={14} />
                     </button>
-                    <button onClick={() => onDelete(t)} style={{ ...iconBtn(D), color: BRAND }}
-                            title="Delete">
+                    <button
+                      onClick={() => onDelete(t)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px 8px',
+                        border: `1.5px solid ${colors.border}`,
+                        borderRadius: 8,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: BRAND,
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                      }}
+                      title="Delete"
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = colors.hoverBg;
+                        e.currentTarget.style.borderColor = BRAND;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = colors.border;
+                      }}
+                    >
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -192,21 +559,34 @@ export default function TenantsView() {
         </div>
       )}
 
+      {/* ── Tenant Modal ── */}
       {modal.open && (
         <TenantModal
           edit={modal.edit}
           onClose={() => setModal({ open: false })}
           onSaved={() => { setModal({ open: false }); load(); }}
           showToast={showToast}
+          colors={colors}
+          isDark={isDark}
         />
       )}
 
+      {/* ── Toast ── */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: 24, right: 24, padding: '12px 18px', borderRadius: 10,
-          background: toast.kind === 'ok' ? GREEN : BRAND, color: '#fff',
-          fontWeight: 600, fontSize: 14, maxWidth: 420,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)', zIndex: 100,
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          padding: '12px 18px',
+          borderRadius: 10,
+          background: toast.kind === 'ok' ? colors.green : BRAND,
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 14,
+          maxWidth: 420,
+          zIndex: 100,
+          fontFamily: "'Poppins', sans-serif",
+          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {toast.msg}
         </div>
@@ -215,22 +595,30 @@ export default function TenantsView() {
   );
 }
 
-// ── Modal — top-level sibling ────────────────────────────────────────────
+// ── Tenant Modal ──
 
-function TenantModal({ edit, onClose, onSaved, showToast }: {
+function TenantModal({
+  edit,
+  onClose,
+  onSaved,
+  showToast,
+  colors,
+  isDark,
+}: {
   edit?: ApiTenant;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string, k?: 'ok' | 'err') => void;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
 }) {
-  const { D } = useD();
   const isEdit = Boolean(edit);
   const [f, setF] = useState({
     companyName: edit?.companyName ?? '',
-    email:       edit?.email ?? '',
-    password:    '',
-    name:        '',
-    planTier:    (edit?.planTier ?? 'starter') as PlanTier,
+    email: edit?.email ?? '',
+    password: '',
+    name: '',
+    planTier: (edit?.planTier ?? 'starter') as PlanTier,
   });
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
@@ -241,16 +629,16 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
       if (isEdit) {
         await updateTenant(edit!.tenantId, {
           companyName: f.companyName,
-          planTier:    f.planTier,
+          planTier: f.planTier,
         });
         showToast('Tenant updated');
       } else {
         await createTenant({
           companyName: f.companyName,
-          email:       f.email,
-          password:    f.password,
-          name:        f.name,
-          planTier:    f.planTier,
+          email: f.email,
+          password: f.password,
+          name: f.name,
+          planTier: f.planTier,
         });
         showToast(`Tenant created — share the login with ${f.email}`);
       }
@@ -267,51 +655,257 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
     : f.companyName.trim() && f.email.trim() && f.password.length >= 8;
 
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16,
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: D.card, borderRadius: 14, padding: 24, width: '100%',
-        maxWidth: 480, maxHeight: '90vh', overflowY: 'auto',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: D.text, fontFamily: "'Baloo 2', sans-serif" }}>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200,
+        padding: 16,
+        fontFamily: "'Poppins', sans-serif",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: colors.card,
+          borderRadius: 16,
+          padding: 24,
+          width: '100%',
+          maxWidth: 480,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          border: `1px solid ${colors.border}`,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.4)' : '0 8px 32px rgba(0,0,0,0.1)',
+        }}
+      >
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 6,
+        }}>
+          <h3 style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 700,
+            color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
+          }}>
             {isEdit ? 'Edit Tenant' : 'New Tenant'}
           </h3>
-          <button onClick={onClose} style={{ ...iconBtn(D), border: 'none' }}><X size={18} /></button>
+          <button
+            onClick={onClose}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 4,
+              border: 'none',
+              borderRadius: 8,
+              background: 'transparent',
+              cursor: 'pointer',
+              color: colors.muted,
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.color = colors.text;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = colors.muted;
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
-        <p style={{ color: D.muted, fontSize: 13, margin: '0 0 18px' }}>
+        <p style={{
+          color: colors.muted,
+          fontSize: 13,
+          margin: '0 0 18px',
+          fontFamily: "'Poppins', sans-serif",
+        }}>
           {isEdit
             ? 'Change the company name or subscription plan.'
             : 'Creates the company and its owner login in one step. The owner then adds their own restaurants.'}
         </p>
 
-        <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ display: 'grid', gap: 14 }}>
           <div>
-            <label style={label(D)}>Company Name</label>
-            <input style={input(D)} value={f.companyName} placeholder="McDonald's Pakistan"
-                   onChange={e => set('companyName', e.target.value)} />
+            <label style={{
+              display: 'block',
+              fontSize: 12,
+              fontWeight: 700,
+              color: colors.muted,
+              marginBottom: 5,
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Company Name
+            </label>
+            <input
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                border: `1.5px solid ${colors.border}`,
+                borderRadius: 10,
+                fontSize: 14,
+                fontFamily: "'Poppins', sans-serif",
+                boxSizing: 'border-box',
+                background: colors.bg,
+                color: colors.text,
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              value={f.companyName}
+              placeholder="McDonald's Pakistan"
+              onChange={e => set('companyName', e.target.value)}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = BRAND;
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = colors.border;
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            />
           </div>
 
           {!isEdit && (
             <>
               <div>
-                <label style={label(D)}>Owner Email</label>
-                <input style={input(D)} type="email" value={f.email} placeholder="owner@company.com"
-                       onChange={e => set('email', e.target.value)} />
+                <label style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.muted,
+                  marginBottom: 5,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
+                  Owner Email
+                </label>
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    border: `1.5px solid ${colors.border}`,
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontFamily: "'Poppins', sans-serif",
+                    boxSizing: 'border-box',
+                    background: colors.bg,
+                    color: colors.text,
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  type="email"
+                  value={f.email}
+                  placeholder="owner@company.com"
+                  onChange={e => set('email', e.target.value)}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = BRAND;
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = colors.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
               </div>
               <div>
-                <label style={label(D)}>Owner Name</label>
-                <input style={input(D)} value={f.name} placeholder="Ali Khan"
-                       onChange={e => set('name', e.target.value)} />
+                <label style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.muted,
+                  marginBottom: 5,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
+                  Owner Name
+                </label>
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    border: `1.5px solid ${colors.border}`,
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontFamily: "'Poppins', sans-serif",
+                    boxSizing: 'border-box',
+                    background: colors.bg,
+                    color: colors.text,
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  value={f.name}
+                  placeholder="Ali Khan"
+                  onChange={e => set('name', e.target.value)}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = BRAND;
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = colors.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
               </div>
               <div>
-                <label style={label(D)}>Temporary Password</label>
-                <input style={input(D)} type="text" value={f.password}
-                       placeholder="min 8 chars, upper + lower + number + symbol"
-                       onChange={e => set('password', e.target.value)} />
-                <p style={{ fontSize: 12, color: D.subtle, margin: '4px 0 0' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.muted,
+                  marginBottom: 5,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
+                  Temporary Password
+                </label>
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    border: `1.5px solid ${colors.border}`,
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontFamily: "'Poppins', sans-serif",
+                    boxSizing: 'border-box',
+                    background: colors.bg,
+                    color: colors.text,
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  type="password"
+                  value={f.password}
+                  placeholder="min 8 chars, upper + lower + number + symbol"
+                  onChange={e => set('password', e.target.value)}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = BRAND;
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = colors.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+                <p style={{
+                  fontSize: 12,
+                  color: colors.subtle,
+                  margin: '4px 0 0',
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
                   Share this with the owner — they can change it after logging in.
                 </p>
               </div>
@@ -319,24 +913,100 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
           )}
 
           <div>
-            <label style={label(D)}>Subscription Plan</label>
-            <select style={input(D)} value={f.planTier}
-                    onChange={e => set('planTier', e.target.value as PlanTier)}>
+            <label style={{
+              display: 'block',
+              fontSize: 12,
+              fontWeight: 700,
+              color: colors.muted,
+              marginBottom: 5,
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Subscription Plan
+            </label>
+            <select
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                border: `1.5px solid ${colors.border}`,
+                borderRadius: 10,
+                fontSize: 14,
+                fontFamily: "'Poppins', sans-serif",
+                boxSizing: 'border-box',
+                background: colors.bg,
+                color: colors.text,
+                outline: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              value={f.planTier}
+              onChange={e => set('planTier', e.target.value as PlanTier)}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = BRAND;
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = colors.border;
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               {(Object.keys(PLAN_LABELS) as PlanTier[]).map(p => (
                 <option key={p} value={p}>{PLAN_LABELS[p]}</option>
               ))}
             </select>
             {isEdit && (
-              <p style={{ fontSize: 12, color: D.subtle, margin: '4px 0 0' }}>
+              <p style={{
+                fontSize: 12,
+                color: colors.subtle,
+                margin: '4px 0 0',
+                fontFamily: "'Poppins', sans-serif",
+              }}>
                 Currently using {edit!.restaurantCount} restaurant(s). Lowering the plan
                 does not delete anything, but blocks new ones past the limit.
               </p>
             )}
           </div>
 
-          <button onClick={save} disabled={saving || !canSave}
-                  style={{ ...btn(BRAND), justifyContent: 'center',
-                           opacity: saving || !canSave ? 0.6 : 1, marginTop: 4 }}>
+          <button
+            onClick={save}
+            disabled={saving || !canSave}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: 10,
+              background: BRAND,
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: saving || !canSave ? 'not-allowed' : 'pointer',
+              fontFamily: "'Poppins', sans-serif",
+              opacity: saving || !canSave ? 0.6 : 1,
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              marginTop: 4,
+            }}
+            onFocus={(e) => {
+              if (!saving && canSave) {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              }
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              if (!saving && canSave) {
+                e.currentTarget.style.background = '#e64a1a';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!saving && canSave) {
+                e.currentTarget.style.background = BRAND;
+              }
+            }}
+          >
             {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
             {isEdit ? 'Save Changes' : 'Create Tenant'}
           </button>
@@ -346,68 +1016,53 @@ function TenantModal({ edit, onClose, onSaved, showToast }: {
   );
 }
 
-// ── Bits ──────────────────────────────────────────────────────────────
+// ── Stat Component ──
 
-function Stat({ label, value, D }: { label: string; value: number; D: DShape }) {
+function Stat({ label, value, colors }: { label: string; value: number; colors: ReturnType<typeof getColors> }) {
   return (
     <div style={{
-      background: D.card, border: `1px solid ${D.border}`, borderRadius: 12,
-      padding: '12px 18px', minWidth: 110,
+      background: colors.card,
+      border: `1px solid ${colors.border}`,
+      borderRadius: 12,
+      padding: '12px 18px',
+      minWidth: 110,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1,
-                    textTransform: 'uppercase', color: D.subtle }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: D.text, fontFamily: "'Baloo 2', sans-serif" }}>{value}</div>
+      <div style={{
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
+      }}>{label}</div>
+      <div style={{
+        fontSize: 22,
+        fontWeight: 700,
+        color: colors.text,
+        fontFamily: "'Poppins', sans-serif",
+      }}>{value}</div>
     </div>
   );
 }
 
-const btn = (bg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-  border: 'none', borderRadius: 8, background: bg, color: '#fff',
-  fontWeight: 700, fontSize: 13, cursor: 'pointer',
-});
+// ── Plan Badge ──
 
-const btnGhost = (D: DShape): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-  border: `1px solid ${D.border}`, borderRadius: 8, background: D.card,
-  fontWeight: 600, fontSize: 13, cursor: 'pointer', color: D.text,
-});
-
-const iconBtn = (D: DShape): React.CSSProperties => ({
-  padding: 6, border: `1px solid ${D.border}`, borderRadius: 6,
-  background: D.card, cursor: 'pointer', display: 'inline-flex',
-});
-
-const cell = (D: DShape): React.CSSProperties => ({ padding: '11px 12px', fontSize: 14, color: D.text });
-
-const th = (D: DShape): React.CSSProperties => ({
-  padding: '10px 12px', fontSize: 11, fontWeight: 700, letterSpacing: 1,
-  textTransform: 'uppercase', color: D.subtle, textAlign: 'left',
-});
-
-const input = (D: DShape): React.CSSProperties => ({
-  width: '100%', padding: '9px 11px', border: `1px solid ${D.border}`,
-  borderRadius: 8, fontSize: 14, boxSizing: 'border-box', background: D.bg, color: D.text,
-});
-
-const label = (D: DShape): React.CSSProperties => ({
-  display: 'block', fontSize: 12, fontWeight: 700, color: D.muted, marginBottom: 5,
-});
-
-// Plan tiers use shading within the brand color rather than three unrelated
-// hues — there's no strict convention these need to differ in a specific
-// universally-understood way, unlike active/suspended status.
-function planBadge(plan: string): React.CSSProperties {
+function planBadge(plan: string, isDark: boolean): React.CSSProperties {
   const colors: Record<string, string> = {
-    starter:      '#9CA3AF',
+    starter: isDark ? '#9CA3AF' : '#6B7280',
     professional: '#ff5723',
-    enterprise:   '#c2410c',
+    enterprise: isDark ? '#fb923c' : '#d97706',
   };
   const c = colors[plan] ?? '#9CA3AF';
   return {
-    fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: 0.5, padding: '3px 8px', borderRadius: 6,
-    background: `${c}22`,
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    padding: '3px 10px',
+    borderRadius: 6,
+    background: isDark ? `${c}22` : `${c}15`,
     color: c,
+    fontFamily: "'Poppins', sans-serif",
   };
 }

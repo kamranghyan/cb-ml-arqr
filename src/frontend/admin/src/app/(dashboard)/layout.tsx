@@ -86,9 +86,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         height: '100vh',
         overflow: 'hidden',
         background: D.bg,
-        transition: 'background 0.25s'
+        transition: 'background 0.25s',
+        fontFamily: "'Poppins', sans-serif",
       }}>
-        {/* Desktop Header - Fixed at top */}
+        {/* ── Desktop Header ── */}
         <header className="desktop-header" style={{
           height: 64,
           background: '#ff5723',
@@ -117,7 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span style={{
                 fontWeight: 700,
                 color: '#fff',
-                fontFamily: "'Baloo 2', sans-serif",
+                fontFamily: "'Poppins', sans-serif",
                 fontSize: 16,
                 lineHeight: 1.1,
               }}>
@@ -130,6 +131,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 letterSpacing: 1,
                 textTransform: 'uppercase',
                 lineHeight: 1,
+                fontFamily: "'Poppins', sans-serif",
               }}>
                 Dashboard
               </span>
@@ -177,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {/* Mobile Header - Fixed at top */}
+        {/* ── Mobile Header ── */}
         <header className="mobile-header" style={{
           height: 56,
           background: '#ff5723',
@@ -191,34 +193,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           position: 'relative',
           zIndex: 50,
         }}>
-      
-
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {/* Menu button */}
-          <button
-            onClick={() => setOpen(!open)}
-            style={{
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              color: '#fff',
-              padding: 4,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 8,
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'none';
-            }}
-          >
-            {open ? <X size={24} /> : <MenuIcon size={24} />}
-          </button>
+            <button
+              onClick={() => setOpen(!open)}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                color: '#fff',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 8,
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'none';
+              }}
+            >
+              {open ? <X size={24} /> : <MenuIcon size={24} />}
+            </button>
             <img
               src='/Images/logo.png'
               alt="Menulay Logo"
@@ -233,7 +232,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span style={{
                 fontWeight: 700,
                 color: '#fff',
-                fontFamily: "'Baloo 2', sans-serif",
+                fontFamily: "'Poppins', sans-serif",
                 fontSize: 14,
                 lineHeight: 1.1,
               }}>
@@ -246,6 +245,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 letterSpacing: 1,
                 textTransform: 'uppercase',
                 lineHeight: 1,
+                fontFamily: "'Poppins', sans-serif",
               }}>
                 Dashboard
               </span>
@@ -285,7 +285,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </header>
 
-        {/* Main content area with sidebar and children */}
+        {/* ── Main content area ── */}
         <div style={{
           display: 'flex',
           flex: 1,
@@ -325,7 +325,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </aside>
           )}
 
-          {/* Desktop Sidebar - Fixed, doesn't scroll */}
+          {/* Desktop Sidebar */}
           <aside className="sidebar-desktop" style={{
             background: D.white,
             flexDirection: 'column',
@@ -339,16 +339,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Sidebar />
           </aside>
 
-          {/* Content - This scrolls independently */}
+          {/* Content */}
           <main style={{
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 0,
             background: D.bg,
-            // Hide scrollbar for Firefox
+            fontFamily: "'Poppins', sans-serif",
             scrollbarWidth: 'none',
-            // Hide scrollbar for IE/Edge
             msOverflowStyle: 'none',
           }}>
             {children}
@@ -405,20 +404,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }
           }
           
-          /* Hide scrollbar for Chrome, Safari and Opera */
           main::-webkit-scrollbar {
             display: none;
             width: 0;
             height: 0;
           }
           
-          /* Alternative for Chrome, Safari and Opera */
           main::-webkit-scrollbar {
             width: 0px;
             background: transparent;
           }
           
-          /* Mobile responsive adjustments */
           @media (max-width: 480px) {
             .mobile-header {
               height: 50px !important;

@@ -9,24 +9,44 @@ import {
   ORDER_TYPE_LABEL, ORDER_TYPE_COLOR,
   type SupportOrder, type OrderStatus, type OrderType,
 } from '@/lib/support-api';
-import { useTheme } from '@/hooks/useTheme';
+import { getTheme } from '@/lib/theme';
 
-// ── Color Schema (Matches other pages) ──────────────────────────────────
+// ── Brand Color ──
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const TONE = {
-  green: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#4ade80' },
-  orange: { bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', text: '#fb923c' },
-  danger: { bg: 'rgba(255,87,35,0.12)', border: 'rgba(255,87,35,0.3)', text: '#ff8a5c' },
-};
+
+// ── Theme-based colors (matching checkout page) ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+});
+
+// ── Accent colors based on theme ──
+const getAccents = (isDark: boolean) => ({
+  green: { 
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
+    text: isDark ? '#4ade80' : '#16a34a' 
+  },
+  orange: { 
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
+    text: isDark ? '#fb923c' : '#d97706' 
+  },
+  danger: { 
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
+    text: isDark ? '#ff8a5c' : BRAND 
+  },
+});
 
 // How far back to look. The orders API caps a query at 24 hours.
 const RANGES = [
@@ -38,8 +58,13 @@ const RANGES = [
 const FILTERS: (OrderStatus | 'all')[] =
   ['all', 'delivered', 'cancelled', 'ready', 'preparing', 'pending'];
 
+// Truncate text function
+const truncate = (text: string, maxLength: number = 30) => {
+  if (!text) return '';
+  return text.length > maxLength ? text.substring(0, maxLength) + '…' : text;
+};
+
 export default function AdminHistory() {
-  const { isDark } = useTheme();
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [hours, setHours] = useState(24);
   const [orders, setOrders] = useState<SupportOrder[]>([]);
@@ -48,22 +73,33 @@ export default function AdminHistory() {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<OrderType | 'all'>('all');
+  const [isDark, setIsDark] = useState(false);
 
-  // Theme-aware colors
-  const colors = isDark ? D : {
-    bg: '#FFFFFF',
-    card: '#ffffff',
-    card2: '#F9FAFB',
-    border: '#F0EBE6',
-    text: '#000000',
-    muted: '#6B6B6B',
-    subtle: '#9CA3AF',
-  };
-  const accent = isDark ? TONE : {
-    green: { bg: '#F0FFF4', border: '#BBF7D0', text: '#16a34a' },
-    orange: { bg: '#FFFBEB', border: '#FDE68A', text: '#d97706' },
-    danger: { bg: '#FFF0F0', border: '#FFD0D0', text: BRAND },
-  };
+  // ── Theme listener ──
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  const colors = getColors(isDark);
+  const accents = getAccents(isDark);
 
   const load = useCallback(async () => {
     if (!scope.tenantId || !scope.restaurantId) {
@@ -120,10 +156,15 @@ export default function AdminHistory() {
       maxWidth: 1150,
       margin: '0 auto',
       minHeight: '100vh',
+      fontFamily: "'Poppins', sans-serif",
     }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -144,6 +185,7 @@ export default function AdminHistory() {
               fontWeight: 800,
               color: colors.text,
               margin: '0 0 2px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Order History
             </h1>
@@ -151,6 +193,7 @@ export default function AdminHistory() {
               color: colors.muted,
               fontSize: 13,
               margin: 0,
+              fontFamily: "'Poppins', sans-serif",
             }}>
               Past orders for a branch — useful when a customer asks what happened.
             </p>
@@ -162,24 +205,45 @@ export default function AdminHistory() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 16px',
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
+              border: `1.5px solid ${colors.border}`,
+              borderRadius: 10,
               background: colors.card2,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
               color: colors.text,
               whiteSpace: 'nowrap',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.hoverBg;
+              e.currentTarget.style.borderColor = BRAND;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = colors.card2;
+              e.currentTarget.style.borderColor = colors.border;
             }}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
             Refresh
           </button>
         </div>
       </div>
 
+      {/* ── Scope Picker ── */}
       <ScopePicker value={scope} onChange={setScope} />
 
+      {/* ── Empty State (No Restaurant Selected) ── */}
       {!scope.restaurantId && (
         <Empty
           icon={<Receipt size={28} />}
@@ -191,7 +255,7 @@ export default function AdminHistory() {
 
       {scope.restaurantId && (
         <>
-          {/* Filters Row */}
+          {/* ── Filters Row ── */}
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -209,13 +273,25 @@ export default function AdminHistory() {
                 value={hours}
                 onChange={e => setHours(Number(e.target.value))}
                 style={{
-                  padding: '7px 10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 8,
+                  padding: '7px 12px',
+                  border: `1.5px solid ${colors.border}`,
+                  borderRadius: 10,
                   fontSize: 13,
+                  fontFamily: "'Poppins', sans-serif",
+                  fontWeight: 500,
                   background: colors.card2,
                   color: colors.text,
                   cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                  e.currentTarget.style.borderColor = BRAND;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = colors.border;
                 }}
               >
                 {RANGES.map(r => <option key={r.hours} value={r.hours}>{r.label}</option>)}
@@ -228,14 +304,33 @@ export default function AdminHistory() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 4,
-                    padding: '6px 12px',
+                    padding: '6px 14px',
                     borderRadius: 20,
-                    border: `1px solid ${colors.border}`,
+                    border: `1.5px solid ${colors.border}`,
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
                     background: colors.card2,
                     color: colors.muted,
+                    fontFamily: "'Poppins', sans-serif",
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = colors.border;
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = colors.hoverBg;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = colors.card2;
+                    e.currentTarget.style.borderColor = colors.border;
                   }}
                 >
                   <X size={14} /> Clear filters
@@ -249,25 +344,48 @@ export default function AdminHistory() {
               flexWrap: 'wrap',
               gap: 6,
             }}>
-              {FILTERS.map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 20,
-                    border: `1px solid ${filter === f ? BRAND : colors.border}`,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: filter === f ? BRAND : colors.card2,
-                    color: filter === f ? '#fff' : colors.muted,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {f === 'all' ? 'All' : STATUS_LABEL[f]}
-                </button>
-              ))}
+              {FILTERS.map(f => {
+                const active = filter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 20,
+                      border: `1.5px solid ${active ? BRAND : colors.border}`,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: active ? BRAND : colors.card2,
+                      color: active ? '#fff' : colors.muted,
+                      transition: 'all 0.2s ease',
+                      fontFamily: "'Poppins', sans-serif",
+                      outline: 'none',
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = colors.hoverBg;
+                        e.currentTarget.style.color = colors.text;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = colors.card2;
+                        e.currentTarget.style.color = colors.muted;
+                      }
+                    }}
+                  >
+                    {f === 'all' ? 'All' : STATUS_LABEL[f]}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Type Filters & Search */}
@@ -282,25 +400,48 @@ export default function AdminHistory() {
                 flexWrap: 'wrap',
                 gap: 6,
               }}>
-                {(['all', 'dine_in', 'pickup', 'delivery'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTypeFilter(t)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 20,
-                      border: `1px solid ${typeFilter === t ? colors.text : colors.border}`,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      background: typeFilter === t ? colors.text : colors.card2,
-                      color: typeFilter === t ? '#fff' : colors.muted,
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    {t === 'all' ? 'Any type' : ORDER_TYPE_LABEL[t]}
-                  </button>
-                ))}
+                {(['all', 'dine_in', 'pickup', 'delivery'] as const).map(t => {
+                  const active = typeFilter === t;
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTypeFilter(t)}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 20,
+                        border: `1.5px solid ${active ? colors.text : colors.border}`,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: active ? colors.text : colors.card2,
+                        color: active ? '#fff' : colors.muted,
+                        transition: 'all 0.2s ease',
+                        fontFamily: "'Poppins', sans-serif",
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = colors.hoverBg;
+                          e.currentTarget.style.color = colors.text;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = colors.card2;
+                          e.currentTarget.style.color = colors.muted;
+                        }
+                      }}
+                    >
+                      {t === 'all' ? 'Any type' : ORDER_TYPE_LABEL[t]}
+                    </button>
+                  );
+                })}
               </div>
 
               <div style={{
@@ -322,19 +463,30 @@ export default function AdminHistory() {
                   style={{
                     width: '100%',
                     padding: '8px 11px 8px 30px',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 8,
+                    border: `1.5px solid ${colors.border}`,
+                    borderRadius: 10,
                     fontSize: 13,
+                    fontFamily: "'Poppins', sans-serif",
                     boxSizing: 'border-box',
                     background: colors.card2,
                     color: colors.text,
+                    outline: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                    e.currentTarget.style.borderColor = BRAND;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = colors.border;
                   }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Loading State */}
+          {/* ── Loading State ── */}
           {loading && (
             <div style={{
               display: 'flex',
@@ -345,11 +497,17 @@ export default function AdminHistory() {
               color: colors.muted,
             }}>
               <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-              <p style={{ marginTop: 12, fontSize: 14 }}>Loading orders…</p>
+              <p style={{ 
+                marginTop: 12, 
+                fontSize: 14, 
+                fontFamily: "'Poppins', sans-serif" 
+              }}>
+                Loading orders…
+              </p>
             </div>
           )}
 
-          {/* Error State */}
+          {/* ── Error State ── */}
           {!loading && error && (
             <div style={{
               display: 'flex',
@@ -357,14 +515,14 @@ export default function AdminHistory() {
               justifyContent: 'center',
               gap: 8,
               padding: '40px 20px',
-              color: accent.danger.text,
+              color: accents.danger.text,
             }}>
               <AlertCircle size={20} />
-              <span>{error}</span>
+              <span style={{ fontFamily: "'Poppins', sans-serif" }}>{error}</span>
             </div>
           )}
 
-          {/* Content */}
+          {/* ── Content ── */}
           {!loading && !error && (
             <>
               {/* Stats */}
@@ -382,7 +540,7 @@ export default function AdminHistory() {
                 <Stat
                   label="Revenue"
                   value={money(revenue, scope.currency)}
-                  accent={accent.green.text}
+                  accent={accents.green.text}
                   colors={colors}
                 />
                 <Stat
@@ -392,7 +550,7 @@ export default function AdminHistory() {
                 />
               </div>
 
-              {/* Empty State */}
+              {/* ── Empty State ── */}
               {shown.length === 0 ? (
                 <Empty
                   icon={<Receipt size={28} />}
@@ -403,14 +561,13 @@ export default function AdminHistory() {
                   colors={colors}
                 />
               ) : (
-                /* Orders Table */
+                /* ── Orders Table ── */
                 <div style={{
                   border: `1px solid ${colors.border}`,
                   borderRadius: 12,
                   overflow: 'hidden',
                   background: colors.card,
                 }}>
-                  {/* Table wrapper with horizontal scroll for mobile */}
                   <div style={{
                     overflowX: 'auto',
                     WebkitOverflowScrolling: 'touch',
@@ -431,6 +588,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Placed</th>
                           <th style={{
                             padding: '10px 12px',
@@ -441,6 +599,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Type</th>
                           <th style={{
                             padding: '10px 12px',
@@ -451,6 +610,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Going to</th>
                           <th style={{
                             padding: '10px 12px',
@@ -461,6 +621,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Items</th>
                           <th style={{
                             padding: '10px 12px',
@@ -471,6 +632,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Total</th>
                           <th style={{
                             padding: '10px 12px',
@@ -481,6 +643,7 @@ export default function AdminHistory() {
                             color: colors.subtle,
                             textAlign: 'left',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}>Status</th>
                         </tr>
                       </thead>
@@ -492,19 +655,24 @@ export default function AdminHistory() {
                             <tr key={o.orderId} style={{
                               borderTop: `1px solid ${colors.border}`,
                             }}>
+                              {/* ── Placed ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 color: colors.text,
                                 whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
                                 {o.placedAt ? new Date(o.placedAt).toLocaleString() : '—'}
                               </td>
+
+                              {/* ── Type ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 color: colors.text,
                                 whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
                                 <span style={{
                                   fontSize: 11,
@@ -513,53 +681,77 @@ export default function AdminHistory() {
                                   letterSpacing: 0.4,
                                   padding: '3px 8px',
                                   borderRadius: 6,
-                                  background: `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15`,
+                                  background: isDark ? `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15` : `${ORDER_TYPE_COLOR[orderTypeOf(o)]}10`,
                                   color: ORDER_TYPE_COLOR[orderTypeOf(o)],
                                   whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
                                 }}>
                                   {ORDER_TYPE_LABEL[orderTypeOf(o)]}
                                 </span>
                               </td>
+
+                              {/* ── Going to ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 color: colors.muted,
                                 whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
+                                maxWidth: '120px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
                               }}>
-                                {destinationOf(o)}
+                                {truncate(destinationOf(o), 15)}
                               </td>
+
+                              {/* ── Items ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 color: colors.muted,
-                                maxWidth: 200,
+                                maxWidth: '180px',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
-                                <div style={{ whiteSpace: 'normal' }}>
+                                <div style={{ 
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}>
                                   {count} item{count === 1 ? '' : 's'}
                                   <span style={{
                                     color: colors.subtle,
                                     fontSize: 12,
                                     display: 'block',
+                                    fontFamily: "'Poppins', sans-serif",
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
                                   }}>
-                                    {(o.lineItems ?? []).slice(0, 2).map(li => li.name).join(', ')}
+                                    {truncate((o.lineItems ?? []).slice(0, 2).map(li => li.name).join(', '), 25)}
                                     {(o.lineItems ?? []).length > 2 ? '…' : ''}
                                   </span>
                                 </div>
                               </td>
+
+                              {/* ── Total ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 fontWeight: 700,
                                 color: colors.text,
                                 whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
                                 {money(o.totalAmountMinorUnits, scope.currency)}
                               </td>
+
+                              {/* ── Status ── */}
                               <td style={{
                                 padding: '11px 12px',
                                 fontSize: 14,
                                 color: colors.text,
                                 whiteSpace: 'nowrap',
+                                fontFamily: "'Poppins', sans-serif",
                               }}>
                                 <span style={{
                                   fontSize: 11,
@@ -568,9 +760,10 @@ export default function AdminHistory() {
                                   letterSpacing: 0.5,
                                   padding: '3px 8px',
                                   borderRadius: 6,
-                                  background: `${STATUS_COLOR[s]}15`,
+                                  background: isDark ? `${STATUS_COLOR[s]}15` : `${STATUS_COLOR[s]}10`,
                                   color: STATUS_COLOR[s],
                                   whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
                                 }}>
                                   {STATUS_LABEL[s]}
                                 </span>
@@ -602,7 +795,7 @@ function Stat({
   label: string;
   value: string;
   accent?: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -617,6 +810,7 @@ function Stat({
         letterSpacing: 1,
         textTransform: 'uppercase',
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {label}
       </div>
@@ -624,6 +818,7 @@ function Stat({
         fontSize: 'clamp(18px, 2.5vw, 20px)',
         fontWeight: 800,
         color: accent ?? colors.text,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {value}
       </div>
@@ -640,7 +835,7 @@ function Empty({
   icon: React.ReactNode;
   title: string;
   text: string;
-  colors: any;
+  colors: ReturnType<typeof getColors>;
 }) {
   return (
     <div style={{
@@ -656,6 +851,7 @@ function Empty({
         margin: 0,
         fontWeight: 600,
         color: colors.muted,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {title}
       </p>
@@ -663,6 +859,7 @@ function Empty({
         margin: '4px 0 0',
         fontSize: 13,
         color: colors.subtle,
+        fontFamily: "'Poppins', sans-serif",
       }}>
         {text}
       </p>

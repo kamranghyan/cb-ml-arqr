@@ -4,21 +4,19 @@
  */
 
 export const RESTAURANT_ID =
-  process.env.NEXT_PUBLIC_RESTAURANT_ID ?? '53591ab9-ac4e-4841-958b-d38853a90f0b'
+  process.env.NEXT_PUBLIC_RESTAURANT_ID
 
 export const ADMIN_RESTAURANT_ID =
-  process.env.NEXT_PUBLIC_ADMIN_RESTAURANT_ID ?? '2687382e-3b00-4f57-9014-f484df89e3fe'
+  process.env.NEXT_PUBLIC_ADMIN_RESTAURANT_ID
 
 export const TENANT_ID =
-  process.env.NEXT_PUBLIC_TENANT_ID ?? 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+  process.env.NEXT_PUBLIC_TENANT_ID
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_API_BASE
 
 export const AR_BASE =
-  process.env.NEXT_PUBLIC_AR_API_BASE ??
-  'https://xn1byphl3m.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_AR_API_BASE
 
 if (typeof window !== 'undefined') {
   if (!RESTAURANT_ID) console.warn('[API] NEXT_PUBLIC_RESTAURANT_ID is not set')
@@ -65,8 +63,7 @@ export async function apiFetch<T>(
 export const TENANT_ID_KDS     = process.env.NEXT_PUBLIC_TENANT_ID_KDS     ?? 't123'
 export const RESTAURANT_ID_KDS = process.env.NEXT_PUBLIC_RESTAURANT_ID_KDS ?? 'r456'
 export const ORDERS_API_BASE   =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE ??
-  'https://s4qafzisc6.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_ORDERS_API_BASE
 
 export const ORDERS_API = {
   list:   () => `/api/orders`,

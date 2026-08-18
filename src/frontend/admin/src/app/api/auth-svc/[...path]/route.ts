@@ -7,8 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const AUTH_API =
-  process.env.NEXT_PUBLIC_AUTH_API_BASE ??
-  'https://REPLACE-ME.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_AUTH_API_BASE
 
 async function forward(req: NextRequest, path: string[]) {
   const upstream = `${AUTH_API}/${path.join('/')}${req.nextUrl.search}`

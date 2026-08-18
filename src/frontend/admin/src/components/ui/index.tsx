@@ -2,35 +2,64 @@
 
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
-import { useTheme } from '@/hooks/useTheme';
+import { useState, useEffect } from 'react';
+import { getTheme } from '@/lib/theme';
 
 // ─── Theme Colors ──────────────────────────────────────────────────────────
 
 const BRAND = '#ff5723';
-const D = {
-  bg: '#111111',
-  card: '#1C1C1C',
-  card2: '#242424',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#F5F0E8',
-  muted: '#9CA3AF',
-  subtle: '#6B7280',
-};
-const L = {
-  bg: '#FFFFFF',
-  card: '#ffffff',
-  card2: '#F9FAFB',
-  border: '#F0EBE6',
-  text: '#000000',
-  muted: '#6B6B6B',
-  subtle: '#9CA3AF',
-};
+
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#111111' : '#FFFFFF',
+  card: isDark ? '#1C1C1C' : '#FFFFFF',
+  card2: isDark ? '#242424' : '#F5F5F5',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#6B6B6B',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+  green: isDark ? '#4ade80' : '#16a34a',
+  greenBg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
+  greenBorder: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
+  orange: isDark ? '#fb923c' : '#d97706',
+  orangeBg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
+  orangeBorder: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A',
+  danger: isDark ? '#ff8a5c' : BRAND,
+  dangerBg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+  dangerBorder: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0',
+});
 
 // ─── Hook to get theme colors ────────────────────────────────────────────
 
 function useThemeColors() {
-  const { isDark } = useTheme();
-  return isDark ? D : L;
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const theme = getTheme();
+      setIsDark(theme === 'dark');
+    };
+    
+    updateTheme();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin_theme') updateTheme();
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    const handleThemeToggle = () => updateTheme();
+    window.addEventListener('themeChange', handleThemeToggle);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('themeChange', handleThemeToggle);
+    };
+  }, []);
+
+  return getColors(isDark);
 }
 
 // ─── Button ──────────────────────────────────────────────────────────────────
@@ -51,7 +80,6 @@ export function Button({
   ...props
 }: ButtonProps) {
   const colors = useThemeColors();
-  const isDark = useTheme().isDark;
 
   const base = {
     display: 'inline-flex',
@@ -59,51 +87,56 @@ export function Button({
     justifyContent: 'center',
     gap: 8,
     fontWeight: 600,
-    borderRadius: 12,
+    borderRadius: 10,
     transition: 'all 0.2s ease',
     cursor: 'pointer',
     border: 'none',
     outline: 'none',
     position: 'relative' as const,
+    fontFamily: "'Poppins', sans-serif",
   };
 
   const variants = {
     primary: {
       background: BRAND,
       color: '#fff',
-      ':hover': { background: '#e04a1a', transform: 'translateY(-1px)' },
+      ':hover': { background: '#e64a1a', transform: 'translateY(-1px)' },
       ':active': { transform: 'scale(0.97)' },
     },
     ghost: {
       background: 'transparent',
-      color: isDark ? D.muted : L.muted,
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6'}`,
+      color: colors.muted,
+      border: `1.5px solid ${colors.border}`,
       ':hover': {
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+        background: colors.hoverBg,
+        borderColor: BRAND,
       },
     },
     surface: {
-      background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-      color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#F0EBE6'}`,
+      background: colors.card2,
+      color: colors.muted,
+      border: `1.5px solid ${colors.border}`,
       ':hover': {
-        background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
+        background: colors.hoverBg,
+        borderColor: BRAND,
       },
     },
     danger: {
-      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
-      color: isDark ? '#ff8a5c' : BRAND,
-      border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+      background: colors.dangerBg,
+      color: colors.danger,
+      border: `1.5px solid ${colors.dangerBorder}`,
       ':hover': {
-        background: isDark ? 'rgba(255,87,35,0.18)' : '#FFE8E8',
+        background: colors.dangerBg,
+        opacity: 0.8,
       },
     },
     success: {
-      background: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      color: isDark ? '#4ade80' : '#16a34a',
-      border: `1px solid ${isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0'}`,
+      background: colors.greenBg,
+      color: colors.green,
+      border: `1.5px solid ${colors.greenBorder}`,
       ':hover': {
-        background: isDark ? 'rgba(34,197,94,0.18)' : '#E6F9ED',
+        background: colors.greenBg,
+        opacity: 0.8,
       },
     },
   };
@@ -155,29 +188,28 @@ interface BadgeProps {
 }
 
 export function Badge({ children, className, variant = 'default' }: BadgeProps) {
-  const { isDark } = useTheme();
   const colors = useThemeColors();
 
   const variants = {
     default: {
-      background: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6',
+      background: colors.card2,
       color: colors.muted,
     },
     primary: {
-      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+      background: colors.brandBg,
       color: BRAND,
     },
     success: {
-      background: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      color: isDark ? '#4ade80' : '#16a34a',
+      background: colors.greenBg,
+      color: colors.green,
     },
     danger: {
-      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
-      color: isDark ? '#ff8a5c' : BRAND,
+      background: colors.dangerBg,
+      color: colors.danger,
     },
     warning: {
-      background: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
-      color: isDark ? '#fb923c' : '#d97706',
+      background: colors.orangeBg,
+      color: colors.orange,
     },
   };
 
@@ -192,6 +224,7 @@ export function Badge({ children, className, variant = 'default' }: BadgeProps) 
         borderRadius: 9999,
         fontSize: 10,
         fontWeight: 600,
+        fontFamily: "'Poppins', sans-serif",
         ...variants[variant],
       }}
     >
@@ -211,6 +244,7 @@ interface CardProps {
 
 export function Card({ children, className, onClick, hoverable = false }: CardProps) {
   const colors = useThemeColors();
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div
@@ -218,19 +252,19 @@ export function Card({ children, className, onClick, hoverable = false }: CardPr
       className={cn(className)}
       style={{
         background: colors.card,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 16,
+        border: `1px solid ${isHovered && hoverable ? BRAND : colors.border}`,
+        borderRadius: 14,
         padding: 'clamp(16px, 2vw, 20px)',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.2s ease',
+        fontFamily: "'Poppins', sans-serif",
         ...(hoverable && {
-          ':hover': {
-            borderColor: BRAND,
-            transform: 'translateY(-2px)',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-          },
+          transform: isHovered ? 'translateY(-2px)' : 'translateY(0)',
+          boxShadow: isHovered ? '0 4px 24px rgba(0,0,0,0.08)' : 'none',
         }),
       }}
+      onMouseEnter={() => hoverable && setIsHovered(true)}
+      onMouseLeave={() => hoverable && setIsHovered(false)}
     >
       {children}
     </div>
@@ -256,6 +290,7 @@ export function Toggle({ checked, onChange, label }: ToggleProps) {
         gap: 12,
         cursor: 'pointer',
         userSelect: 'none',
+        fontFamily: "'Poppins', sans-serif",
       }}
     >
       {label && (
@@ -263,6 +298,7 @@ export function Toggle({ checked, onChange, label }: ToggleProps) {
           style={{
             fontSize: 13,
             color: colors.muted,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {label}
@@ -282,6 +318,12 @@ export function Toggle({ checked, onChange, label }: ToggleProps) {
           border: 'none',
           cursor: 'pointer',
           outline: 'none',
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.boxShadow = 'none';
         }}
       >
         <span
@@ -319,44 +361,44 @@ const STATUS_LABELS: Record<StatusChipProps['status'], string> = {
 };
 
 export function StatusChip({ status }: StatusChipProps) {
-  const { isDark } = useTheme();
+  const colors = useThemeColors();
 
   const statusColors: Record<StatusChipProps['status'], { bg: string; color: string }> = {
     active: {
-      bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      color: isDark ? '#4ade80' : '#16a34a',
+      bg: colors.greenBg,
+      color: colors.green,
     },
     inactive: {
-      bg: isDark ? 'rgba(156,163,175,0.12)' : '#F3F4F6',
-      color: isDark ? '#9CA3AF' : '#6B7280',
+      bg: colors.card2,
+      color: colors.muted,
     },
     draft: {
-      bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
-      color: isDark ? '#fb923c' : '#d97706',
+      bg: colors.orangeBg,
+      color: colors.orange,
     },
     new: {
-      bg: isDark ? 'rgba(96,165,250,0.12)' : '#EFF6FF',
-      color: isDark ? '#60a5fa' : '#2563eb',
+      bg: colors.brandBg,
+      color: BRAND,
     },
     preparing: {
-      bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
-      color: isDark ? '#fb923c' : '#d97706',
+      bg: colors.orangeBg,
+      color: colors.orange,
     },
     ready: {
-      bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      color: isDark ? '#4ade80' : '#16a34a',
+      bg: colors.greenBg,
+      color: colors.green,
     },
     delivered: {
-      bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      color: isDark ? '#4ade80' : '#16a34a',
+      bg: colors.greenBg,
+      color: colors.green,
     },
     cancelled: {
-      bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
-      color: isDark ? '#ff8a5c' : BRAND,
+      bg: colors.dangerBg,
+      color: colors.danger,
     },
   };
 
-  const colors = statusColors[status];
+  const statusStyle = statusColors[status];
 
   return (
     <span
@@ -368,7 +410,8 @@ export function StatusChip({ status }: StatusChipProps) {
         fontWeight: 600,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
-        ...colors,
+        fontFamily: "'Poppins', sans-serif",
+        ...statusStyle,
       }}
     >
       {STATUS_LABELS[status]}
@@ -388,8 +431,9 @@ export function SectionLabel({ children }: { children: ReactNode }) {
         color: colors.subtle,
         textTransform: 'uppercase',
         letterSpacing: 1,
-        fontWeight: 500,
+        fontWeight: 600,
         margin: 0,
+        fontFamily: "'Poppins', sans-serif",
       }}
     >
       {children}
@@ -400,10 +444,12 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 // ─── LiveDot ─────────────────────────────────────────────────────────────────
 
 export function LiveDot({ color = 'green' }: { color?: 'green' | 'amber' | 'red' }) {
-  const colors = {
-    green: '#4ade80',
-    amber: '#fb923c',
-    red: '#ff8a5c',
+  const colors = useThemeColors();
+  
+  const dotColors = {
+    green: colors.green,
+    amber: colors.orange,
+    red: colors.danger,
   };
 
   return (
@@ -413,7 +459,7 @@ export function LiveDot({ color = 'green' }: { color?: 'green' | 'amber' | 'red'
         width: 7,
         height: 7,
         borderRadius: '50%',
-        background: colors[color],
+        background: dotColors[color],
         animation: 'blink 1.5s ease-in-out infinite',
       }}
     />
@@ -455,6 +501,7 @@ export function Input({ label, error, className, ...props }: InputProps) {
             fontSize: 13,
             fontWeight: 600,
             color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {label}
@@ -464,15 +511,24 @@ export function Input({ label, error, className, ...props }: InputProps) {
         className={cn(className)}
         style={{
           padding: '8px 12px',
-          borderRadius: 8,
-          border: `1px solid ${error ? BRAND : colors.border}`,
+          borderRadius: 10,
+          border: `1.5px solid ${error ? BRAND : colors.border}`,
           background: colors.card2,
           color: colors.text,
           fontSize: 13,
+          fontFamily: "'Poppins', sans-serif",
           outline: 'none',
-          transition: 'border-color 0.2s ease',
+          transition: 'all 0.2s ease',
           width: '100%',
           boxSizing: 'border-box',
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = BRAND;
+          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = error ? BRAND : colors.border;
+          e.currentTarget.style.boxShadow = 'none';
         }}
         {...props}
       />
@@ -481,6 +537,7 @@ export function Input({ label, error, className, ...props }: InputProps) {
           style={{
             fontSize: 12,
             color: BRAND,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {error}
@@ -509,6 +566,7 @@ export function Select({ label, options, error, className, ...props }: SelectPro
             fontSize: 13,
             fontWeight: 600,
             color: colors.text,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {label}
@@ -518,16 +576,25 @@ export function Select({ label, options, error, className, ...props }: SelectPro
         className={cn(className)}
         style={{
           padding: '8px 12px',
-          borderRadius: 8,
-          border: `1px solid ${error ? BRAND : colors.border}`,
+          borderRadius: 10,
+          border: `1.5px solid ${error ? BRAND : colors.border}`,
           background: colors.card2,
           color: colors.text,
           fontSize: 13,
+          fontFamily: "'Poppins', sans-serif",
           outline: 'none',
-          transition: 'border-color 0.2s ease',
+          transition: 'all 0.2s ease',
           width: '100%',
           boxSizing: 'border-box',
           cursor: 'pointer',
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = BRAND;
+          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = error ? BRAND : colors.border;
+          e.currentTarget.style.boxShadow = 'none';
         }}
         {...props}
       >
@@ -542,6 +609,7 @@ export function Select({ label, options, error, className, ...props }: SelectPro
           style={{
             fontSize: 12,
             color: BRAND,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {error}
@@ -578,28 +646,28 @@ interface AlertProps {
 }
 
 export function Alert({ type = 'info', title, message }: AlertProps) {
-  const { isDark } = useTheme();
+  const colors = useThemeColors();
 
   const types = {
     info: {
-      bg: isDark ? 'rgba(96,165,250,0.12)' : '#EFF6FF',
-      border: isDark ? 'rgba(96,165,250,0.3)' : '#BFDBFE',
-      color: isDark ? '#60a5fa' : '#2563eb',
+      bg: colors.brandBg,
+      border: colors.border,
+      color: BRAND,
     },
     success: {
-      bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
-      border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
-      color: isDark ? '#4ade80' : '#16a34a',
+      bg: colors.greenBg,
+      border: colors.greenBorder,
+      color: colors.green,
     },
     warning: {
-      bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
-      border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A',
-      color: isDark ? '#fb923c' : '#d97706',
+      bg: colors.orangeBg,
+      border: colors.orangeBorder,
+      color: colors.orange,
     },
     error: {
-      bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
-      border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0',
-      color: isDark ? '#ff8a5c' : BRAND,
+      bg: colors.dangerBg,
+      border: colors.dangerBorder,
+      color: colors.danger,
     },
   };
 
@@ -615,6 +683,7 @@ export function Alert({ type = 'info', title, message }: AlertProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
+        fontFamily: "'Poppins', sans-serif",
       }}
     >
       {title && (
@@ -623,6 +692,7 @@ export function Alert({ type = 'info', title, message }: AlertProps) {
             fontSize: 14,
             fontWeight: 700,
             color: style.color,
+            fontFamily: "'Poppins', sans-serif",
           }}
         >
           {title}
@@ -631,7 +701,8 @@ export function Alert({ type = 'info', title, message }: AlertProps) {
       <div
         style={{
           fontSize: 13,
-          color: isDark ? D.muted : L.muted,
+          color: colors.muted,
+          fontFamily: "'Poppins', sans-serif",
         }}
       >
         {message}
@@ -642,7 +713,6 @@ export function Alert({ type = 'info', title, message }: AlertProps) {
 
 // ─── CSS Animations ─────────────────────────────────────────────────────────
 
-// Add these to your global CSS or as a style tag in your root layout
 export const animations = `
   @keyframes spin {
     to { transform: rotate(360deg); }
