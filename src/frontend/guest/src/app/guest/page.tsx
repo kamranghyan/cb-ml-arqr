@@ -28,7 +28,7 @@ const PLACEHOLDER_CUISINE_TAGS = ['Sandwiches', 'Chinese', 'Thai Seafood', 'Beve
 const PLACEHOLDER_HOURS = '10:00AM – 11:00PM';
 const PLACEHOLDER_RATING = '4.8/5 (100+)';
 const PLACEHOLDER_DELIVERY = 'Free Delivery';
-
+//
 // ✅ Static fallback values
 const STATIC_RESTAURANT_NAME = 'Cheezious';
 const STATIC_TAGLINE = '';
