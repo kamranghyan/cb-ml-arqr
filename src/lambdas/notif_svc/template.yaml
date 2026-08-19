@@ -12,18 +12,18 @@ Parameters:
 
   SnsTopicArn:
     Type: String
-    Default: "arn:aws:sns:ap-south-1:833090513377:orders-notifications-dev"
+    Default: "arn:aws:sns:ap-south-1:990016797093:orders-notifications-dev"
 
   WsEndpoint:
     Type: String
-    Default: "https://opoa6rn0zf.execute-api.ap-south-1.amazonaws.com/dev"
+    Default: "https://x0ev8z7gwg.execute-api.ap-south-1.amazonaws.com/dev"
     Description: >-
       Full WebSocket management endpoint. REPLACE the API ID with the
       ap-south-1 WebSocket API ID (the old opoa6rn0zf ID belongs to the previous region).
 
   WsApiId:
     Type: String
-    Default: "opoa6rn0zf"
+    Default: "x0ev8z7gwg"
     Description: >-
       WebSocket API Gateway ID, used to scope the execute-api IAM policy.
       Must match the API ID inside WsEndpoint, and must be the ap-south-1 API ID.

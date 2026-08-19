@@ -15,7 +15,7 @@ Globals:
 Parameters:
   BucketAR:
     Type: String
-    Default: menu-assets-dev-833090513377
+    Default: cb-ml-arqr-menu-assets-dev-990016797093
     Description: Name of the existing S3 bucket that holds AR assets
 
   SNSAdminArn:

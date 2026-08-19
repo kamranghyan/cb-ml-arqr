@@ -19,7 +19,16 @@ confirm_changeset = true
 resolve_s3 = true
 s3_prefix = "notifications-lambda-dev"
 disable_rollback = false
-parameter_overrides = "Stage=\"dev\" SnsTopicArn=\"arn:aws:sns:ap-south-1:833090513377:orders-notifications-dev\" WsEndpoint=\"https://opoa6rn0zf.execute-api.ap-south-1.amazonaws.com/dev\" WsApiId=\"opoa6rn0zf\" WsConnectionsTableName=\"ConnectionTable-dev\" OrderTableName=\"OrderTable-dev\" PinpointAppId=\"\" PinpointFromNumber=\"\""
+parameter_overrides = [
+  "Stage=dev",
+  "SnsTopicArn=arn:aws:sns:ap-south-1:990016797093:orders-notifications-dev",
+  "WsEndpoint=https://x0ev8z7gwg.execute-api.ap-south-1.amazonaws.com/dev",
+  "WsApiId=x0ev8z7gwg",
+  "WsConnectionsTableName=ConnectionTable-dev",
+  "OrderTableName=OrderTable-dev",
+  "PinpointAppId=\"\"",
+  "PinpointFromNumber=\"\""
+]
 image_repositories = []
 stack_name = "notifications-lambda-dev"
 
