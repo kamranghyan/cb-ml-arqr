@@ -19,6 +19,7 @@ import {
   type ApiMenuItem,
   type ApiAddon,
   deleteMenuItem,
+  createAddon,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
@@ -35,10 +36,10 @@ const getColors = (isDark: boolean) => ({
   card2: isDark ? '#242424' : '#F9FAFB',
   border: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
   text: isDark ? '#F5F0E8' : '#1A1A1A',
-  bell:isDark?"white":"white",
+  bell: isDark ? "white" : "white",
   muted: isDark ? '#9CA3AF' : '#6B6B6B',
   subtle: isDark ? '#6B7280' : '#9CA3AF',
-  inputBg: isDark ? '#1C1C1C' : '#FFFFFF', // ✅ Fixed: added inputBg
+  inputBg: isDark ? '#1C1C1C' : '#FFFFFF',
   inputBorder: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
   inputText: isDark ? '#F5F0E8' : '#1A1A1A',
   brand: BRAND,
@@ -70,6 +71,7 @@ type ModalState = { open: boolean; item?: ApiMenuItem };
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
 type GlbStatus = 'idle' | 'uploading' | 'approved' | 'error';
 
+// ✅ Updated createMenuItemWithFiles with slides support
 async function createMenuItemWithFiles(
   restaurantId: string,
   payload: {
@@ -81,10 +83,12 @@ async function createMenuItemWithFiles(
     allergens?: string[];
     prepTime?: string;
     calories?: number;
+    sizes?: { name: string; price: number }[];
+    slides?: { position: number; imageKey?: string }[];
   },
   imageFile?: File | null,
   glbFile?: File | null,
-  imageFiles: File[] = [],
+  imageFiles: File[] = [], // ✅ Multiple images for slides
 ): Promise<any> {
   const fd = new FormData();
 
@@ -110,6 +114,25 @@ async function createMenuItemWithFiles(
     fd.append('calories', String(payload.calories));
   }
 
+  // ✅ Sizes as JSON string
+  if (payload.sizes?.length) {
+    const sizesPayload = payload.sizes.map(size => ({
+      name: size.name,
+      priceMinorUnits: Math.round(size.price * 100),
+    }));
+    fd.append('sizes', JSON.stringify(sizesPayload));
+  }
+
+  // ✅ Slides as JSON string (positions will be set by backend)
+  if (payload.slides?.length) {
+    const slidesPayload = payload.slides.map((slide, index) => ({
+      position: slide.position || index + 1,
+      imageKey: slide.imageKey || '',
+    }));
+    fd.append('slides', JSON.stringify(slidesPayload));
+    console.log('📤 Slides payload:', JSON.stringify(slidesPayload));
+  }
+
   // Main image
   if (imageFile) {
     fd.append('file', imageFile);
@@ -120,9 +143,10 @@ async function createMenuItemWithFiles(
     fd.append('arFile', glbFile);
   }
 
-  // Multiple images
+  // ✅ Multiple images for slides - Pass the full file objects
   imageFiles.forEach(file => {
     fd.append('images', file);
+    console.log('📎 Slide image attached:', file.name, file.size);
   });
 
   const { getValidIdToken } = await import('@/lib/cognito');
@@ -217,6 +241,8 @@ export default function BranchMenuPage() {
     item?: ApiMenuItem;
   }>({ open: false });
   const [sizes, setSizes] = useState<{ name: string; price: string }[]>([]);
+  // ✅ Slides state for multiple images
+  const [slides, setSlides] = useState<{ file: File | null; preview: string | null }[]>([]);
 
   // ── Theme listener ──
   useEffect(() => {
@@ -245,12 +271,6 @@ export default function BranchMenuPage() {
 
   const removeSize = (index: number) => {
     setSizes(prev => prev.filter((_, i) => i !== index));
-  };
-  const addSize = () => {
-    setSizes(prev => [
-      ...prev,
-      { name: '', price: '' }
-    ]);
   };
 
   const loadItems = useCallback(async () => {
@@ -379,6 +399,8 @@ export default function BranchMenuPage() {
     setAddonInput('');
     setAddonPrice('');
     setAddonDescription('');
+    setItemImages([]);
+    setItemImagePreviews([]);
 
     if (item?.id) {
       try {
@@ -444,6 +466,31 @@ export default function BranchMenuPage() {
           ? String(item.calories)
           : '',
     });
+
+    // ✅ Load sizes if editing
+    if (item) {
+      if (item.sizes && item.sizes.length > 0) {
+        setSizes(item.sizes.map(s => ({
+          name: s.name,
+          price: String(s.price || 0),
+        })));
+      } else {
+        setSizes([]);
+      }
+
+      // ✅ Load slides (existing images from API)
+      if (item.slides && item.slides.length > 0) {
+        setSlides(item.slides.map(s => ({
+          file: null,
+          preview: s.imageUrl || null,
+        })));
+      } else {
+        setSlides([]);
+      }
+    } else {
+      setSizes([]);
+      setSlides([]);
+    }
   };
 
   const uploadToS3 = async (url: string, file: File, ct: string) => {
@@ -459,11 +506,32 @@ export default function BranchMenuPage() {
       setSaveErr('Invalid category selected.');
       return;
     }
+
     setSaving(true);
     setSaveMsg('');
     setSaveErr('');
+
     try {
+      let createdItemId: string | undefined;
+
+      // ✅ Prepare sizes payload
+      const sizesPayload = sizes
+        .filter(size => size.name.trim() && size.price)
+        .map(size => ({
+          name: size.name.trim(),
+          price: parseFloat(size.price),
+        }));
+
+      // ✅ Prepare slides payload
+      const slidesPayload = slides
+        .filter(slide => slide.preview || slide.file)
+        .map((slide, index) => ({
+          position: index + 1,
+          imageKey: '', // Will be set by backend
+        }));
+
       if (modal.item?.id) {
+        // ── UPDATE EXISTING ITEM ──
         const version = (modal.item as any).version ?? 1;
         const raw = await updateMenuItem(
           restaurantId,
@@ -476,20 +544,19 @@ export default function BranchMenuPage() {
             status: isActive ? 'active' : 'inactive',
             tags: isChef ? ['chef'] : [],
             prepTime: form.prepTime || '20 min',
-            calories: form.calories
-              ? parseInt(form.calories)
-              : undefined,
-            sizes: sizes
-              .filter((size) => size.price !== '')
-              .map((size) => ({
-                name: size.name,
-                priceMinorUnits: Math.round(Number(size.price) * 100),
-              })),
+            calories: form.calories ? parseInt(form.calories) : undefined,
+            sizes: sizesPayload,
+            slides: slidesPayload,
           },
           version
         );
-        setItems(prev => prev.map(i => i.id === ((raw as any).id ?? (raw as any).itemId) ? normaliseItem(raw) : i));
-        setSaveMsg('Item updated!');
+
+        const updatedItemId = (raw as any).id ?? (raw as any).itemId;
+        setItems(prev => prev.map(i => i.id === updatedItemId ? normaliseItem(raw) : i));
+        setSaveMsg('Item updated with sizes & slides! ✓');
+        createdItemId = updatedItemId;
+
+        // Handle image upload for existing item
         if (uploadFile) {
           setSaveMsg('Getting image upload URL…');
           const fetched = await fetchMenuItem(modal.item.id, restaurantId) as any;
@@ -499,14 +566,21 @@ export default function BranchMenuPage() {
             setSaveMsg('Image uploaded! ✓');
           }
         }
+
         if (glbFile && !(modal.item as any).arModelKey) {
           setSaveErr('This item has no AR model slot. Use "Recreate & Upload Files" to create a fresh item with GLB.');
           setSaving(false);
           return;
         }
       } else {
+        // ── CREATE NEW ITEM ──
         setSaveMsg('Creating item…');
-        if (glbFile) { setGlbStatus('uploading'); setSaveMsg('Uploading item + 3D model…'); }
+        if (glbFile) {
+          setGlbStatus('uploading');
+          setSaveMsg('Uploading item + 3D model…');
+        }
+
+        // ✅ FIX: Pass itemImages for SLIDES to the API
         const raw = await createMenuItemWithFiles(
           restaurantId,
           {
@@ -515,23 +589,78 @@ export default function BranchMenuPage() {
             price: parseFloat(form.price),
             categoryId: form.category,
             isActive: true,
-            prepTime: form.prepTime || undefined,
-            calories: form.calories
-              ? parseInt(form.calories)
-              : undefined,
+            // ✅ Fix: Send prepTime as number, not string with "min"
+            prepTime: form.prepTime ? String(parseInt(form.prepTime.replace(/\D/g, '')) || 20) : undefined,
+            calories: form.calories ? parseInt(form.calories) : undefined,
+            sizes: sizesPayload,
+            // ✅ Only send slides if there are images
+            slides: slidesPayload.length > 0 ? slidesPayload : undefined,
           },
           uploadFile,
           glbFile,
-          itemImages
+          itemImages // ✅ Pass the actual file array here
         );
-        setItems(prev => [...prev, normaliseItem(raw)]);
-        if (raw.arModelKey) { setGlbStatus('approved'); setSaveMsg('Item created with 3D model! ✓'); } else setSaveMsg('Item created!');
+
+        const newItem = normaliseItem(raw);
+        setItems(prev => [...prev, newItem]);
+        createdItemId = newItem.id;
+
+        if (raw.arModelKey) {
+          setGlbStatus('approved');
+          setSaveMsg('Item created with 3D model, sizes & slides! ✓');
+        } else {
+          setSaveMsg('Item created with sizes & slides! ✓');
+        }
       }
-      setTimeout(() => { setModal({ open: false }); loadItems(); setSaveMsg(''); }, 1400);
+
+      // ── CREATE ADDONS AFTER ITEM IS CREATED/UPDATED ──
+      if (addons.length > 0 && createdItemId) {
+        setSaveMsg('Creating add-ons...');
+        let addonSuccessCount = 0;
+        let addonErrorCount = 0;
+
+        for (const addon of addons) {
+          try {
+            await createAddon(
+              restaurantId,
+              createdItemId,
+              {
+                name: addon.name,
+                description: addon.description || '',
+                priceMinorUnits: addon.priceMinorUnits,
+                isActive: addon.isActive,
+                sortOrder: addon.sortOrder ?? 0,
+              }
+            );
+            addonSuccessCount++;
+          } catch (error) {
+            addonErrorCount++;
+            console.error('Failed to create addon:', addon.name, error);
+          }
+        }
+
+        if (addonErrorCount > 0) {
+          setSaveMsg(`${addonSuccessCount} add-ons created, ${addonErrorCount} failed`);
+        } else {
+          setSaveMsg(`${addonSuccessCount} add-ons created! ✓`);
+        }
+      }
+
+      setTimeout(() => {
+        setModal({ open: false });
+        loadItems();
+        setSaveMsg('');
+      }, 1400);
+
     } catch (err: any) {
       setSaveErr(err?.message ?? 'Save failed.');
-      if (glbStatus === 'uploading') { setGlbStatus('error'); setGlbError(err?.message ?? 'Upload failed'); }
-    } finally { setSaving(false); }
+      if (glbStatus === 'uploading') {
+        setGlbStatus('error');
+        setGlbError(err?.message ?? 'Upload failed');
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -583,6 +712,21 @@ export default function BranchMenuPage() {
       // 2. Create NEW item with files
       setSaveMsg('Creating fresh item…');
 
+      const sizesPayload = sizes
+        .filter(size => size.name.trim() && size.price)
+        .map(size => ({
+          name: size.name.trim(),
+          price: parseFloat(size.price),
+        }));
+
+      const slidesPayload = slides
+        .filter(slide => slide.preview || slide.file)
+        .map((slide, index) => ({
+          position: index + 1,
+          imageKey: '',
+        }));
+
+      // ✅ FIX: Pass itemImages for SLIDES to the API
       const raw = await createMenuItemWithFiles(
         restaurantId,
         {
@@ -595,10 +739,12 @@ export default function BranchMenuPage() {
           calories: form.calories
             ? parseInt(form.calories)
             : undefined,
+          sizes: sizesPayload,
+          slides: slidesPayload,
         },
         uploadFile,
         glbFile,
-        itemImages
+        itemImages // ✅ Pass the actual file array here
       );
 
       setItems(prev => [
@@ -612,8 +758,8 @@ export default function BranchMenuPage() {
 
       setSaveMsg(
         raw.arModelKey
-          ? 'Recreated with 3D model! ✓'
-          : 'Recreated! ✓'
+          ? 'Recreated with 3D model, sizes & slides! ✓'
+          : 'Recreated with sizes & slides! ✓'
       );
 
       setTimeout(() => {
@@ -798,7 +944,7 @@ export default function BranchMenuPage() {
               e.currentTarget.style.boxShadow = 'none';
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = colors.hoverBg;
+              // e.currentTarget.style.background = colors.hoverBg;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = colors.imageBg;
@@ -828,7 +974,7 @@ export default function BranchMenuPage() {
               e.currentTarget.style.boxShadow = 'none';
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = colors.hoverBg;
+              // e.currentTarget.style.background = colors.hoverBg;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = colors.inputBg;
@@ -863,7 +1009,7 @@ export default function BranchMenuPage() {
               e.currentTarget.style.boxShadow = 'none';
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = colors.hoverBg;
+              // e.currentTarget.style.background = colors.hoverBg;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = colors.imageBg;
@@ -1294,7 +1440,7 @@ export default function BranchMenuPage() {
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = colors.hoverBg;
+                      
                       e.currentTarget.style.borderColor = BRAND;
                     }}
                     onMouseLeave={(e) => {
@@ -1302,7 +1448,7 @@ export default function BranchMenuPage() {
                       e.currentTarget.style.borderColor = colors.imageBorder;
                     }}
                   >
-                    <Edit2 size={12} color={colors.text} />
+                    <Edit2 size={12} />
                   </button>
                   <button
                     onClick={() => setDeleteModal({ open: true, item })}
@@ -1560,9 +1706,9 @@ export default function BranchMenuPage() {
               />
             </div>
 
-            {/* Sizes */}
+            {/* ── Sizes ── */}
             <div style={{ marginBottom: 14 }}>
-              <FieldLabel>Sizes</FieldLabel>
+              <FieldLabel>Sizes (Small, Medium, Large)</FieldLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {sizes.map((size, index) => (
                   <div key={index} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1574,7 +1720,7 @@ export default function BranchMenuPage() {
                         updated[index] = { ...updated[index], name: e.target.value };
                         setSizes(updated);
                       }}
-                      placeholder="Size name"
+                      placeholder="Small"
                       style={{ ...inputStyle(), flex: 1 }}
                       onFocus={handleFocus}
                       onBlur={handleBlur}
@@ -1594,14 +1740,14 @@ export default function BranchMenuPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => removeSize(index)}
+                      onClick={() => setSizes(prev => prev.filter((_, i) => i !== index))}
                       style={{
                         height: 42,
                         padding: '0 14px',
                         borderRadius: 10,
                         background: colors.imageBg,
                         border: `1.5px solid ${colors.imageBorder}`,
-                        color: BRAND,
+                        color: "#ffffff",
                         fontSize: 12,
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -1616,20 +1762,20 @@ export default function BranchMenuPage() {
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      Remove
+                      ✕
                     </button>
                   </div>
                 ))}
                 <button
                   type="button"
-                  onClick={addSize}
+                  onClick={() => setSizes(prev => [...prev, { name: '', price: '' }])}
                   style={{
                     height: 42,
                     padding: '0 14px',
                     borderRadius: 10,
-                    background: "rgb(255, 87, 35)",
+                    background: BRAND,
                     border: `1.5px solid ${colors.imageBorder}`,
-                    color: "#ffff",
+                    color: '#fff',
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -1647,6 +1793,164 @@ export default function BranchMenuPage() {
                   + Add Size
                 </button>
               </div>
+            </div>
+
+            {/* ── Slides (Multiple Images) ── */}
+            <div style={{ marginBottom: 14 }}>
+              <FieldLabel>
+                Slides (Additional Images)
+                <span style={{
+                  color: colors.subtle,
+                  fontSize: 10,
+                  marginLeft: 6,
+                  textTransform: 'none',
+                  letterSpacing: 0,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
+                  Max 6 images
+                </span>
+              </FieldLabel>
+
+              {/* Existing slides preview */}
+              {slides.map((slide, index) => (
+                <div key={index} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '8px 12px',
+                  marginBottom: 8,
+                  borderRadius: 10,
+                  background: colors.inputBg,
+                  border: `1px solid ${colors.border}`,
+                }}>
+                  {slide.preview ? (
+                    <Image
+                      src={slide.preview}
+                      alt={`Slide ${index + 1}`}
+                      width={50}
+                      height={50}
+                      unoptimized
+                      style={{
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: 8,
+                      background: colors.card2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 20,
+                    }}>
+                      🖼️
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <p style={{
+                      fontSize: 12,
+                      color: colors.text,
+                      fontWeight: 600,
+                      margin: 0,
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>
+                      Slide {index + 1}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // ✅ Fix: Clean up both slide and itemImages state
+                      const fileToRemove = slides[index].file;
+                      setSlides(prev => prev.filter((_, i) => i !== index));
+                      if (fileToRemove) {
+                        setItemImages(prev => prev.filter((_, i) => i !== index));
+                        setItemImagePreviews(prev => prev.filter((_, i) => i !== index));
+                      }
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      background: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+                      border: `1px solid ${isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0'}`,
+                      color: colors.danger,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: "'Poppins', sans-serif",
+                      transition: 'all 0.2s ease',
+                      outline: 'none',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              {/* Add new slide (Multiple files support) */}
+              {slides.length < 6 && (
+                <label
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 16,
+                    borderRadius: 12,
+                    border: `2px dashed ${colors.border}`,
+                    background: colors.inputBg,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    fontFamily: "'Poppins', sans-serif",
+                  }}
+                >
+                  {/* ✅ CHANGE: added 'multiple' attribute to select multiple files at once */}
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        // ✅ Loop through all selected files
+                        const newSlides: { file: File | null; preview: string | null }[] = [];
+                        const newItemImages: File[] = [];
+                        const newPreviews: string[] = [];
+
+                        // Only take files until we reach max 6 slides
+                        const remainingSlots = 6 - slides.length;
+                        const filesToAdd = Math.min(files.length, remainingSlots);
+
+                        for (let i = 0; i < filesToAdd; i++) {
+                          const file = files[i];
+                          const previewUrl = URL.createObjectURL(file);
+                          
+                          newSlides.push({ file, preview: previewUrl });
+                          newItemImages.push(file);
+                          newPreviews.push(previewUrl);
+                        }
+
+                        // Add to state
+                        setSlides(prev => [...prev, ...newSlides]);
+                        setItemImages(prev => [...prev, ...newItemImages]);
+                        setItemImagePreviews(prev => [...prev, ...newPreviews]);
+                      }
+                    }}
+                  />
+                  <CloudUpload size={20} color={colors.subtle} />
+                  <span style={{
+                    fontSize: 12,
+                    color: colors.subtle,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    Add Slide Images ({slides.length}/6) · Select multiple
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* Add-ons */}
@@ -1733,7 +2037,7 @@ export default function BranchMenuPage() {
                         <div style={{
                           fontSize: 12,
                           fontWeight: 700,
-                          color: colors.text,
+                          color: "#ffff",
                           fontFamily: "'Poppins', sans-serif",
                         }}>
                           {addon.name}
@@ -1871,139 +2175,6 @@ export default function BranchMenuPage() {
                       border: `1px solid ${colors.border}`,
                     }}
                   />
-                </div>
-              )}
-            </div>
-
-            {/* Multiple Images */}
-            <div style={{ marginBottom: 14 }}>
-              <FieldLabel>
-                Item Images
-                <span style={{
-                  color: colors.subtle,
-                  fontSize: 10,
-                  marginLeft: 6,
-                  textTransform: 'none',
-                  letterSpacing: 0,
-                  fontFamily: "'Poppins', sans-serif",
-                }}>
-                  Multiple images allowed
-                </span>
-              </FieldLabel>
-              <label
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: 20,
-                  borderRadius: 16,
-                  border: `2px dashed ${itemImages.length ? colors.imageBorder : colors.border}`,
-                  background: itemImages.length ? colors.imageBg : colors.inputBg,
-                  cursor: 'pointer',
-                  fontFamily: "'Poppins', sans-serif",
-                  transition: 'all 0.2s',
-                }}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  style={{ display: 'none' }}
-                  onChange={e => {
-                    const files = Array.from(e.target.files ?? []);
-                    setItemImages(files);
-                    setItemImagePreviews(
-                      files.map(file => URL.createObjectURL(file))
-                    );
-                  }}
-                />
-                <CloudUpload size={24} color={itemImages.length ? colors.text : colors.subtle} />
-                <span style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: itemImages.length ? colors.text : colors.subtle,
-                  fontFamily: "'Poppins', sans-serif",
-                }}>
-                  {itemImages.length
-                    ? `${itemImages.length} image${itemImages.length > 1 ? 's' : ''} selected`
-                    : 'Click to upload multiple images'}
-                </span>
-                <span style={{
-                  fontSize: 10,
-                  color: colors.subtle,
-                  fontFamily: "'Poppins', sans-serif",
-                }}>
-                  PNG, JPG, WEBP
-                </span>
-              </label>
-
-              {itemImagePreviews.length > 0 && (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 8,
-                  marginTop: 12,
-                }}>
-                  {itemImagePreviews.map((src, index) => (
-                    <div
-                      key={src}
-                      style={{
-                        position: 'relative',
-                        width: '100%',
-                        aspectRatio: '1',
-                        borderRadius: 10,
-                        overflow: 'hidden',
-                        border: `1px solid ${colors.border}`,
-                      }}
-                    >
-                      <Image
-                        src={src}
-                        alt={`Item image ${index + 1}`}
-                        fill
-                        unoptimized
-                        style={{
-                          objectFit: 'cover',
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setItemImages(prev =>
-                            prev.filter((_, i) => i !== index)
-                          );
-                          setItemImagePreviews(prev =>
-                            prev.filter((_, i) => i !== index)
-                          );
-                        }}
-                        style={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4,
-                          width: 22,
-                          height: 22,
-                          borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.65)',
-                          color: '#fff',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -2292,7 +2463,7 @@ export default function BranchMenuPage() {
                 }}
                 onMouseEnter={(e) => {
                   if (!saving && glbStatus !== 'uploading' && (cats.length > 0 || modal.item)) {
-                    e.currentTarget.style.background = colors.hoverBg;
+                   
                   }
                 }}
                 onMouseLeave={(e) => {

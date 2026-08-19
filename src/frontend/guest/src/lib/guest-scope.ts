@@ -16,10 +16,12 @@
 
 const RID_KEY = 'lm_rid'
 const TID_KEY = 'lm_tid'
+const TABLE_NUM_KEY = 'lm_table'
 
 export interface GuestScope {
   restaurantId: string
   tableId:      string
+  tableNumber?: string
 }
 
 function readSession(key: string): string {
@@ -55,12 +57,23 @@ export function getGuestScope(params?: URLSearchParams): GuestScope {
 
   const restaurantId = search.get('rid') || readSession(RID_KEY)
   const tableId      = search.get('tid') || readSession(TID_KEY)
+  const tableNumber  = readSession(TABLE_NUM_KEY)
 
   // Remember a fresh scan for the rest of the visit.
   if (search.get('rid')) writeSession(RID_KEY, search.get('rid')!)
   if (search.get('tid')) writeSession(TID_KEY, search.get('tid')!)
+  
+  // Extract table number from tableId if not present
+  let extractedTableNumber = tableNumber
+  if (!extractedTableNumber && tableId) {
+    const match = tableId.match(/table[-_]?(\d+)/i)
+    if (match) {
+      extractedTableNumber = match[1]
+      writeSession(TABLE_NUM_KEY, extractedTableNumber)
+    }
+  }
 
-  return { restaurantId, tableId }
+  return { restaurantId, tableId, tableNumber: extractedTableNumber }
 }
 
 /** True when we know which restaurant the guest is sitting in. */
@@ -84,6 +97,7 @@ export function clearGuestScope(): void {
   try {
     sessionStorage.removeItem(RID_KEY)
     sessionStorage.removeItem(TID_KEY)
+    sessionStorage.removeItem(TABLE_NUM_KEY)
   } catch {
     /* nothing to do */
   }

@@ -36,6 +36,17 @@ export interface ApiMenuItem {
   restaurantId?: string
   createdAt?: string
   updatedAt?: string
+  
+  // ✅ Added slides and sizes
+  slides?: { position: number; imageUrl: string; imageKey?: string }[]
+  sizes?: { name: string; price: number; priceMinorUnits?: number }[]
+  
+  // AR properties
+  arModelUrl?: string
+  arModelKey?: string
+  imageKey?: string
+  hasArModel?: boolean
+  version?: number
 }
 
 export interface ApiMenuResponse {
@@ -45,13 +56,6 @@ export interface ApiMenuResponse {
 }
 
 // ── Add-on ("Extra Toppings") ────────────────────────────────────────────────
-// NOTE: field names inferred from addons.py's route handlers, not a confirmed
-// schema — the addon_service.py / model file weren't part of what was shared.
-// Defensive fallbacks (addOnId ?? id, priceMinorUnits ?? price) so this keeps
-// working if the real field names turn out slightly different — check the
-// browser console's "🧩 Raw add-on" log below against what actually comes
-// back the first time you load an item that has add-ons, and adjust the
-// field names here if they don't match.
 export interface ApiAddOn {
   addOnId: string
   menuItemId: string
@@ -191,8 +195,6 @@ async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
 }
 
 // ── Fetch add-ons ("Extra Toppings") for a menu item ──────────────────────────
-// No add-ons for an item is a completely normal case (not every item has
-// them) — returns [] rather than throwing, same spirit as fetchARModel above.
 export async function fetchAddOns(itemId: string, restaurantId?: string): Promise<ApiAddOn[]> {
   const rid = restaurantId?.trim() || RESTAURANT_ID
   try {
@@ -230,7 +232,6 @@ export async function fetchRestaurants(restaurantId?: string): Promise<Restauran
   try {
     console.log('🏪 Fetching restaurants with rid:', rid);
 
-    // ✅ Use the proxy endpoint
     const response = await fetch(`/api/menu/restaurants?rid=${rid}`, {
       headers: {
         'Content-Type': 'application/json',
@@ -370,7 +371,8 @@ export async function deleteMenuItem(itemId: string): Promise<void> {
 
 // ── Normalise raw API response ────────────────────────────────────────────────
 export function normaliseItem(raw: any): ApiMenuItem {
-  console.log("RAW ITEM:", raw);
+  console.log("📦 RAW ITEM:", raw);
+  
   const id = raw.id ?? raw.itemId ?? raw.item_id ?? raw._id ?? crypto.randomUUID()
 
   const price = raw.priceMinorUnits != null
@@ -391,21 +393,16 @@ export function normaliseItem(raw: any): ApiMenuItem {
 
   const hasArModel = !!(raw.arModelUrl || raw.arModelKey)
 
-  const KNOWN_CATS: Record<string, string> = {
-    'e933848e-0d18-4e3a-b0a8-d70275c2fa54': 'Main Course',
-  }
-  const rawCategory = raw.category ?? raw.categoryId ?? 'other'
+  const categoryId =
+    raw.categoryId ??
+    raw.category?.id ??
+    '';
+
   const CATEGORY_MAP: Record<string, string> = {
     "c840f14d-fa93-40af-9f16-f4f35fc3f27a": "Fast Food",
     "567d9886-3c01-4ba9-9946-c3607f80091e": "Starter",
     "e933848e-0d18-4e3a-b0a8-d70275c2fa54": "Main Course",
   };
-
-
-  const categoryId =
-    raw.categoryId ??
-    raw.category?.id ??
-    '';
 
   const categoryName =
     raw.categoryName ??
@@ -413,15 +410,35 @@ export function normaliseItem(raw: any): ApiMenuItem {
     CATEGORY_MAP[categoryId] ??
     'Other';
 
-  console.log("CATEGORY DEBUG:", {
-    rawCategory: raw.category,
-    categoryId,
-    categoryName
-  });
+  // ✅ Parse slides
+  let slides: { position: number; imageUrl: string; imageKey?: string }[] = [];
+  if (raw.slides && Array.isArray(raw.slides)) {
+    slides = raw.slides.map((slide: any) => ({
+      position: slide.position ?? 0,
+      imageUrl: slide.imageUrl ?? slide.url ?? '',
+      imageKey: slide.imageKey ?? '',
+    })).filter((s: { imageUrl: string }) => s.imageUrl); // Remove empty imageUrls
+  }
+  console.log("📸 Slides parsed:", slides);
+
+  // ✅ Parse sizes
+  let sizes: { name: string; price: number; priceMinorUnits?: number }[] = [];
+  if (raw.sizes && Array.isArray(raw.sizes)) {
+    sizes = raw.sizes.map((size: any) => ({
+      name: size.name ?? '',
+      price: size.price != null ? size.price : (size.priceMinorUnits != null ? size.priceMinorUnits / 100 : 0),
+      priceMinorUnits: size.priceMinorUnits ?? (size.price != null ? Math.round(size.price * 100) : 0),
+    }));
+  }
+  console.log("📏 Sizes parsed:", sizes);
 
   return {
     ...raw,
-    id, price, status, allergens, hasArModel,
+    id,
+    price,
+    status,
+    allergens,
+    hasArModel,
     emoji: raw.emoji ?? '🍽️',
     tags: raw.tags ?? [],
     rating: raw.rating ?? 4.5,
@@ -442,6 +459,9 @@ export function normaliseItem(raw: any): ApiMenuItem {
     arModelKey: raw.arModelKey ?? null,
     imageKey: raw.imageKey ?? null,
     version: raw.version ?? 1,
+    // ✅ Include slides and sizes
+    slides,
+    sizes,
   }
 }
 
@@ -483,6 +503,121 @@ export async function fetchCategories(
         Boolean(category.name)
     );
 }
+// app/restaurants/[restaurantId]/menu/page.tsx
+
+async function createMenuItemWithFiles(
+  restaurantId: string,
+  payload: {
+    name: string;
+    description: string;
+    price: number;
+    categoryId: string;
+    isActive: boolean;
+    allergens?: string[];
+    prepTime?: string;
+    calories?: number;
+    sizes?: { name: string; price: number }[];
+    slides?: { position: number; imageKey: string }[];
+  },
+  imageFile?: File | null,
+  glbFile?: File | null,
+  imageFiles: File[] = [],
+): Promise<any> {
+  const fd = new FormData();
+
+  // ── Text fields ──
+  fd.append('name', payload.name);
+  fd.append('description', payload.description);
+  fd.append('priceMinorUnits', String(Math.round(payload.price * 100)));
+  fd.append('categoryId', payload.categoryId);
+  fd.append('isActive', String(payload.isActive));
+  fd.append('restaurantId', restaurantId);
+
+  if (payload.allergens?.length) {
+    fd.append('allergens', payload.allergens.join(','));
+  }
+  if (payload.prepTime) {
+    fd.append('prepTime', payload.prepTime);
+  }
+  if (payload.calories !== undefined) {
+    fd.append('calories', String(payload.calories));
+  }
+
+  // ✅ Sizes as JSON string
+  if (payload.sizes?.length) {
+    const sizesPayload = payload.sizes.map(size => ({
+      name: size.name,
+      priceMinorUnits: Math.round(size.price * 100),
+    }));
+    fd.append('sizes', JSON.stringify(sizesPayload));
+  }
+
+  // ✅ Slides as JSON string
+  if (payload.slides?.length) {
+    const slidesPayload = payload.slides.map((slide, index) => ({
+      position: slide.position || index + 1,
+      imageKey: slide.imageKey || '',
+    }));
+    fd.append('slides', JSON.stringify(slidesPayload));
+    console.log('📤 Slides payload:', JSON.stringify(slidesPayload));
+  }
+
+  // ── Main image ──
+  if (imageFile) {
+    fd.append('file', imageFile);
+  }
+
+  // ── AR model ──
+  if (glbFile) {
+    fd.append('arFile', glbFile);
+  }
+
+  // ✅ Multiple images for slides - YAHAN CHANGES KARNI HAIN
+  console.log(`📎 Sending ${imageFiles.length} slide images`);
+  imageFiles.forEach((file, index) => {
+    fd.append('images', file);
+    console.log(`📎 Slide image ${index + 1}:`, file.name, file.size, file.type);
+  });
+
+  // 📤 Debug: Log all FormData entries
+  console.log('📤 FormData entries:');
+  for (const [key, value] of fd.entries()) {
+    if (value instanceof File) {
+      console.log(`   ${key}: File(${value.name}, ${value.size} bytes, ${value.type})`);
+    } else {
+      console.log(`   ${key}: ${value}`);
+    }
+  }
+
+  const { getValidIdToken } = await import('@/lib/cognito');
+  const token = await getValidIdToken();
+
+  if (!token) {
+    throw new Error('Authentication token missing.');
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: token,
+    'x-tenant-id': restaurantId,
+  };
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/items`,
+    {
+      method: 'POST',
+      headers,
+      body: fd,
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => res.statusText);
+    throw new Error(`Create failed (${res.status}): ${txt}`);
+  }
+
+  return res.json();
+}
+
 
 export function extractCategoriesFromItems(
   items: ApiMenuItem[]

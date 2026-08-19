@@ -25,18 +25,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   // Listen for theme changes
-  useEffect(() => {
-    const handleThemeChange = () => {
-      const currentTheme = getTheme();
-      setTheme(currentTheme);
-    };
-    window.addEventListener('themeChange', handleThemeChange);
-    window.addEventListener('storage', handleThemeChange);
-    return () => {
-      window.removeEventListener('themeChange', handleThemeChange);
-      window.removeEventListener('storage', handleThemeChange);
-    };
-  }, []);
+  // useEffect(() => {
+  //   const handleThemeChange = () => {
+  //     const currentTheme = getTheme();
+  //     setTheme(currentTheme);
+  //   };
+  //   window.addEventListener('themeChange', handleThemeChange);
+  //   window.addEventListener('storage', handleThemeChange);
+  //   return () => {
+  //     window.removeEventListener('themeChange', handleThemeChange);
+  //     window.removeEventListener('storage', handleThemeChange);
+  //   };
+  // }, []);
 
   const handleToggleTheme = () => {
     const newTheme = toggleTheme();

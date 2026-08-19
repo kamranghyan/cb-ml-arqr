@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Plus, Edit2, Trash2, X, Loader2, RefreshCw, Store, AlertCircle, Lock, ChevronRight,
-  CloudUpload,
+  CloudUpload, MapPin,
 } from 'lucide-react';
 import {
   fetchRestaurants,
   fetchRestaurant,
-  createRestaurant,
+  createRestaurantWithFiles,
   updateRestaurant,
   deleteRestaurant,
   type ApiRestaurant,
@@ -75,17 +75,17 @@ export default function RestaurantsView() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -338,6 +338,9 @@ export default function RestaurantsView() {
         <div style={{
           padding: '60px',
           textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
           color: colors.subtle,
           fontFamily: "'Poppins', sans-serif",
         }}>
@@ -419,12 +422,12 @@ export default function RestaurantsView() {
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.8';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}>
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}>
                 Manage menu, tables &amp; QR <ChevronRight size={15} />
               </Link>
 
@@ -588,12 +591,18 @@ function RestaurantModal({
   accents: ReturnType<typeof getAccents>;
   isDark: boolean;
 }) {
+  // ── Combine address into one field ──
+  const getFullAddress = () => {
+    if (edit?.address) {
+      const { street, city, country, postcode } = edit.address;
+      return [street, city, country, postcode].filter(Boolean).join(', ');
+    }
+    return '';
+  };
+
   const [f, setF] = useState({
     name: edit?.name ?? '',
-    street: edit?.address?.street ?? '',
-    city: edit?.address?.city ?? '',
-    country: edit?.address?.country ?? 'Pakistan',
-    postcode: edit?.address?.postcode ?? '',
+    fullAddress: getFullAddress(), // ✅ Combined address field
     timezone: edit?.timezone ?? 'Asia/Karachi',
     currencyCode: edit?.currencyCode ?? 'PKR',
     isActive: edit?.isActive ?? true,
@@ -620,29 +629,38 @@ function RestaurantModal({
   const [logoPreview, setLogoPreview] = useState<string>(edit?.logoUrl ?? '');
   const [bannerPreview, setBannerPreview] = useState<string>(edit?.bannerUrl ?? '');
 
-  const passwordPlaceholderColor = isDark ? '#6B7280' : '#AAAAAA';
+  // ── Parse full address into components ──
+  const parseAddress = (fullAddress: string) => {
+    const parts = fullAddress.split(',').map(s => s.trim());
+    const street = parts[0] || '';
+    const city = parts[1] || '';
+    const country = parts[2] || '';
+    const postcode = parts[3] || '';
+    return { street, city, country, postcode };
+  };
 
   async function save() {
     setSaving(true);
+
+    // ── Parse address from combined field ──
+    const { street, city, country, postcode } = parseAddress(f.fullAddress);
+
+    // ── Build payload ──
     const payload = {
-      name: f.name,
-      logoKey: f.logoKey || null,
-      bannerKey: f.bannerKey || null,
-      ratingValue: f.ratingValue ? Number(f.ratingValue) : null,
-      ratingCount: f.ratingCount ? Number(f.ratingCount) : null,
+      name: f.name.trim(),
+      timezone: f.timezone || 'Asia/Karachi',
+      currencyCode: f.currencyCode || 'PKR',
       address: {
-        street: f.street,
-        city: f.city,
-        country: f.country,
-        postcode: f.postcode,
+        street: street || 'N/A',
+        city: city || 'Karachi',
+        country: country || 'Pakistan',
+        postcode: postcode || '00000',
       },
-      timezone: f.timezone,
-      currencyCode: f.currencyCode,
       isActive: f.isActive,
-      tagline: f.tagline,
-      openingHours: f.openingHours,
-      deliveryNote: f.deliveryNote,
-      cuisineTags: f.cuisineTags.split(',').map(x => x.trim()).filter(Boolean),
+      tagline: f.tagline || '',
+      openingHours: f.openingHours || '',
+      deliveryNote: f.deliveryNote || '',
+      cuisineTags: f.cuisineTags ? f.cuisineTags.split(',').map(x => x.trim()).filter(Boolean) : [],
       socialMedia: {
         x: f.socialX || null,
         instagram: f.socialInstagram || null,
@@ -651,11 +669,19 @@ function RestaurantModal({
         linkedin: f.socialLinkedin || null,
         tiktok: f.socialTiktok || null,
       },
+      ratingValue: f.ratingValue ? Number(f.ratingValue) : null,
+      ratingCount: f.ratingCount ? Number(f.ratingCount) : null,
     };
+
+    console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+    console.log('📎 Logo file:', logoFile);
+    console.log('📎 Banner file:', bannerFile);
 
     try {
       if (edit) {
+        // ── Edit Mode: Update with separate uploads ──
         let updatedPayload: any = { ...payload };
+
         if (logoFile) {
           const uploadedLogo = await uploadRestaurantLogo(logoFile, edit.restaurantId);
           updatedPayload.logoKey = uploadedLogo.s3Key;
@@ -664,31 +690,32 @@ function RestaurantModal({
           const uploadedBanner = await uploadRestaurantBanner(bannerFile, edit.restaurantId);
           updatedPayload.bannerKey = uploadedBanner.s3Key;
         }
+
         await updateRestaurant(edit.restaurantId, updatedPayload);
         showToast('Restaurant updated');
+
       } else {
-        const created = await createRestaurant(payload as any);
-        let logoKey: string | null = null;
-        let bannerKey: string | null = null;
-        if (logoFile) {
-          const uploadedLogo = await uploadRestaurantLogo(logoFile, created.restaurantId);
-          logoKey = uploadedLogo.s3Key;
+        // ── Create Mode: Everything in one FormData request ──
+        console.log('🆕 Creating restaurant with files...');
+        const created = await createRestaurantWithFiles(
+          payload,
+          logoFile,
+          bannerFile
+        );
+        console.log('✅ Restaurant created:', created);
+
+        if (created.logoKey || created.bannerKey) {
+          showToast('Restaurant created with logo & banner!');
+        } else {
+          showToast('Restaurant created! (Images processing)');
         }
-        if (bannerFile) {
-          const uploadedBanner = await uploadRestaurantBanner(bannerFile, created.restaurantId);
-          bannerKey = uploadedBanner.s3Key;
-        }
-        if (logoKey || bannerKey) {
-          await updateRestaurant(created.restaurantId, {
-            ...(logoKey ? { logoKey } : {}),
-            ...(bannerKey ? { bannerKey } : {}),
-          });
-        }
-        showToast('Restaurant created');
       }
+
       onSaved();
+
     } catch (e: any) {
-      showToast(e.message, 'err');
+      console.error('❌ Save error:', e);
+      showToast(e.message || 'Something went wrong', 'err');
     } finally {
       setSaving(false);
     }
@@ -795,34 +822,27 @@ function RestaurantModal({
             />
           </div>
 
-          {/* ── Street ── */}
+          {/* ── Combined Address Field ── */}
           <div>
-            <label style={labelStyle(colors)}>Street</label>
-            <input
-              style={inputStyle(colors)}
-              value={f.street}
-              placeholder="Street address"
-              onChange={e => set('street', e.target.value)}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = BRAND;
-                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = colors.border;
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
-          </div>
-
-          {/* ── City & Postcode ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={labelStyle(colors)}>City</label>
+            <label style={labelStyle(colors)}>Address</label>
+            <div style={{ position: 'relative' }}>
+              <MapPin size={18} style={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: colors.muted,
+                pointerEvents: 'none',
+                zIndex: 1,
+              }} />
               <input
-                style={inputStyle(colors)}
-                value={f.city}
-                placeholder="Lahore"
-                onChange={e => set('city', e.target.value)}
+                style={{
+                  ...inputStyle(colors),
+                  paddingLeft: 38,
+                }}
+                value={f.fullAddress}
+                placeholder="Street, City, Country, Postcode"
+                onChange={e => set('fullAddress', e.target.value)}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = BRAND;
                   e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
@@ -833,34 +853,25 @@ function RestaurantModal({
                 }}
               />
             </div>
-            <div>
-              <label style={labelStyle(colors)}>Postcode</label>
-              <input
-                style={inputStyle(colors)}
-                value={f.postcode}
-                placeholder="54000"
-                onChange={e => set('postcode', e.target.value)}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = BRAND;
-                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = colors.border;
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              />
-            </div>
+            <p style={{
+              fontSize: 11,
+              color: colors.muted,
+              margin: '4px 0 0',
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Format: Street, City, Country, Postcode
+            </p>
           </div>
 
           {/* ── Country & Currency ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={labelStyle(colors)}>Country</label>
+              <label style={labelStyle(colors)}>Timezone</label>
               <input
                 style={inputStyle(colors)}
-                value={f.country}
-                placeholder="Pakistan"
-                onChange={e => set('country', e.target.value)}
+                value={f.timezone}
+                placeholder="Asia/Karachi"
+                onChange={e => set('timezone', e.target.value)}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = BRAND;
                   e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
@@ -889,25 +900,6 @@ function RestaurantModal({
                 }}
               />
             </div>
-          </div>
-
-          {/* ── Timezone ── */}
-          <div>
-            <label style={labelStyle(colors)}>Timezone</label>
-            <input
-              style={inputStyle(colors)}
-              value={f.timezone}
-              placeholder="Asia/Karachi"
-              onChange={e => set('timezone', e.target.value)}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = BRAND;
-                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = colors.border;
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
           </div>
 
           {/* ── Tagline ── */}
@@ -1092,6 +1084,7 @@ function RestaurantModal({
               <input
                 style={inputStyle(colors)}
                 type="number"
+                step="0.1"
                 value={f.ratingValue}
                 placeholder="4.8"
                 onChange={e => set('ratingValue', e.target.value)}

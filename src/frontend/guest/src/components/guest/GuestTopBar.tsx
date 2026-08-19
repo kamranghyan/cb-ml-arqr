@@ -33,6 +33,22 @@ import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
+// ── Theme Colors ──
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#1C1C1C' : '#FFFFFF',
+  border: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
+  text: isDark ? '#F5F0E8' : '#000000',
+  muted: isDark ? '#9CA3AF' : '#6B6B6B',
+  subtle: isDark ? '#6B7280' : '#9CA3AF',
+  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#FFF5F0',
+  brand: BRAND,
+  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
+  focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
+  dropdownBg: isDark ? '#1C1C1C' : '#FFFFFF',
+  dropdownBorder: isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0',
+  overlay: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)',
+});
+
 // Navigation tabs configuration
 const NAV_TABS = [
   { key: 'home', label: 'Home', icon: Home, href: '/guest' },
@@ -151,6 +167,7 @@ const getPageName = (pathname: string): string => {
 
 export default function GuestTopBar() {
   const { isDark } = useTheme();
+  const colors = getColors(isDark);
   const pathname = usePathname();
   const router = useRouter();
   const scope = getGuestScope();
@@ -162,13 +179,6 @@ export default function GuestTopBar() {
   const pageName = getPageName(pathname);
   const cartCount = itemCount();
 
-  const bg = isDark ? '#1C1C1C' : '#ffffff';
-  const border = isDark ? 'rgba(255,255,255,0.08)' : '#F0E8E0';
-  const dropdownBg = isDark ? '#1C1C1C' : '#ffffff';
-  const textColor = isDark ? '#F5F0E8' : '#000000';
-  const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : '#FFF5F0';
-  const mutedColor = isDark ? '#9CA3AF' : '#6B6B6B';
-
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
     setIsBellOpen(false);
@@ -177,7 +187,6 @@ export default function GuestTopBar() {
   const toggleBell = () => {
     setIsBellOpen(!isBellOpen);
     setIsMenuOpen(false);
-    // Mark all as read when opening
     if (!isBellOpen) {
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     }
@@ -203,30 +212,48 @@ export default function GuestTopBar() {
     return pathname.startsWith(href);
   };
 
+  // ── Focus/Blur handlers ──
+  const handleFocus = (e: React.FocusEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.boxShadow = 'none';
+  };
+
+  const handleButtonMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = colors.hoverBg;
+  };
+
+  const handleButtonMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = 'transparent';
+  };
+
   return (
     <>
-      {/* Top Bar */}
+      {/* ── Top Bar ── */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '14px 20px',
-          background: bg,
-          borderBottom: `1px solid ${border}`,
+          background: colors.bg,
+          borderBottom: `1px solid ${colors.border}`,
           position: 'sticky',
           top: 0,
           zIndex: 100,
+          fontFamily: "'Poppins', sans-serif",
         }}
       >
-        {/* Logo + Page Name */}
+        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Image src="/images/nav/logo.png" alt="Menulay Logo" width={107.5} height={35} />
         </div>
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Bell Icon with Badge */}
+          {/* ── Bell Icon ── */}
           <button
             aria-label="Notifications"
             onClick={toggleBell}
@@ -239,7 +266,14 @@ export default function GuestTopBar() {
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
+              outline: 'none',
+              borderRadius: 8,
+              transition: 'all 0.2s ease',
             }}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onMouseEnter={handleButtonMouseEnter}
+            onMouseLeave={handleButtonMouseLeave}
           >
             <Image src="/images/nav/Bell.png" alt="Notifications" width={28} height={28} />
             {unreadCount > 0 && (
@@ -258,7 +292,8 @@ export default function GuestTopBar() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: `2px solid ${bg}`,
+                  border: `2px solid ${colors.bg}`,
+                  fontFamily: "'Poppins', sans-serif",
                 }}
               >
                 {unreadCount}
@@ -266,7 +301,7 @@ export default function GuestTopBar() {
             )}
           </button>
 
-          {/* Hamburger Menu Button */}
+          {/* ── Hamburger Menu ── */}
           <button
             aria-label="Menu"
             onClick={toggleMenu}
@@ -278,7 +313,14 @@ export default function GuestTopBar() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              outline: 'none',
+              borderRadius: 8,
+              transition: 'all 0.2s ease',
             }}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onMouseEnter={handleButtonMouseEnter}
+            onMouseLeave={handleButtonMouseLeave}
           >
             {isMenuOpen ? (
               <X size={28} color={BRAND} />
@@ -289,10 +331,9 @@ export default function GuestTopBar() {
         </div>
       </div>
 
-      {/* Bell Dropdown */}
+      {/* ── Bell Dropdown ── */}
       {isBellOpen && (
         <>
-          {/* Overlay */}
           <div
             onClick={closeAll}
             style={{
@@ -301,12 +342,11 @@ export default function GuestTopBar() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0,0,0,0.3)',
+              background: colors.overlay,
               zIndex: 99,
             }}
           />
           
-          {/* Dropdown */}
           <div
             style={{
               position: 'fixed',
@@ -315,21 +355,22 @@ export default function GuestTopBar() {
               transform: 'translateX(50%)',
               width: '100%',
               maxWidth: 480,
-              background: dropdownBg,
+              background: colors.dropdownBg,
               borderBottomLeftRadius: 16,
               borderBottomRightRadius: 16,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+              boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.15)',
               zIndex: 100,
               borderTop: `2px solid ${BRAND}`,
               maxHeight: '70vh',
               overflowY: 'auto',
+              fontFamily: "'Poppins', sans-serif",
             }}
           >
             {/* Header */}
             <div
               style={{
                 padding: '16px 20px 12px',
-                borderBottom: `1px solid ${border}`,
+                borderBottom: `1px solid ${colors.border}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -339,7 +380,8 @@ export default function GuestTopBar() {
                 style={{
                   fontSize: 16,
                   fontWeight: 700,
-                  color: textColor,
+                  color: colors.text,
+                  fontFamily: "'Poppins', sans-serif",
                 }}
               >
                 Notifications
@@ -356,6 +398,19 @@ export default function GuestTopBar() {
                     border: 'none',
                     cursor: 'pointer',
                     fontWeight: 600,
+                    fontFamily: "'Poppins', sans-serif",
+                    outline: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    transition: 'all 0.2s ease',
+                  }}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = colors.hoverBg;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
                   }}
                 >
                   Mark all as read
@@ -366,8 +421,13 @@ export default function GuestTopBar() {
             {/* Notification List */}
             {notifications.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <Bell size={40} color={mutedColor} style={{ opacity: 0.3 }} />
-                <p style={{ fontSize: 14, color: mutedColor, marginTop: 12 }}>
+                <Bell size={40} color={colors.muted} style={{ opacity: 0.3 }} />
+                <p style={{ 
+                  fontSize: 14, 
+                  color: colors.muted, 
+                  marginTop: 12,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
                   No notifications
                 </p>
               </div>
@@ -380,16 +440,21 @@ export default function GuestTopBar() {
                       display: 'flex',
                       gap: 12,
                       padding: '12px 20px',
-                      background: !notif.read ? hoverBg : 'transparent',
-                      borderBottom: `1px solid ${border}`,
+                      background: !notif.read ? colors.hoverBg : 'transparent',
+                      borderBottom: `1px solid ${colors.border}`,
                       cursor: 'pointer',
-                      transition: 'background 0.15s',
+                      transition: 'all 0.15s ease',
                     }}
                     onClick={() => {
-                      // Handle notification click - navigate or mark as read
                       setNotifications(prev => 
                         prev.map(n => n.id === notif.id ? { ...n, read: true } : n)
                       );
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = colors.hoverBg;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = !notif.read ? colors.hoverBg : 'transparent';
                     }}
                   >
                     {/* Icon */}
@@ -415,11 +480,12 @@ export default function GuestTopBar() {
                           style={{
                             fontSize: 14,
                             fontWeight: notif.read ? 500 : 700,
-                            color: textColor,
+                            color: colors.text,
                             margin: 0,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
                           }}
                         >
                           {notif.title}
@@ -439,13 +505,14 @@ export default function GuestTopBar() {
                       <p
                         style={{
                           fontSize: 13,
-                          color: mutedColor,
+                          color: colors.muted,
                           margin: '4px 0 0',
                           lineHeight: 1.4,
                           overflow: 'hidden',
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical' as const,
+                          fontFamily: "'Poppins', sans-serif",
                         }}
                       >
                         {notif.message}
@@ -458,11 +525,12 @@ export default function GuestTopBar() {
                           marginTop: 6,
                         }}
                       >
-                        <Clock size={12} color={mutedColor} />
+                        <Clock size={12} color={colors.muted} />
                         <span
                           style={{
                             fontSize: 11,
-                            color: mutedColor,
+                            color: colors.muted,
+                            fontFamily: "'Poppins', sans-serif",
                           }}
                         >
                           {notif.time}
@@ -477,10 +545,9 @@ export default function GuestTopBar() {
         </>
       )}
 
-      {/* Menu Dropdown */}
+      {/* ── Menu Dropdown ── */}
       {isMenuOpen && (
         <>
-          {/* Overlay */}
           <div
             onClick={closeAll}
             style={{
@@ -489,12 +556,11 @@ export default function GuestTopBar() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0,0,0,0.3)',
+              background: colors.overlay,
               zIndex: 99,
             }}
           />
           
-          {/* Dropdown */}
           <div
             style={{
               position: 'fixed',
@@ -503,19 +569,18 @@ export default function GuestTopBar() {
               transform: 'translateX(50%)',
               width: '100%',
               maxWidth: 480,
-              background: dropdownBg,
+              background: colors.dropdownBg,
               borderBottomLeftRadius: 16,
               borderBottomRightRadius: 16,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+              boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.15)',
               padding: '12px 0',
               zIndex: 100,
               borderTop: `2px solid ${BRAND}`,
               maxHeight: '80vh',
               overflowY: 'auto',
+              fontFamily: "'Poppins', sans-serif",
             }}
           >
-
-            {/* Navigation Items */}
             {NAV_TABS.map((tab) => {
               const active = isActive(tab.href);
               const Icon = tab.icon;
@@ -531,22 +596,26 @@ export default function GuestTopBar() {
                     gap: 14,
                     padding: '12px 20px',
                     width: '100%',
-                    background: active ? hoverBg : 'transparent',
+                    background: active ? colors.hoverBg : 'transparent',
                     border: 'none',
                     cursor: 'pointer',
-                    transition: 'background 0.15s',
+                    transition: 'all 0.15s ease',
                     position: 'relative',
+                    outline: 'none',
+                    fontFamily: "'Poppins', sans-serif",
                   }}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = hoverBg;
+                    e.currentTarget.style.background = colors.hoverBg;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = active ? hoverBg : 'transparent';
+                    e.currentTarget.style.background = active ? colors.hoverBg : 'transparent';
                   }}
                 >
                   <Icon
                     size={20}
-                    color={active ? BRAND : textColor}
+                    color={active ? BRAND : colors.text}
                     strokeWidth={active ? 2.5 : 2}
                   />
                   <span
@@ -555,7 +624,8 @@ export default function GuestTopBar() {
                       textAlign: 'left',
                       fontSize: 15,
                       fontWeight: active ? 700 : 500,
-                      color: active ? BRAND : textColor,
+                      color: active ? BRAND : colors.text,
+                      fontFamily: "'Poppins', sans-serif",
                     }}
                   >
                     {tab.label}
@@ -571,6 +641,7 @@ export default function GuestTopBar() {
                         borderRadius: 12,
                         minWidth: 20,
                         textAlign: 'center',
+                        fontFamily: "'Poppins', sans-serif",
                       }}
                     >
                       {cartCount}

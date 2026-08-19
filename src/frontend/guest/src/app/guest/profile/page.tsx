@@ -35,9 +35,7 @@ export default function ProfilePage() {
   // ── QR Scanner Logic ──────────────────────────────────────────────
   useEffect(() => {
     if (!showScanner) return;
-
     startScanner();
-
     return () => {
       stopScanner();
     };
@@ -60,33 +58,34 @@ export default function ProfilePage() {
       });
 
       const video = videoRef.current;
-
       if (!video) {
         stream.getTracks().forEach(track => track.stop());
         return;
       }
 
       video.srcObject = stream;
+      video.setAttribute('playsinline', 'true');
 
       await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve();
+        if (video.readyState >= 1) {
+          resolve();
+        } else {
+          video.onloadedmetadata = () => resolve();
+        }
       });
 
       await video.play();
-
-      // Camera ko initialize hone ka thora time do
       scanTimeoutRef.current = setTimeout(() => {
         scanQRCode();
       }, 500);
 
     } catch (err) {
       console.error('Camera error:', err);
-      setScanError(
-        'Unable to access camera. Please allow camera permissions.'
-      );
+      setScanError('Unable to access camera. Please allow camera permissions.');
       setScanning(false);
     }
   };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -116,7 +115,6 @@ export default function ProfilePage() {
         }
 
         const video = videoRef.current;
-
         if (!video) {
           stream.getTracks().forEach(track => track.stop());
           return;
@@ -141,11 +139,8 @@ export default function ProfilePage() {
 
       } catch (error) {
         console.error('Camera error:', error);
-
         if (!cancelled) {
-          setScanError(
-            'Unable to access camera. Please allow camera permissions.'
-          );
+          setScanError('Unable to access camera. Please allow camera permissions.');
           setScanning(false);
         }
       }
@@ -173,12 +168,9 @@ export default function ProfilePage() {
     }
 
     const video = videoRef.current;
-
     if (video?.srcObject) {
       const stream = video.srcObject as MediaStream;
-
       stream.getTracks().forEach(track => track.stop());
-
       video.srcObject = null;
     }
   };
@@ -186,13 +178,9 @@ export default function ProfilePage() {
   const scanQRCode = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-
     if (!video || !canvas) return;
 
-    const ctx = canvas.getContext('2d', {
-      willReadFrequently: true,
-    });
-
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     if (scanIntervalRef.current) {
@@ -200,10 +188,6 @@ export default function ProfilePage() {
     }
 
     scanIntervalRef.current = setInterval(() => {
-
-      // ❌ IMPORTANT:
-      // yahan `scanning` state check mat karo
-
       if (
         video.readyState < 2 ||
         video.videoWidth === 0 ||
@@ -215,39 +199,22 @@ export default function ProfilePage() {
       try {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        ctx.drawImage(
-          video,
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-
-        const imageData = ctx.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(
           imageData.data,
           imageData.width,
           imageData.height,
-          {
-            inversionAttempts: 'attemptBoth',
-          }
+          { inversionAttempts: 'attemptBoth' }
         );
 
         if (code?.data) {
           console.log('✅ QR CODE FOUND:', code.data);
-
           if (scanIntervalRef.current) {
             clearInterval(scanIntervalRef.current);
             scanIntervalRef.current = null;
           }
-
           handleScanResult(code.data);
         }
 
@@ -258,24 +225,8 @@ export default function ProfilePage() {
     }, 200);
   };
 
-  const onScanSuccess = (decodedText: string, decodedResult: any) => {
-    console.log('✅ QR Code detected!');
-    console.log('📦 Raw data:', decodedText);
-
-    // // 🔥 Show what was scanned
-    // alert('QR Scanned!\nData: ' + decodedText);
-
-    stopScanner();
-    
-    setShowScanner(false);
-    handleScanResult(decodedText);
-  };
-
   const handleScanResult = (result: string) => {
     console.log('📦 Processing QR result:', result);
-
-    // 🔥 TEST: Show alert
-    alert('Processing QR: ' + result);
 
     setShowScanner(false);
     setScanning(false);
@@ -305,7 +256,6 @@ export default function ProfilePage() {
       }
     } catch (e) {
       console.log('Not JSON, trying URL...');
-      // Not JSON, try URL params
       try {
         const url = new URL(result);
         console.log('✅ Parsed as URL:', url);
@@ -340,8 +290,6 @@ export default function ProfilePage() {
     }
   };
 
-
-
   const handleSave = () => {
     setFullName(nameInput.trim());
     setPhone(phoneInput.trim());
@@ -363,95 +311,352 @@ export default function ProfilePage() {
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
-    text: '#F5F0E8', muted: '#9CA3AF',
+    text: '#F5F0E8', muted: '#9CA3AF', subtle: '#6B7280',
   } : {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-    text: '#000000', muted: '#6B6B6B',
+    text: '#000000', muted: '#6B6B6B', subtle: '#9CA3AF',
   };
 
   const inputStyle: React.CSSProperties = {
     width: '100%', height: 50, borderRadius: 12, padding: '0 16px', fontSize: 15,
     background: D.card2, border: `1.5px solid ${D.border}`, color: D.text, outline: 'none',
-    boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif", marginBottom: 12,
+    boxSizing: 'border-box', fontFamily: "'Poppins', sans-serif", marginBottom: 12,
+    transition: 'all 0.2s ease',
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = BRAND;
+    e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = D.border;
+    e.currentTarget.style.boxShadow = 'none';
   };
 
   return (
     <>
-      <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ 
+        minHeight: '100dvh', 
+        background: D.bg, 
+        fontFamily: "'Poppins', sans-serif", 
+        maxWidth: 480, 
+        margin: '0 auto', 
+        display: 'flex', 
+        flexDirection: 'column',
+        transition: 'background 0.25s',
+      }}>
         <GuestTopBar />
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{ padding: '35px 20px 16px' }}>
-          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
+          <button 
+            onClick={() => router.back()} 
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              cursor: 'pointer', 
+              color: BRAND, 
+              padding: 4, 
+              display: 'flex',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              borderRadius: 8,
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            aria-label="Back"
+          >
             <ChevronLeft size={28} strokeWidth={2.5} />
           </button>
-          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", textAlign: "center", fontSize: 26, fontWeight: 700, color: BRAND, margin: '8px 0 0' }}>Profile</h1>
+          <h1 style={{ 
+            fontFamily: "'Poppins', sans-serif", 
+            textAlign: "center", 
+            fontSize: 26, 
+            fontWeight: 700, 
+            color: BRAND, 
+            margin: '8px 0 0' 
+          }}>Profile</h1>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 120px' }}>
 
-          {/* Avatar */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '12px 0 32px' }}>
-            <div style={{ width: 84, height: 84, borderRadius: '50%', background: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+          {/* ── Avatar ── */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            margin: '12px 0 32px' 
+          }}>
+            <div style={{ 
+              width: 84, 
+              height: 84, 
+              borderRadius: '50%', 
+              background: BRAND, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              marginBottom: 12 
+            }}>
               {initials
-                ? <span style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 30, fontWeight: 700, color: '#fff' }}>{initials}</span>
+                ? <span style={{ 
+                    fontFamily: "'Poppins', sans-serif", 
+                    fontSize: 30, 
+                    fontWeight: 700, 
+                    color: '#fff' 
+                  }}>{initials}</span>
                 : <User size={36} color="#fff" strokeWidth={1.75} />}
             </div>
-            <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 600, color: D.text, margin: 0 }}>{fullName || 'Guest'}</p>
+            <p style={{ 
+              fontFamily: "'Poppins', sans-serif", 
+              fontSize: 19, 
+              fontWeight: 600, 
+              color: D.text, 
+              margin: 0 
+            }}>{fullName || 'Guest'}</p>
             {tableNum && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <MapPin size={12} color={D.muted} />
-                <span style={{ fontSize: 12, color: D.muted }}>Table {tableNum}</span>
+                <span style={{ 
+                  fontSize: 12, 
+                  color: D.muted,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>Table {tableNum}</span>
               </div>
             )}
           </div>
 
-          {/* Your Details */}
-          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text, margin: '0 0 12px' }}>Your Details</h2>
-          <input className='searchInput' value={nameInput} onChange={e => setNameInput(e.target.value)} placeholder="Full Name" style={inputStyle} />
-          <input className='searchInput' value={phoneInput} onChange={e => setPhoneInput(e.target.value)} placeholder="Phone Number" type="tel" style={{ ...inputStyle, marginBottom: 14 }} />
-          <button onClick={handleSave}
-            style={{ width: '100%', height: 46, borderRadius: 12, background: saved ? '#22c55e' : BRAND, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 28, transition: 'background 0.2s' }}>
+          {/* ── Your Details ── */}
+          <h2 style={{ 
+            fontFamily: "'Poppins', sans-serif", 
+            fontSize: 17, 
+            fontWeight: 700, 
+            color: D.text, 
+            margin: '0 0 12px' 
+          }}>Your Details</h2>
+          <input 
+            className='searchInput' 
+            value={nameInput} 
+            onChange={e => setNameInput(e.target.value)} 
+            placeholder="Full Name" 
+            style={inputStyle}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+          <input 
+            className='searchInput' 
+            value={phoneInput} 
+            onChange={e => setPhoneInput(e.target.value)} 
+            placeholder="Phone Number" 
+            type="tel" 
+            style={{ ...inputStyle, marginBottom: 14 }}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+          <button 
+            onClick={handleSave}
+            style={{ 
+              width: '100%', 
+              height: 46, 
+              borderRadius: 12, 
+              background: saved ? '#e64a1a' : BRAND, 
+              color: '#fff', 
+              border: 'none', 
+              fontSize: 14, 
+              fontWeight: 700, 
+              cursor: 'pointer', 
+              marginBottom: 28, 
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              opacity: saved ? 0.5 : 1, 
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              if (!saved) {
+                e.currentTarget.style.background = '#e64a1a';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!saved) {
+                e.currentTarget.style.background = BRAND;
+              }
+            }}
+          >
             {saved ? '✓ Saved' : 'Save Details'}
           </button>
 
-          {/* Preferences */}
-          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 17, fontWeight: 700, color: D.text, margin: '0 0 12px' }}>Preferences</h2>
+          {/* ── Preferences ── */}
+          <h2 style={{ 
+            fontFamily: "'Poppins', sans-serif", 
+            fontSize: 17, 
+            fontWeight: 700, 
+            color: D.text, 
+            margin: '0 0 12px' 
+          }}>Preferences</h2>
           <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
-            <button onClick={() => isDark && toggle()}
-              style={{ flex: 1, height: 48, borderRadius: 12, border: `2px solid ${BRAND}`, background: !isDark ? BRAND : D.card, color: !isDark ? '#fff' : BRAND, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button 
+              onClick={() => isDark && toggle()}
+              style={{ 
+                flex: 1, 
+                height: 48, 
+                borderRadius: 12, 
+                border: `2px solid ${BRAND}`, 
+                background: !isDark ? BRAND : D.card, 
+                color: !isDark ? '#fff' : BRAND, 
+                fontSize: 14, 
+                fontWeight: 600, 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: 8,
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Sun size={16} /> Light
             </button>
-            <button onClick={() => !isDark && toggle()}
-              style={{ flex: 1, height: 48, borderRadius: 12, border: `2px solid ${BRAND}`, background: isDark ? BRAND : D.card, color: isDark ? '#fff' : BRAND, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button 
+              onClick={() => !isDark && toggle()}
+              style={{ 
+                flex: 1, 
+                height: 48, 
+                borderRadius: 12, 
+                border: `2px solid ${BRAND}`, 
+                background: isDark ? BRAND : D.card, 
+                color: isDark ? '#fff' : BRAND, 
+                fontSize: 14, 
+                fontWeight: 600, 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: 8,
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Moon size={16} /> Dark
             </button>
           </div>
 
-          {/* Quick links */}
+          {/* ── Quick links ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-            <button onClick={() => router.push('/guest/tracking')}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 14, cursor: 'pointer', textAlign: 'left' }}>
+            <button 
+              onClick={() => router.push('/guest/tracking')}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                padding: '14px 16px', 
+                background: D.card, 
+                border: `1.5px solid ${D.border}`, 
+                borderRadius: 14, 
+                cursor: 'pointer', 
+                textAlign: 'left',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = D.border;
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = D.card;
+              }}
+            >
               <FileText size={18} color={BRAND} />
-              <span style={{ flex: 1, fontSize: 15, color: D.text, fontWeight: 500 }}>My Orders</span>
+              <span style={{ 
+                flex: 1, 
+                fontSize: 15, 
+                color: D.text, 
+                fontWeight: 500,
+                fontFamily: "'Poppins', sans-serif",
+              }}>My Orders</span>
               <ChevronRight size={16} color={D.muted} />
             </button>
-            <button onClick={() => router.push('/guest/favorites')}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: D.card, border: `1.5px solid ${D.border}`, borderRadius: 14, cursor: 'pointer', textAlign: 'left' }}>
+            <button 
+              onClick={() => router.push('/guest/favorites')}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                padding: '14px 16px', 
+                background: D.card, 
+                border: `1.5px solid ${D.border}`, 
+                borderRadius: 14, 
+                cursor: 'pointer', 
+                textAlign: 'left',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                e.currentTarget.style.borderColor = BRAND;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = D.border;
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = D.card;
+              }}
+            >
               <Heart size={18} color={BRAND} />
-              <span style={{ flex: 1, fontSize: 15, color: D.text, fontWeight: 500 }}>Favorites</span>
+              <span style={{ 
+                flex: 1, 
+                fontSize: 15, 
+                color: D.text, 
+                fontWeight: 500,
+                fontFamily: "'Poppins', sans-serif",
+              }}>Favorites</span>
               <ChevronRight size={16} color={D.muted} />
             </button>
           </div>
 
-          {/* Switch table button */}
-          <button onClick={handleSwitchTable}
+          {/* ── Switch table button ── */}
+          <button 
+            onClick={handleSwitchTable}
             style={{
               width: '100%',
               height: 48,
               borderRadius: 14,
               background: BRAND,
-              border: `1.5px solid ${BRAND}`,
+              border: 'none',
               color: '#fff',
               fontSize: 14,
               fontWeight: 600,
@@ -460,11 +665,19 @@ export default function ProfilePage() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
+              fontFamily: "'Poppins', sans-serif",
               transition: 'all 0.2s ease',
               boxShadow: `0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`,
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}, 0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = `0 4px 12px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#e04a1a';
+              e.currentTarget.style.background = '#e64a1a';
               e.currentTarget.style.transform = 'translateY(-1px)';
             }}
             onMouseLeave={(e) => {
@@ -491,6 +704,7 @@ export default function ProfilePage() {
           alignItems: 'center',
           justifyContent: 'center',
           padding: 20,
+          fontFamily: "'Poppins', sans-serif",
         }}>
           <button
             onClick={() => {
@@ -512,6 +726,20 @@ export default function ProfilePage() {
               cursor: 'pointer',
               color: '#fff',
               zIndex: 10,
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.3)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.25)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
             }}
           >
             <X size={24} />
@@ -531,7 +759,13 @@ export default function ProfilePage() {
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>
+              <h3 style={{ 
+                color: '#fff', 
+                fontSize: 18, 
+                fontWeight: 700, 
+                margin: 0,
+                fontFamily: "'Poppins', sans-serif",
+              }}>
                 Scan Table QR Code
               </h3>
             </div>
@@ -570,10 +804,46 @@ export default function ProfilePage() {
                   pointerEvents: 'none',
                   boxShadow: 'inset 0 0 30px rgba(255,87,35,0.1)',
                 }}>
-                  <div style={{ position: 'absolute', top: -2, left: -2, width: 20, height: 20, borderTop: '3px solid #ff5723', borderLeft: '3px solid #ff5723', borderRadius: '4px 0 0 0' }} />
-                  <div style={{ position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderTop: '3px solid #ff5723', borderRight: '3px solid #ff5723', borderRadius: '0 4px 0 0' }} />
-                  <div style={{ position: 'absolute', bottom: -2, left: -2, width: 20, height: 20, borderBottom: '3px solid #ff5723', borderLeft: '3px solid #ff5723', borderRadius: '0 0 0 4px' }} />
-                  <div style={{ position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderBottom: '3px solid #ff5723', borderRight: '3px solid #ff5723', borderRadius: '0 0 4px 0' }} />
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: -2, 
+                    left: -2, 
+                    width: 20, 
+                    height: 20, 
+                    borderTop: '3px solid #ff5723', 
+                    borderLeft: '3px solid #ff5723', 
+                    borderRadius: '4px 0 0 0' 
+                  }} />
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: -2, 
+                    right: -2, 
+                    width: 20, 
+                    height: 20, 
+                    borderTop: '3px solid #ff5723', 
+                    borderRight: '3px solid #ff5723', 
+                    borderRadius: '0 4px 0 0' 
+                  }} />
+                  <div style={{ 
+                    position: 'absolute', 
+                    bottom: -2, 
+                    left: -2, 
+                    width: 20, 
+                    height: 20, 
+                    borderBottom: '3px solid #ff5723', 
+                    borderLeft: '3px solid #ff5723', 
+                    borderRadius: '0 0 0 4px' 
+                  }} />
+                  <div style={{ 
+                    position: 'absolute', 
+                    bottom: -2, 
+                    right: -2, 
+                    width: 20, 
+                    height: 20, 
+                    borderBottom: '3px solid #ff5723', 
+                    borderRight: '3px solid #ff5723', 
+                    borderRadius: '0 0 4px 0' 
+                  }} />
                 </div>
 
                 {scanning && (
@@ -585,9 +855,18 @@ export default function ProfilePage() {
                     background: 'rgba(0,0,0,0.7)',
                     padding: '8px 16px',
                     borderRadius: 20,
+                    fontFamily: "'Poppins', sans-serif",
                   }}>
                     <span style={{ color: '#fff', fontSize: 12 }}>
-                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#4ade80', marginRight: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                      <span style={{ 
+                        display: 'inline-block', 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: '50%', 
+                        background: '#4ade80', 
+                        marginRight: 8, 
+                        animation: 'pulse 1.5s ease-in-out infinite' 
+                      }} />
                       Scanning...
                     </span>
                   </div>
@@ -602,7 +881,12 @@ export default function ProfilePage() {
                   borderRadius: 10,
                   textAlign: 'center',
                 }}>
-                  <p style={{ color: BRAND, fontSize: 13, margin: 0 }}>{scanError}</p>
+                  <p style={{ 
+                    color: BRAND, 
+                    fontSize: 13, 
+                    margin: 0,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>{scanError}</p>
                 </div>
               )}
 
@@ -613,7 +897,12 @@ export default function ProfilePage() {
                 borderRadius: 10,
                 textAlign: 'center',
               }}>
-                <p style={{ color: '#9CA3AF', fontSize: 12, margin: 0 }}>
+                <p style={{ 
+                  color: '#9CA3AF', 
+                  fontSize: 12, 
+                  margin: 0,
+                  fontFamily: "'Poppins', sans-serif",
+                }}>
                   Position the QR code in the center of the frame
                 </p>
               </div>
@@ -629,6 +918,13 @@ export default function ProfilePage() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
+        }
+        input::placeholder {
+          color: ${D.muted};
+          opacity: 0.7;
+        }
+        .searchInput:focus {
+          outline: none;
         }
       `}</style>
     </>

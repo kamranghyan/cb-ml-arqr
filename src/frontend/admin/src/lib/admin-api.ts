@@ -161,13 +161,118 @@ export async function fetchRestaurant(
   );
 }
 
-export async function createRestaurant(
-  payload: Omit<ApiRestaurant, 'restaurantId'>,
+/**
+ * Create a restaurant with optional logo and banner images.
+ * Uses JSON payload with logo/banner as base64 or separate upload.
+ */
+/**
+ * Create a restaurant with optional logo and banner images.
+ * Uses multipart/form-data to send everything in one request.
+ */
+// lib/admin-api.ts
+
+export async function createRestaurantWithFiles(
+  payload: any,
+  logoFile?: File | null,
+  bannerFile?: File | null,
 ): Promise<ApiRestaurant> {
-  return adminFetch<ApiRestaurant>('/restaurants', {
+  const token = await getValidIdToken();
+
+  const formData = new FormData();
+
+  // ── Required fields ──
+  formData.append('name', payload.name);
+  formData.append('timezone', payload.timezone);
+  formData.append('currencyCode', payload.currencyCode);
+
+  // ✅ Send address as JSON string (backend expects this)
+  formData.append('address', JSON.stringify({
+    street: payload.address?.street || 'N/A',
+    city: payload.address?.city || 'Karachi',
+    country: payload.address?.country || 'Pakistan',
+    postcode: payload.address?.postcode || '00000'
+  }));
+
+  formData.append('isActive', String(payload.isActive));
+
+  // ── Optional fields ──
+  if (payload.tagline) formData.append('tagline', payload.tagline);
+  if (payload.openingHours) formData.append('openingHours', payload.openingHours);
+  if (payload.deliveryNote) formData.append('deliveryNote', payload.deliveryNote);
+
+  // ✅ cuisineTags as JSON string
+  if (payload.cuisineTags?.length) {
+    formData.append('cuisineTags', JSON.stringify(payload.cuisineTags));
+  }
+
+  // ✅ socialMedia as JSON string
+  if (payload.socialMedia) {
+    const cleanSocialMedia: Record<string, string> = {};
+    Object.entries(payload.socialMedia).forEach(([key, value]) => {
+      if (typeof value === 'string' && value) {
+        cleanSocialMedia[key] = value;
+      }
+    });
+    formData.append('socialMedia', JSON.stringify(cleanSocialMedia));
+  }
+
+  if (payload.ratingValue !== null && payload.ratingValue !== undefined) {
+    formData.append('ratingValue', String(payload.ratingValue));
+  }
+  if (payload.ratingCount !== null && payload.ratingCount !== undefined) {
+    formData.append('ratingCount', String(payload.ratingCount));
+  }
+
+  // ── Files ──
+  if (logoFile) {
+    formData.append('logo', logoFile);
+  }
+  if (bannerFile) {
+    formData.append('banner', bannerFile);
+  }
+
+  // ── Debug logging ──
+  console.log('📤 FormData entries:');
+  for (const [key, value] of formData.entries()) {
+    if (value instanceof File) {
+      console.log(`   ${key}: File(${value.name}, ${value.size} bytes)`);
+    } else {
+      console.log(`   ${key}: ${value}`);
+    }
+  }
+
+  // ── Send request ──
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`/api/menu/restaurants`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    headers,
+    body: formData,
   });
+
+  const responseText = await res.text();
+  console.log('📥 Response Status:', res.status);
+  console.log('📥 Response Body:', responseText);
+
+  if (!res.ok) {
+    let errorMessage = `Create restaurant failed (${res.status})`;
+    try {
+      const errorData = JSON.parse(responseText);
+      errorMessage = errorData?.detail ||
+        errorData?.message ||
+        errorData?.error?.message ||
+        errorData?.error ||
+        responseText;
+    } catch {
+      errorMessage = responseText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  return JSON.parse(responseText);
 }
 
 export async function updateRestaurant(
@@ -423,8 +528,8 @@ export async function uploadRestaurantLogo(
       method: 'POST',
       headers: token
         ? {
-            Authorization: `Bearer ${token}`,
-          }
+          Authorization: `Bearer ${token}`,
+        }
         : {},
       body: form,
     }
@@ -454,8 +559,8 @@ export async function uploadRestaurantBanner(
       method: 'POST',
       headers: token
         ? {
-            Authorization: `Bearer ${token}`,
-          }
+          Authorization: `Bearer ${token}`,
+        }
         : {},
       body: form,
     }
@@ -468,6 +573,7 @@ export async function uploadRestaurantBanner(
 
   return res.json();
 }
+
 
 /**
  * Upload a category image. Field name must be `file`.

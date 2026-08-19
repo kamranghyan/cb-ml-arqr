@@ -31,7 +31,7 @@ const PLACEHOLDER_DELIVERY = 'Free Delivery';
 
 // ✅ Static fallback values
 const STATIC_RESTAURANT_NAME = 'Cheezious';
-const STATIC_TAGLINE = 'Fine Dining Experience';
+const STATIC_TAGLINE = '';
 const STATIC_IMAGE = '/images/menu/Restaurant-banner.avif';
 
 const CAT_EMOJI: Record<string, string> = {
@@ -57,6 +57,7 @@ function GuestContent() {
   // ✅ State with static fallback values
   const [restaurantImage, setRestaurantImage] = useState('');
   const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
+  const [tagline, setTagline] = useState(STATIC_TAGLINE); // ✅ New state for tagline
   const [zone, setZone] = useState('Main Hall');
   const [items, setItems] = useState<ApiMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +95,12 @@ function GuestContent() {
           // ✅ Use restaurant name from API
           if (restaurant.name?.trim()) {
             setRestName(restaurant.name.trim());
+          }
+
+          // ✅ Use description as the tagline when available
+          const description = (restaurant as RestaurantData & { description?: string }).description;
+          if (description?.trim()) {
+            setTagline(description.trim());
           }
 
           // ✅ Use restaurant banner from API
@@ -187,10 +194,10 @@ function GuestContent() {
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
-    text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280', input: '#222222',
+    text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280', input: '#242424',
   } : {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-    text: '#000000', muted: '#9D9D9D', sub: '#C4C4C4', input: '#FFFFFF',
+    text: '#000000', muted: '#6B6B6B', sub: '#9CA3AF', input: '#FFFFFF',
   };
 
   const filteredSearch = items.filter(i =>
@@ -202,6 +209,7 @@ function GuestContent() {
 
   // ✅ Display name: Restaurant Name or Static
   const displayName = restName || STATIC_RESTAURANT_NAME;
+  const displayTagline = tagline || STATIC_TAGLINE;
 
   function getSocialUrl(url?: string | null) {
     if (!url?.trim()) return null;
@@ -226,9 +234,9 @@ function GuestContent() {
     const icons: Record<string, string> = {
       instagram: '/images/social/instagram.png',
       facebook: '/images/social/facebook.png',
-      youtube: '/images/social/x.png',
+      youtube: '/images/social/youtube.png',
       linkedin: '/images/social/linkedIn.png',
-      tiktok: '/images/social/x.png',
+      tiktok: '/images/social/tiktok.png',
       x: '/images/social/x.png',
     };
     //
@@ -282,7 +290,7 @@ function GuestContent() {
     <div style={{
       minHeight: '100dvh',
       background: D.bg,
-      fontFamily: "'DM Sans', sans-serif",
+      fontFamily: "'Poppins', sans-serif",
       maxWidth: 480,
       margin: '0 auto',
       display: 'flex',
@@ -309,7 +317,7 @@ function GuestContent() {
           backgroundRepeat: 'no-repeat',
         }}>
           <p style={{
-            fontFamily: "'Baloo 2', sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             fontWeight: 800,
             fontSize: 32,
             color: '#fff',
@@ -329,13 +337,40 @@ function GuestContent() {
         {/* ── Restaurant info strip ────────────────────────────────────────── */}
         <div style={{ background: BRAND, padding: '20px 20px 22px', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontWeight: 800, fontSize: 23, color: '#fff', margin: '0 0 6px' }}>
+            <h1 style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontWeight: 800,
+              fontSize: 23,
+              color: '#fff',
+              margin: '0 0 4px'
+            }}>
               {displayName}
             </h1>
 
+            {/* ✅ Tagline - now shows below restaurant name and above address */}
+            {displayTagline && (
+              <p style={{
+                fontSize: 14,
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.95)',
+                margin: '0 0 6px',
+                fontStyle: 'italic',
+                fontFamily: "'Poppins', sans-serif",
+                letterSpacing: 0.3,
+              }}>
+                {displayTagline}
+              </p>
+            )}
+
             {/* ✅ Show address from API if available */}
             {restaurantData?.address && (
-              <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: '0 0 4px', lineHeight: 1.5 }}>
+              <p style={{
+                fontSize: 12.5,
+                color: 'rgba(255,255,255,0.92)',
+                margin: '0 0 4px',
+                lineHeight: 1.5,
+                fontFamily: "'Poppins', sans-serif",
+              }}>
                 {restaurantData.address.street}
                 {restaurantData.address.city && `, ${restaurantData.address.city}`}
                 {restaurantData.address.country && `, ${restaurantData.address.country}`}
@@ -345,7 +380,8 @@ function GuestContent() {
             <p style={{
               fontSize: 12.5,
               color: 'rgba(255,255,255,0.92)',
-              margin: '0 0 4px'
+              margin: '0 0 4px',
+              fontFamily: "'Poppins', sans-serif",
             }}>
               {
                 restaurantData?.cuisineTags?.length
@@ -354,7 +390,12 @@ function GuestContent() {
               }
             </p>
 
-            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.92)', margin: 0 }}>
+            <p style={{
+              fontSize: 12.5,
+              color: 'rgba(255,255,255,0.92)',
+              margin: 0,
+              fontFamily: "'Poppins', sans-serif",
+            }}>
               Open: {
                 restaurantData?.openingHours || PLACEHOLDER_HOURS
               }
@@ -406,15 +447,20 @@ function GuestContent() {
           <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 7, paddingTop: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Star size={13} fill="#fff" color="#fff" />
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}><span>
-                {
-                  restaurantData?.ratingValue
-                    ?
-                    `${restaurantData.ratingValue}/5 (${restaurantData.ratingCount ?? 0}+)`
-                    :
-                    PLACEHOLDER_RATING
-                }
-              </span></span>
+              <span style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                color: '#fff',
+                fontFamily: "'Poppins', sans-serif",
+              }}><span>
+                  {
+                    restaurantData?.ratingValue
+                      ?
+                      `${restaurantData.ratingValue}/5 (${restaurantData.ratingCount ?? 0}+)`
+                      :
+                      PLACEHOLDER_RATING
+                  }
+                </span></span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Image
@@ -430,7 +476,11 @@ function GuestContent() {
                 }}
               />
 
-              <span style={{ fontSize: 12.5, color: '#fff' }}>
+              <span style={{
+                fontSize: 12.5,
+                color: '#fff',
+                fontFamily: "'Poppins', sans-serif",
+              }}>
                 {restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY}
               </span>
             </div>
@@ -462,13 +512,26 @@ function GuestContent() {
                 color: D.text,
                 outline: 'none',
                 boxSizing: 'border-box',
-                fontFamily: "'DM Sans', sans-serif"
-
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
               }}
             />
             {search && (
               <button onClick={() => setSearch('')}
-                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: D.sub }}>
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: D.sub, transition: 'all 0.2s ease', outline: 'none', padding: '4px 8px', borderRadius: 6 }}
+                onFocus={(e) => {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 ✕
               </button>
             )}
@@ -493,7 +556,14 @@ function GuestContent() {
                     padding: '12px 16px',
                     textDecoration: 'none',
                     borderBottom: idx < arr.length - 1 ? `1px solid ${D.border}` : 'none',
-                    background: 'transparent'
+                    background: 'transparent',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
                   }}
                   onClick={() => setSearch('')}>
                   <div style={{
@@ -523,20 +593,54 @@ function GuestContent() {
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: D.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                    <p style={{ fontSize: 12, color: D.muted, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || 'Restaurant special'}</p>
+                    <p style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: D.text,
+                      margin: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>{item.name}</p>
+                    <p style={{
+                      fontSize: 12,
+                      color: D.muted,
+                      margin: '2px 0 0',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>{item.description || 'Restaurant special'}</p>
                   </div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: BRAND, flexShrink: 0 }}>Rs. {item.price.toLocaleString()}</span>
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: 800,
+                    color: BRAND,
+                    flexShrink: 0,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>Rs. {item.price.toLocaleString()}</span>
                 </Link>
               ))}
               {filteredSearch.length === 0 && (
                 <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, color: D.muted, margin: 0 }}>No items found for "{search}"</p>
+                  <p style={{
+                    fontSize: 13,
+                    color: D.muted,
+                    margin: 0,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>No items found for "{search}"</p>
                 </div>
               )}
               {filteredSearch.length > 6 && (
                 <Link href={`${menuUrl}&q=${encodeURIComponent(search)}`}
-                  style={{ display: 'block', padding: '12px 16px', textAlign: 'center', fontSize: 13, fontWeight: 700, color: BRAND, textDecoration: 'none', borderTop: `1px solid ${D.border}` }}
+                  style={{ display: 'block', padding: '12px 16px', textAlign: 'center', fontSize: 13, fontWeight: 700, color: BRAND, textDecoration: 'none', borderTop: `1px solid ${D.border}`, fontFamily: "'Poppins', sans-serif", transition: 'all 0.2s ease' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
                   onClick={() => setSearch('')}>
                   See all results →
                 </Link>
@@ -545,11 +649,48 @@ function GuestContent() {
           )}
 
           {/* Promo banner */}
-          <div style={{ borderRadius: 20, background: '#ffbca7', padding: '22px 20px', marginTop: 20, marginBottom: 24 }}>
-            <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 15, fontWeight: 600, color: '#3a1a10', margin: '0 0 6px' }}>Limited Time</p>
-            <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 800, color: BRAND, margin: '0 0 6px' }}>Special Today</p>
-            <p style={{ fontSize: 13.5, color: 'rgba(58,26,16,0.75)', margin: '0 0 16px' }}>Exclusive Table experience</p>
-            <Link href={menuUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: BRAND, color: '#fff', padding: '10px 20px', borderRadius: 24, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+          <div style={{ borderRadius: 20, background: isDark ? '#2A1A1A' : '#ffbca7', padding: '22px 20px', marginTop: 20, marginBottom: 24 }}>
+            <p style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontSize: 15,
+              fontWeight: 600,
+              color: isDark ? '#fbbf24' : '#3a1a10',
+              margin: '0 0 6px'
+            }}>Limited Time</p>
+            <p style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontSize: 26,
+              fontWeight: 800,
+              color: BRAND,
+              margin: '0 0 6px'
+            }}>Special Today</p>
+            <p style={{
+              fontSize: 13.5,
+              color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(58,26,16,0.75)',
+              margin: '0 0 16px',
+              fontFamily: "'Poppins', sans-serif",
+            }}>Exclusive Table experience</p>
+            <Link href={menuUrl} style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: BRAND,
+              color: '#fff',
+              padding: '10px 20px',
+              borderRadius: 24,
+              fontSize: 14,
+              fontWeight: 700,
+              textDecoration: 'none',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.2s ease',
+            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#e64a1a';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = BRAND;
+              }}
+            >
               Order Now <ChevronRight size={16} />
             </Link>
           </div>
@@ -557,7 +698,7 @@ function GuestContent() {
           {/* Categories */}
           <h2
             style={{
-              fontFamily: "'Baloo 2', sans-serif",
+              fontFamily: "'Poppins', sans-serif",
               fontSize: 22,
               fontWeight: 700,
               color: D.text,
@@ -603,6 +744,7 @@ function GuestContent() {
                       margin: 0,
                       fontSize: 13,
                       color: D.muted,
+                      fontFamily: "'Poppins', sans-serif",
                     }}
                   >
                     No menu categories available
@@ -638,6 +780,15 @@ function GuestContent() {
                           background: isDark
                             ? D.card2
                             : 'linear-gradient(135deg,#ffe4d8,#ffcbb3)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                          e.currentTarget.style.boxShadow = `0 4px 12px rgba(255,87,35,0.2)`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                          e.currentTarget.style.boxShadow = 'none';
                         }}
                       >
                         {cat.imageUrl ? (
@@ -683,6 +834,7 @@ function GuestContent() {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          fontFamily: "'Poppins', sans-serif",
                         }}
                       >
                         {cat.name}
@@ -695,7 +847,13 @@ function GuestContent() {
           </div>
 
           {/* Popular Today */}
-          <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: D.text, margin: '0 0 16px' }}>Popular Today</h2>
+          <h2 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 22,
+            fontWeight: 700,
+            color: D.text,
+            margin: '0 0 16px'
+          }}>Popular Today</h2>
 
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -707,8 +865,37 @@ function GuestContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {popular.map(item => (
                 <Link key={item.id} href={`/guest/menu/${item.id}?rid=${qrRid}&tid=${tid}`}
-                  style={{ display: 'flex', gap: 16, padding: 16, background: D.card, border: `1.5px solid ${BRAND}`, borderRadius: 20, textDecoration: 'none' }}>
-                  <div style={{ width: 100, height: 100, borderRadius: 14, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
+                  style={{
+                    display: 'flex',
+                    gap: 16,
+                    padding: 16,
+                    background: D.card,
+                    border: `1.5px solid ${BRAND}`,
+                    borderRadius: 20,
+                    textDecoration: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = `0 4px 16px ${isDark ? 'rgba(255,87,35,0.15)' : 'rgba(255,87,35,0.1)'}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{
+                    width: 100,
+                    height: 100,
+                    borderRadius: 14,
+                    background: D.card2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 40,
+                    overflow: 'hidden'
+                  }}>
                     {(item as any).imageUrl ? (
                       <Image
                         src={(item as any).imageUrl}
@@ -734,14 +921,79 @@ function GuestContent() {
                     )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 6px' }}>{item.name}</p>
-                    <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 16, fontWeight: 700, color: BRAND, margin: '0 0 6px' }}>Rs. {item.price.toLocaleString()}</p>
-                    <p style={{ fontSize: 13, color: D.text, margin: 0, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                    <p style={{
+                      fontFamily: "'Poppins', sans-serif",
+                      fontSize: 19,
+                      fontWeight: 700,
+                      color: D.text,
+                      margin: '0 0 6px'
+                    }}>{item.name}</p>
+                    <p style={{
+                      fontFamily: "'Poppins', sans-serif",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: BRAND,
+                      margin: '0 0 6px'
+                    }}>Rs. {item.price.toLocaleString()}</p>
+                    <p style={{
+                      fontSize: 13,
+                      color: D.text,
+                      margin: 0,
+                      lineHeight: 1.4,
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical' as const,
+                      fontFamily: "'Poppins', sans-serif",
+                    }}>
                       {item.description || 'Restaurant special'}
                     </p>
                   </div>
-                  <button onClick={e => { e.preventDefault(); addItem({ menuItemId: item.id, name: item.name, emoji: item.emoji ?? '🍽️', price: item.price, quantity: 1, options: {} }); }}
-                    style={{ width: 40, height: 40, borderRadius: '50%', background: BRAND, border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', alignSelf: 'flex-end', flexShrink: 0, boxShadow: '0 2px 8px rgba(255,87,35,0.35)' }}>
+                  <button
+                    onClick={e => {
+                      e.preventDefault();
+                      addItem({
+                        menuItemId: item.id,
+                        name: item.name,
+                        emoji: item.emoji ?? '🍽️',
+                        price: item.price,
+                        quantity: 1,
+                        options: {},
+                        imageUrl: (item as any).imageUrl || '',
+                      });
+                    }}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      background: BRAND,
+                      border: 'none',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      alignSelf: 'flex-end',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 8px rgba(255,87,35,0.35)',
+                      transition: 'all 0.2s ease',
+                      outline: 'none',
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3), 0 2px 8px rgba(255,87,35,0.35)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(255,87,35,0.35)';
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e64a1a';
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = BRAND;
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
                     <Plus size={18} />
                   </button>
                 </Link>
@@ -761,7 +1013,14 @@ function GuestContent() {
 export default function GuestLandingPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: '100dvh', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        minHeight: '100dvh',
+        background: '#111',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: "'Poppins', sans-serif",
+      }}>
         <Loader2 size={28} color="#ff5723" className="animate-spin" />
       </div>
     }>

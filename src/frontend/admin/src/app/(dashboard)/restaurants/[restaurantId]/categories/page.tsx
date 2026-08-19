@@ -611,6 +611,7 @@ export default function CategoriesPage() {
           modalPrimaryButton={modalPrimaryButton}
           primaryHandlers={primaryHandlers}
           ghostHandlers={ghostHandlers}
+          existingCategories={rows}
         />
       )}
 
@@ -666,6 +667,7 @@ function CategoryModal({
   modalPrimaryButton,
   primaryHandlers,
   ghostHandlers,
+  existingCategories,
 }: {
   restaurantId: string;
   edit?: ApiCategory;
@@ -681,6 +683,7 @@ function CategoryModal({
   modalPrimaryButton: React.CSSProperties;
   primaryHandlers: any;
   ghostHandlers: any;
+  existingCategories: ApiCategory[];
 }) {
   const [f, setF] = useState({
     name: edit?.name ?? '',
@@ -690,7 +693,42 @@ function CategoryModal({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(edit?.imageUrl ?? '');
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState('');
   const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  // ✅ Check for duplicate category name
+  const validateName = (name: string) => {
+    if (!name.trim()) {
+      setNameError('Category name is required');
+      return false;
+    }
+
+    const trimmedName = name.trim().toLowerCase();
+    const isDuplicate = existingCategories.some(cat => {
+      // If editing, exclude the current category from the check
+      if (edit && cat.categoryId === edit.categoryId) {
+        return false;
+      }
+      return cat.name.trim().toLowerCase() === trimmedName;
+    });
+
+    if (isDuplicate) {
+      setNameError(`Category "${name.trim()}" already exists. Please use a different name.`);
+      return false;
+    }
+
+    setNameError('');
+    return true;
+  };
+
+  const handleNameChange = (value: string) => {
+    set('name', value);
+    if (value.trim()) {
+      validateName(value);
+    } else {
+      setNameError('Category name is required');
+    }
+  };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     e.currentTarget.style.borderColor = BRAND;
@@ -700,9 +738,17 @@ function CategoryModal({
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     e.currentTarget.style.borderColor = colors.border;
     e.currentTarget.style.boxShadow = 'none';
+    if (f.name.trim()) {
+      validateName(f.name);
+    }
   };
 
   async function save() {
+    // Validate before saving
+    if (!validateName(f.name)) {
+      return;
+    }
+
     setSaving(true);
     try {
       if (edit) {
@@ -710,7 +756,7 @@ function CategoryModal({
         await updateCategory(
           edit.categoryId,
           {
-            name: f.name,
+            name: f.name.trim(),
             displayOrder: f.displayOrder,
             isActive: f.isActive,
           },
@@ -721,7 +767,7 @@ function CategoryModal({
       } else {
         await createCategory(
           {
-            name: f.name,
+            name: f.name.trim(),
             displayOrder: f.displayOrder,
             isActive: f.isActive,
           },
@@ -739,7 +785,7 @@ function CategoryModal({
     }
   }
 
-  const canSave = f.name.trim().length > 0;
+  const canSave = f.name.trim().length > 0 && !nameError;
 
   return (
     <div
@@ -841,7 +887,7 @@ function CategoryModal({
               style={{
                 width: '100%',
                 padding: '9px 12px',
-                border: `1.5px solid ${colors.border}`,
+                border: `1.5px solid ${nameError ? colors.danger : colors.border}`,
                 borderRadius: 10,
                 fontSize: 14,
                 fontFamily: "'Poppins', sans-serif",
@@ -853,10 +899,20 @@ function CategoryModal({
               }}
               value={f.name}
               placeholder="Burgers"
-              onChange={e => set('name', e.target.value)}
+              onChange={e => handleNameChange(e.target.value)}
               onFocus={handleFocus}
               onBlur={handleBlur}
             />
+            {nameError && (
+              <p style={{
+                fontSize: 12,
+                color: colors.danger,
+                margin: '4px 0 0',
+                fontFamily: "'Poppins', sans-serif",
+              }}>
+                {nameError}
+              </p>
+            )}
           </div>
 
           {/* ── Image Upload ── */}

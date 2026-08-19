@@ -1,13 +1,8 @@
 // src/app/api/menu/[...path]/route.ts  —  TENANT CONSOLE
-//
-// The company is whoever is signed in. Their token carries custom:tenant_id,
-// so nothing about the tenant is configured here — one build serves every
-// company that logs in.
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE
 
 /** Read (not verify) the token payload — the backend verifies it properly. */
 function parseJwt(token: string): Record<string, unknown> {
@@ -51,19 +46,8 @@ async function forward(req: NextRequest, path: string[]) {
     }
   }
 
-  // -----------------------------------------
-  // ROUTING — every route in menu_svc (including all four /upload/...
-  // endpoints) lives under /menus/ on the backend. There's no case where
-  // upload paths should be treated differently from any other menu_svc
-  // path — both need the same prefix. (Previously this branched on
-  // `isUpload` and skipped the prefix for upload paths specifically,
-  // which sent those requests to a URL the backend never registered.)
-  // -----------------------------------------
   const pathString = path.join('/');
-
-  const upstream =
-    `${API_BASE}/menus/${pathString}${req.nextUrl.search}`;
-  // -----------------------------------------
+  const upstream = `${API_BASE}/menus/${pathString}${req.nextUrl.search}`;
 
   const ct = req.headers.get('content-type') ?? '';
   const headers: Record<string, string> = {
@@ -87,8 +71,31 @@ async function forward(req: NextRequest, path: string[]) {
 
   if (!['GET', 'HEAD'].includes(req.method)) {
     if (ct.includes('multipart')) {
-      headers['Content-Type'] = ct;
-      init.body = await req.arrayBuffer();
+      // ✅ FIX: Use formData() instead of arrayBuffer()
+      const formData = await req.formData();
+      
+      // ✅ Create a new FormData to forward
+      const forwardFormData = new FormData();
+      
+      // Copy all fields
+      for (const [key, value] of formData.entries()) {
+        forwardFormData.append(key, value);
+      }
+      
+      // ✅ Don't set Content-Type header - let fetch set it with boundary
+      // Remove Content-Type from headers so fetch adds it with correct boundary
+      delete headers['Content-Type'];
+      
+      init.body = forwardFormData;
+      
+      console.log('📤 Forwarding FormData with fields:');
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`   ${key}: File(${value.name}, ${value.size} bytes)`);
+        } else {
+          console.log(`   ${key}: ${value}`);
+        }
+      }
     } else {
       headers['Content-Type'] = ct || 'application/json';
       init.body = await req.text();

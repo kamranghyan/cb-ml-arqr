@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronDown, Check, MapPin, CreditCard, Wallet, Smartphone, Shield, Lock } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Check, MapPin, CreditCard, Wallet, Smartphone, Shield, Lock, Clock } from 'lucide-react';
 import { useCartStore } from '@/lib/store';
 import { useGuestProfileStore } from '@/lib/guest-profile-store';
 import { useTheme } from '@/hooks/useTheme';
@@ -38,6 +38,9 @@ export default function CheckoutPage() {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [contactPhone, setContactPhone] = useState('');
 
+  // ✅ Pickup Time
+  const [pickupTime, setPickupTime] = useState('');
+
   // Card Details
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -51,6 +54,9 @@ export default function CheckoutPage() {
   const [placed, setPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [orderError, setOrderError] = useState('');
+
+  // ✅ State for preparation time from API
+  const [prepTime, setPrepTime] = useState('20-30 mins');
 
   // ── Logging Helper ──────────────────────────────────────────────────────────
   const log = (step: string, data: any) => {
@@ -113,6 +119,13 @@ export default function CheckoutPage() {
       setContactPhone(savedProfile.phone);
     }
 
+    // ✅ Set default pickup time to 20 minutes from now
+    const defaultPickup = new Date(Date.now() + 20 * 60000);
+    // Format: YYYY-MM-DDTHH:mm (for datetime-local input)
+    const formattedTime = defaultPickup.toISOString().slice(0, 16);
+    setPickupTime(formattedTime);
+    console.log('📋 Default pickup time set to:', formattedTime);
+
     console.log('═══════════════════════════════════════════════');
   }, []);
 
@@ -120,6 +133,7 @@ export default function CheckoutPage() {
   const showCardFields = paymentMethod === 'Card';
   const showWalletFields = paymentMethod === 'Digital Wallet';
   const showDeliveryFields = orderType === 'delivery';
+  const showPickupFields = orderType === 'pickup';
 
   // Card number formatting
   const formatCardNumber = (value: string) => {
@@ -151,241 +165,343 @@ export default function CheckoutPage() {
     setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4));
   };
 
-  const placeOrder = async () => {
-    console.log('═══════════════════════════════════════════════');
-    console.log('🔄 PLACE ORDER STARTED');
-    console.log('═══════════════════════════════════════════════');
+const placeOrder = async () => {
+  console.log('═══════════════════════════════════════════════');
+  console.log('🔄 PLACE ORDER STARTED');
+  console.log('═══════════════════════════════════════════════');
 
-    console.log('📋 Current state:');
-    console.log('   - Order Type:', orderType);
-    console.log('   - Table Number:', tableNumber);
-    console.log('   - Payment Method:', paymentMethod);
-    console.log('   - Full Name:', fullName);
-    console.log('   - Phone:', phone);
-    console.log('   - Notes:', notes);
-    console.log('   - Delivery Address:', deliveryAddress);
-    console.log('   - Contact Phone:', contactPhone);
+  if (!items.length) {
+    console.log('❌ Cart is empty, cannot place order');
+    setOrderError('Cart is empty');
+    return;
+  }
 
-    if (!items.length) {
-      console.log('❌ Cart is empty, cannot place order');
-      setOrderError('Cart is empty');
-      return;
+  setPlacing(true);
+  setOrderError('');
+
+  try {
+    const scope = getGuestScope();
+    console.log('📋 Guest Scope:', scope);
+
+    // ── 1. Get table ID for dine-in ──
+    let tableId = '';
+    if (orderType === 'dine_in') {
+      const sessionTid = sessionStorage.getItem('lm_tid');
+      tableId = sessionTid ?? `table-${tableNumber.padStart(2, '0')}`;
+      console.log('📋 Dine-in table ID:', tableId);
+    } else {
+      console.log('📋 Order type:', orderType, '- No table ID needed');
     }
 
-    console.log('📋 Items in cart:', items.length);
-    items.forEach((item, idx) => {
-      console.log(`   Item ${idx + 1}: ${item.name} x${item.quantity} = Rs.${item.price * item.quantity}`);
+    // ── 2. Calculate line items ──
+    console.log('📋 Calculating prices for items...');
+    const lineItems = items.map((item) => {
+      // ✅ FIX: Use BASE price (without size multiplier)
+      let unitPrice = item.price; // Base price from menu item
+      
+      // ❌ DO NOT apply size multiplier to unitPrice
+      // Size selection is for display/total calculation only
+      
+      // ✅ Add toppings total (add-ons are extra charges)
+      if (item.options?.toppingsTotal) {
+        unitPrice += item.options.toppingsTotal;
+      }
+
+      console.log(`   Item: ${item.name}`);
+      console.log(`      Base price: ${item.price}`);
+      console.log(`      Size multiplier: ${item.options?.sizeMultiplier || 1} (for display only)`);
+      console.log(`      Toppings total: ${item.options?.toppingsTotal || 0}`);
+      console.log(`      Final unit price (base + toppings): ${unitPrice}`);
+      console.log(`      Quantity: ${item.quantity}`);
+      console.log(`      Total: ${unitPrice * item.quantity}`);
+
+      return {
+        itemId: item.menuItemId,
+        name: item.name,
+        quantity: item.quantity,
+        unitPriceMinorUnits: Math.round(unitPrice * 100),
+        totalPriceMinorUnits: Math.round(unitPrice * item.quantity * 100),
+      };
     });
 
-    setPlacing(true);
-    setOrderError('');
+    const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
+    console.log('📋 Line items total:', lineItemsTotal / 100);
 
-    try {
-      const scope = getGuestScope();
-      console.log('📋 Guest Scope:', {
-        restaurantId: scope.restaurantId,
-      });
+    // ── 3. Build payload ──
+    const payload: any = {
+      restaurantId: scope.restaurantId,
+      currencyCode: 'PKR',
+      lineItems: lineItems,
+      totalAmountMinorUnits: lineItemsTotal,
+      orderType: orderType,
+      tableId: tableId,
+      customerName: fullName || null,
+      contactPhone: phone || null,
+      paymentMethod: paymentMethod,
+    };
 
-      // Get table ID - only for dine-in
-      let tableId = '';
-      if (orderType === 'dine_in') {
-        const sessionTid = sessionStorage.getItem('lm_tid');
-        tableId = sessionTid ?? `table-${tableNumber.padStart(2, '0')}`;
-        console.log('📋 Dine-in table ID from session:', sessionTid);
-        console.log('📋 Final table ID:', tableId);
-      } else {
-        console.log('📋 Order type:', orderType, '- No table ID needed');
+    // ── 4. Add order-type specific fields ──
+    if (orderType === 'dine_in') {
+      console.log('📋 Processing DINE-IN order');
+    } else if (orderType === 'pickup') {
+      console.log('📋 Processing PICKUP order');
+      if (!fullName.trim()) {
+        throw new Error('Full name is required for pickup orders');
       }
-
-      // Calculate prices with options
-      console.log('📋 Calculating prices for items...');
-      const lineItems = items.map((item, idx) => {
-        let unitPrice = item.price;
-        console.log(`   Item ${idx + 1}: ${item.name}`);
-        console.log(`      Base price: ${unitPrice}`);
-
-        if (item.options?.sizeMultiplier) {
-          const oldPrice = unitPrice;
-          unitPrice = item.price * item.options.sizeMultiplier;
-          console.log(`      Size multiplier: ${item.options.sizeMultiplier} → ${oldPrice} → ${unitPrice}`);
-        }
-        if (item.options?.toppingsTotal) {
-          const oldPrice = unitPrice;
-          unitPrice += item.options.toppingsTotal;
-          console.log(`      Toppings total: ${item.options.toppingsTotal} → ${oldPrice} → ${unitPrice}`);
-        }
-
-        const result = {
-          itemId: item.menuItemId || item.id,
-          name: item.name,
-          quantity: item.quantity,
-          unitPriceMinorUnits: Math.round(unitPrice * 100),
-          totalPriceMinorUnits: Math.round(unitPrice * item.quantity * 100),
-        };
-        console.log(`      Final: Rs.${unitPrice} × ${item.quantity} = Rs.${unitPrice * item.quantity}`);
-        console.log(`      Minor units: ${result.unitPriceMinorUnits} × ${item.quantity} = ${result.totalPriceMinorUnits}`);
-        return result;
-      });
-
-      const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
-      console.log('📋 Line items total:');
-      console.log(`   Minor units: ${lineItemsTotal}`);
-      console.log(`   Rs.: ${lineItemsTotal / 100}`);
-
-      // ✅ Build payload matching the schema
-      const payload: any = {
-        restaurantId: scope.restaurantId,
-        currencyCode: 'PKR',
-        lineItems: lineItems,
-        totalAmountMinorUnits: lineItemsTotal,
-        orderType: orderType,
-        tableId: tableId,
-      };
-
-      console.log('📋 Basic payload:');
-      console.log(`   restaurantId: ${payload.restaurantId}`);
-      console.log(`   currencyCode: ${payload.currencyCode}`);
-      console.log(`   totalAmountMinorUnits: ${payload.totalAmountMinorUnits}`);
-      console.log(`   orderType: ${payload.orderType}`);
-      console.log(`   tableId: ${payload.tableId}`);
-      console.log(`   lineItemsCount: ${payload.lineItems.length}`);
-
-      // Add delivery fields if order type is delivery
-      if (orderType === 'delivery') {
-        console.log('📋 Processing delivery order...');
-        if (!deliveryAddress.trim()) {
-          console.log('❌ Delivery address missing');
-          throw new Error('Delivery address is required');
-        }
-        if (!contactPhone.trim()) {
-          console.log('❌ Contact phone missing');
-          throw new Error('Contact phone is required for delivery');
-        }
-        payload.deliveryAddress = deliveryAddress.trim();
-        payload.contactPhone = contactPhone.trim();
-        console.log(`   deliveryAddress: ${payload.deliveryAddress}`);
-        console.log(`   contactPhone: ${payload.contactPhone}`);
+      if (!phone.trim()) {
+        throw new Error('Phone number is required for pickup orders');
       }
-
-      // Add notes if provided
-      if (notes.trim()) {
-        payload.notes = notes.trim();
-        console.log(`   notes: ${payload.notes}`);
+      if (!pickupTime) {
+        throw new Error('Pickup time is required');
       }
-
-      // Add payment method info
-      payload.paymentMethod = paymentMethod;
-      console.log(`   paymentMethod: ${payload.paymentMethod}`);
-
-      if (paymentMethod === 'Card' && cardNumber) {
-        payload.cardLast4 = cardNumber.slice(-4);
-        console.log(`   cardLast4: ${payload.cardLast4}`);
+      payload.customerName = fullName.trim();
+      payload.contactPhone = phone.trim();
+      const pickupDate = new Date(pickupTime);
+      payload.pickupTime = pickupDate.toISOString();
+      console.log(`   pickupTime: ${payload.pickupTime}`);
+    } else if (orderType === 'delivery') {
+      console.log('📋 Processing DELIVERY order');
+      if (!deliveryAddress.trim()) {
+        throw new Error('Delivery address is required');
       }
-
-      if (paymentMethod === 'Digital Wallet' && walletProvider) {
-        payload.walletProvider = walletProvider;
-        console.log(`   walletProvider: ${payload.walletProvider}`);
+      if (!contactPhone.trim()) {
+        throw new Error('Contact phone is required for delivery');
       }
-
-      console.log('═══════════════════════════════════════════════');
-      console.log('📦 FINAL ORDER PAYLOAD:');
-      console.log(JSON.stringify(payload, null, 2));
-      console.log('═══════════════════════════════════════════════');
-
-      console.log('📡 Sending request to /api/orders...');
-      console.log(`   Headers: x-tenant-id: ${scope.restaurantId}`);
-
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': scope.restaurantId,
-        },
-        body: JSON.stringify(payload)
-      });
-
-      console.log(`📡 Response status: ${res.status}`);
-      console.log(`📡 Response status text: ${res.statusText}`);
-      console.log(`📡 Response ok: ${res.ok}`);
-
-      const data = await res.json();
-      console.log('📦 ORDER RESPONSE:');
-      console.log(JSON.stringify(data, null, 2));
-      console.log('═══════════════════════════════════════════════');
-
-      if (!res.ok) {
-        const errorMsg = data?.error || data?.message || `Error ${res.status}`;
-        console.log(`❌ Order failed: ${errorMsg}`);
-        if (data?.detail) {
-          console.log(`   Detail: ${data.detail}`);
-        }
-        throw new Error(errorMsg);
-      }
-
-      console.log('✅ Order placed successfully!');
-      console.log(`📋 Order ID: ${data.orderId}`);
-      console.log(`📋 Status: ${data.status}`);
-      if (data.stepFunctionsExecutionArn) {
-        console.log(`📋 Execution ARN: ${data.stepFunctionsExecutionArn}`);
-      }
-
-      if (fullName.trim()) {
-        savedProfile.setFullName(fullName.trim());
-        console.log('📋 Saved full name to profile');
-      }
-      if (phone.trim()) {
-        savedProfile.setPhone(phone.trim());
-        console.log('📋 Saved phone to profile');
-      }
-
-      setOrderId(data.orderId ?? '');
-      clearCart();
-      setPlaced(true);
-      console.log('✅ Cart cleared, redirecting to success screen');
-
-    } catch (err: any) {
-      console.log('❌ ORDER ERROR:');
-      console.log(`   Error: ${err}`);
-      console.log(`   Message: ${err?.message}`);
-      console.log(`   Stack: ${err?.stack}`);
-      console.log('═══════════════════════════════════════════════');
-      setOrderError(err?.message ?? 'Failed to place order.');
-    } finally {
-      setPlacing(false);
-      console.log('🔄 Place order completed (placing = false)');
+      payload.deliveryAddress = deliveryAddress.trim();
+      payload.contactPhone = contactPhone.trim();
+      payload.deliveryFeeMinorUnits = 0;
     }
-  };
+
+    // ── 5. Add notes if provided ──
+    if (notes.trim()) {
+      payload.notes = notes.trim();
+    }
+
+    // ── 6. Add payment method info ──
+    if (paymentMethod === 'Card' && cardNumber) {
+      payload.cardLast4 = cardNumber.slice(-4);
+    }
+    if (paymentMethod === 'Digital Wallet' && walletProvider) {
+      payload.walletProvider = walletProvider;
+    }
+
+    console.log('═══════════════════════════════════════════════');
+    console.log('📦 FINAL ORDER PAYLOAD:');
+    console.log(JSON.stringify(payload, null, 2));
+    console.log('═══════════════════════════════════════════════');
+
+    // ── 7. Call guest orders API ──
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const errorMsg = data?.error || data?.message || `Error ${res.status}`;
+      console.log(`❌ Order failed: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    console.log('✅ Order placed successfully!');
+    console.log(`📋 Order ID: ${data.orderId}`);
+
+    // ── 8. Get prep time ──
+    let prepTimeValue = '20-30 mins';
+    if (data.prepTime) {
+      prepTimeValue = data.prepTime;
+    } else if (data.estimatedTime) {
+      prepTimeValue = data.estimatedTime;
+    } else {
+      try {
+        const menuRes = await fetch(`/api/menu/restaurants/${scope.restaurantId}/items`, {
+          headers: { 'x-tenant-id': scope.restaurantId }
+        });
+        if (menuRes.ok) {
+          const menuData = await menuRes.json();
+          const prepTimeMap: Record<string, number> = {};
+          menuData.items?.forEach((item: any) => {
+            prepTimeMap[item.itemId] = item.prepTime || 20;
+          });
+          let maxPrepTime = 0;
+          items.forEach(cartItem => {
+            const prepTime = prepTimeMap[cartItem.menuItemId] || 20;
+            if (prepTime > maxPrepTime) maxPrepTime = prepTime;
+          });
+          prepTimeValue = `${maxPrepTime}-${maxPrepTime + 5} mins`;
+        }
+      } catch (menuErr) {
+        console.log('⚠️ Could not fetch prep time, using default');
+      }
+    }
+    setPrepTime(prepTimeValue);
+
+    // ── 9. Save profile and clear cart ──
+    if (fullName.trim()) {
+      savedProfile.setFullName(fullName.trim());
+    }
+    if (phone.trim()) {
+      savedProfile.setPhone(phone.trim());
+    }
+
+    setOrderId(data.orderId ?? '');
+    clearCart();
+    setPlaced(true);
+
+  } catch (err: any) {
+    console.log('❌ ORDER ERROR:', err);
+    setOrderError(err?.message ?? 'Failed to place order.');
+  } finally {
+    setPlacing(false);
+  }
+};
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)', selected: "rgba(255, 87, 35, 0.12)",
     text: '#F5F0E8', muted: '#9CA3AF', placeholder: '#6B7280',
   } : {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
-    text: '#000000', muted: '#6B6B6B', placeholder: '#6B6B6B',
+    text: '#000000', muted: '#6B6B6B', placeholder: '#888888',
   };
 
   // ── Success screen ───────────────────────────────────────────────────────────
   if (placed) return (
-    <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 32px 100px', textAlign: 'center' }}>
-        <div style={{ width: 130, height: 130, borderRadius: '50%', background: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
+    <div style={{
+      minHeight: '100dvh',
+      background: D.bg,
+      fontFamily: "'Poppins', sans-serif",
+      maxWidth: 480,
+      margin: '0 auto',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <GuestTopBar />
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 32px 100px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          width: 130,
+          height: 130,
+          borderRadius: '50%',
+          background: BRAND,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 32
+        }}>
           <Check size={62} color="#fff" strokeWidth={3} />
         </div>
-        <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 30, fontWeight: 700, color: BRAND, margin: '0 0 32px', lineHeight: 1.25 }}>
+        <h1 style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: 30,
+          fontWeight: 700,
+          color: BRAND,
+          margin: '0 0 32px',
+          lineHeight: 1.25
+        }}>
           Order Placed Successfully!
         </h1>
-        <p style={{ fontSize: 16, color: BRAND, margin: '0 0 4px' }}>Order ID</p>
-        <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: D.text, margin: '0 0 28px' }}>
+        <p style={{
+          fontSize: 16,
+          color: BRAND,
+          margin: '0 0 4px',
+          fontFamily: "'Poppins', sans-serif",
+        }}>Order ID</p>
+        <p style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: 22,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 28px'
+        }}>
           #{orderId ? orderId.slice(0, 8).toUpperCase() : '—'}
         </p>
-        <p style={{ fontSize: 16, color: BRAND, margin: '0 0 4px' }}>Estimated Time</p>
-        <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 22, fontWeight: 700, color: D.text, margin: '0 0 40px' }}>20–30 mins</p>
-        <button onClick={() => router.push('/guest/tracking')}
-          style={{ width: '100%', height: 56, borderRadius: 16, background: BRAND, color: '#fff', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontSize: 18, fontWeight: 700, cursor: 'pointer', marginBottom: 20 }}>
+        <p style={{
+          fontSize: 16,
+          color: BRAND,
+          margin: '0 0 4px',
+          fontFamily: "'Poppins', sans-serif",
+        }}>Estimated Time</p>
+        <p style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: 22,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 40px'
+        }}>
+          {prepTime}
+        </p>
+
+        <button
+          onClick={() => router.push('/guest/tracking')}
+          style={{
+            width: '100%',
+            height: 56,
+            borderRadius: 16,
+            background: BRAND,
+            color: '#fff',
+            border: 'none',
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 18,
+            fontWeight: 700,
+            cursor: 'pointer',
+            marginBottom: 20,
+            transition: 'all 0.2s ease',
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#e64a1a';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = BRAND;
+          }}
+        >
           Track Order
         </button>
-        <button onClick={() => router.push('/guest/menu')}
-          style={{ background: 'none', border: 'none', fontSize: 16, fontWeight: 600, color: D.text, cursor: 'pointer' }}>
+        <button
+          onClick={() => router.push('/guest/menu')}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: 16,
+            fontWeight: 600,
+            color: D.text,
+            cursor: 'pointer',
+            fontFamily: "'Poppins', sans-serif",
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            padding: '4px 8px',
+            borderRadius: 8,
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = BRAND;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = D.text;
+          }}
+        >
           Back to Menu
         </button>
       </div>
@@ -395,26 +511,96 @@ export default function CheckoutPage() {
 
   // ── Checkout form ────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100dvh', background: D.bg, fontFamily: "'DM Sans',sans-serif", maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      minHeight: '100dvh',
+      background: D.bg,
+      fontFamily: "'Poppins', sans-serif",
+      maxWidth: 480,
+      margin: '0 auto',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
       <GuestTopBar />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 124px' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '20px 0 28px' }}>
-          <button onClick={() => router.back()} style={{ position: 'absolute', left: 0, background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex' }} aria-label="Back">
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          padding: '20px 0 28px'
+        }}>
+          <button
+            onClick={() => router.back()}
+            style={{
+              position: 'absolute',
+              left: 0,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: BRAND,
+              padding: 4,
+              display: 'flex',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              borderRadius: 8,
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            aria-label="Back"
+          >
             <ChevronLeft size={28} strokeWidth={2.5} />
           </button>
-          <h1 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 24, fontWeight: 700, color: BRAND, margin: 0 }}>Checkout</h1>
+          <h1 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 24,
+            fontWeight: 700,
+            color: BRAND,
+            margin: 0
+          }}>Checkout</h1>
         </div>
 
         {/* Order Type */}
-        <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Order Type</h2>
+        <h2 style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: 19,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 14px'
+        }}>Order Type</h2>
         <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
           {ORDER_TYPES.map(t => {
             const selected = orderType === t;
             return (
-              <button key={t} onClick={() => setOrderType(t)}
-                style={{ flex: 1, height: 56, borderRadius: 14, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, color: selected ? '#fff' : BRAND, fontSize: 15, fontWeight: 500, cursor: 'pointer' }}>
+              <button
+                key={t}
+                onClick={() => setOrderType(t)}
+                style={{
+                  flex: 1,
+                  height: 56,
+                  borderRadius: 14,
+                  border: `2px solid ${BRAND}`,
+                  background: selected ? BRAND : D.card,
+                  color: selected ? '#fff' : BRAND,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  fontFamily: "'Poppins', sans-serif",
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 {ORDER_TYPE_LABELS[t]}
               </button>
             );
@@ -425,7 +611,7 @@ export default function CheckoutPage() {
         {showTableNumber && (
           <>
             <h2 style={{
-              fontFamily: "'Baloo 2', sans-serif",
+              fontFamily: "'Poppins', sans-serif",
               fontSize: 19,
               fontWeight: 700,
               color: D.text,
@@ -455,6 +641,7 @@ export default function CheckoutPage() {
                   color: D.text,
                   fontSize: 17,
                   fontWeight: 500,
+                  fontFamily: "'Poppins', sans-serif",
                 }}>
                   Table {tableNumber}
                 </span>
@@ -463,11 +650,77 @@ export default function CheckoutPage() {
           </>
         )}
 
+        {/* ✅ Pickup Fields */}
+        {showPickupFields && (
+          <>
+            <h2 style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontSize: 19,
+              fontWeight: 700,
+              color: D.text,
+              margin: '0 0 14px'
+            }}>
+              Pickup Details
+            </h2>
+            <div style={{
+              position: 'relative',
+              marginBottom: 12,
+            }}>
+              <Clock size={20} style={{
+                position: 'absolute',
+                left: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: D.muted,
+                pointerEvents: 'none',
+                zIndex: 1,
+              }} />
+              <input
+                value={pickupTime}
+                onChange={e => setPickupTime(e.target.value)}
+                type="datetime-local"
+                className="checkout-input"
+                style={{
+                  width: '100%',
+                  height: 56,
+                  borderRadius: 14,
+                  border: `1.5px solid ${D.border}`,
+                  background: D.card,
+                  color: D.text,
+                  fontSize: 16,
+                  padding: '0 18px 0 44px',
+                  marginBottom: 0,
+                  boxSizing: 'border-box',
+                  fontFamily: "'Poppins', sans-serif",
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = BRAND;
+                  e.target.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = D.border;
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+            <p style={{
+              fontSize: 12,
+              color: D.muted,
+              margin: '0 0 28px',
+              fontFamily: "'Poppins', sans-serif",
+            }}>
+              Please select your preferred pickup time (minimum 20 minutes from now)
+            </p>
+          </>
+        )}
+
         {/* Delivery Fields */}
         {showDeliveryFields && (
           <>
             <h2 style={{
-              fontFamily: "'Baloo 2', sans-serif",
+              fontFamily: "'Poppins', sans-serif",
               fontSize: 19,
               fontWeight: 700,
               color: D.text,
@@ -491,11 +744,9 @@ export default function CheckoutPage() {
                 padding: '0 18px',
                 marginBottom: 12,
                 boxSizing: 'border-box',
-                fontFamily: "'DM Sans',sans-serif",
+                fontFamily: "'Poppins', sans-serif",
                 outline: 'none',
-                transition: 'border-color 0.2s ease',
-                // 🔥 Add placeholder color
-                ...(D.placeholder ? { '::placeholder': { color: D.placeholder, opacity: 0.7 } } : {})
+                transition: 'all 0.2s ease',
               }}
               onFocus={e => {
                 e.target.style.borderColor = BRAND;
@@ -523,9 +774,9 @@ export default function CheckoutPage() {
                 padding: '0 18px',
                 marginBottom: 28,
                 boxSizing: 'border-box',
-                fontFamily: "'DM Sans',sans-serif",
+                fontFamily: "'Poppins', sans-serif",
                 outline: 'none',
-                transition: 'border-color 0.2s ease',
+                transition: 'all 0.2s ease',
               }}
               onFocus={e => {
                 e.target.style.borderColor = BRAND;
@@ -541,7 +792,7 @@ export default function CheckoutPage() {
 
         {/* Customer Details */}
         <h2 style={{
-          fontFamily: "'Baloo 2', sans-serif",
+          fontFamily: "'Poppins', sans-serif",
           fontSize: 19,
           fontWeight: 700,
           color: D.text,
@@ -565,9 +816,9 @@ export default function CheckoutPage() {
             padding: '0 18px',
             marginBottom: 12,
             boxSizing: 'border-box',
-            fontFamily: "'DM Sans',sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             outline: 'none',
-            transition: 'border-color 0.2s ease',
+            transition: 'all 0.2s ease',
           }}
           onFocus={e => {
             e.target.style.borderColor = BRAND;
@@ -595,9 +846,9 @@ export default function CheckoutPage() {
             padding: '0 18px',
             marginBottom: 28,
             boxSizing: 'border-box',
-            fontFamily: "'DM Sans',sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             outline: 'none',
-            transition: 'border-color 0.2s ease',
+            transition: 'all 0.2s ease',
           }}
           onFocus={e => {
             e.target.style.borderColor = BRAND;
@@ -611,7 +862,7 @@ export default function CheckoutPage() {
 
         {/* Special Note */}
         <h2 style={{
-          fontFamily: "'Baloo 2', sans-serif",
+          fontFamily: "'Poppins', sans-serif",
           fontSize: 19,
           fontWeight: 700,
           color: D.text,
@@ -636,9 +887,9 @@ export default function CheckoutPage() {
             marginBottom: 28,
             resize: 'none',
             boxSizing: 'border-box',
-            fontFamily: "'DM Sans',sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             outline: 'none',
-            transition: 'border-color 0.2s ease',
+            transition: 'all 0.2s ease',
           }}
           onFocus={e => {
             e.target.style.borderColor = BRAND;
@@ -651,17 +902,22 @@ export default function CheckoutPage() {
         />
 
         {/* Payment Method */}
-        <h2 style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Payment Method</h2>
+        <h2 style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: 19,
+          fontWeight: 700,
+          color: D.text,
+          margin: '0 0 14px'
+        }}>Payment Method</h2>
         <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
           {PAYMENT_METHODS.map(m => {
             const selected = paymentMethod === m;
-            // 🔥 Disable Card and Digital Wallet
             const isDisabled = m === 'Card' || m === 'Digital Wallet';
             return (
               <button
                 key={m}
                 onClick={() => {
-                  if (isDisabled) return; // 🔥 Prevent click on disabled buttons
+                  if (isDisabled) return;
                   setPaymentMethod(m);
                 }}
                 style={{
@@ -676,7 +932,19 @@ export default function CheckoutPage() {
                   cursor: isDisabled ? 'not-allowed' : 'pointer',
                   opacity: isDisabled ? 0.4 : 1,
                   position: 'relative',
-                }}>
+                  fontFamily: "'Poppins', sans-serif",
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                }}
+                onFocus={(e) => {
+                  if (!isDisabled) {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                  }
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 {m}
                 {isDisabled && (
                   <span style={{
@@ -689,6 +957,7 @@ export default function CheckoutPage() {
                     padding: '1px 6px',
                     borderRadius: 10,
                     border: `1px solid ${D.border}`,
+                    fontFamily: "'Poppins', sans-serif",
                   }}>
                     Soon
                   </span>
@@ -698,35 +967,20 @@ export default function CheckoutPage() {
           })}
         </div>
 
-        {/* ── Card Payment UI (DISABLED) ── */}
-        {/* showCardFields && (
-          <div style={{
-            background: D.card,
-            border: `1.5px solid ${D.border}`,
-            borderRadius: 16,
-            padding: '20px',
-            marginBottom: 20,
-          }}>
-            // ... card fields
-          </div>
-        ) */}
-
-        {/* ── Digital Wallet UI (DISABLED) ── */}
-        {/* showWalletFields && (
-          <div style={{
-            background: D.card,
-            border: `1.5px solid ${D.border}`,
-            borderRadius: 16,
-            padding: '20px',
-            marginBottom: 20,
-          }}>
-            // ... wallet fields
-          </div>
-        ) */}
-
         {orderError && (
-          <div style={{ padding: '12px 14px', background: '#FFF0F0', border: '1px solid #FFD0D0', borderRadius: 12, margin: '12px 0' }}>
-            <p style={{ fontSize: 12, color: BRAND, margin: 0 }}>{orderError}</p>
+          <div style={{
+            padding: '12px 14px',
+            background: '#FFF0F0',
+            border: '1px solid #FFD0D0',
+            borderRadius: 12,
+            margin: '12px 0'
+          }}>
+            <p style={{
+              fontSize: 12,
+              color: BRAND,
+              margin: 0,
+              fontFamily: "'Poppins', sans-serif",
+            }}>{orderError}</p>
           </div>
         )}
 
@@ -737,16 +991,35 @@ export default function CheckoutPage() {
             width: '100%',
             height: 58,
             borderRadius: 16,
-            background: BRAND, // 🔥 Always BRAND color, even when loading
+            background: placing ? `rgba(255,87,35,0.6)` : BRAND,
             color: '#fff',
             border: 'none',
-            fontFamily: "'Baloo 2', sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             fontSize: 18,
             fontWeight: 700,
             cursor: placing ? 'not-allowed' : 'pointer',
             marginTop: 16,
             opacity: placing ? 0.7 : 1,
-            transition: 'opacity 0.2s ease',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            if (!placing) {
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onMouseEnter={(e) => {
+            if (!placing) {
+              e.currentTarget.style.background = '#e64a1a';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!placing) {
+              e.currentTarget.style.background = BRAND;
+            }
           }}
         >
           {placing
@@ -764,21 +1037,24 @@ export default function CheckoutPage() {
       </div>
       <BottomNav />
       <style>{`
-        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
         .checkout-input::placeholder {
-          color: ${D.muted};
-          opacity: 0.6;
-        }
-        [data-theme="dark"] .checkout-input::placeholder {
-          color: #9CA3AF;
+          color: ${D.placeholder};
           opacity: 0.7;
         }
-        [data-theme="light"] .checkout-input::placeholder {
-          color: #6B6B6B;
-          opacity: 0.7;
+        .checkout-input:focus {
+          outline: none;
+        }
+        input[type="datetime-local"] {
+          color-scheme: ${isDark ? 'dark' : 'light'};
+        }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+          filter: ${isDark ? 'invert(1)' : 'none'};
+          cursor: pointer;
         }
       `}</style>
-    </div >
+    </div>
   );
-
 }

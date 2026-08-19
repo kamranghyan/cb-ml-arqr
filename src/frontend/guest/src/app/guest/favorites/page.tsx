@@ -25,23 +25,23 @@ export default function FavoritesPage() {
     setHydrated(true);
   }, []);
 
-  const D = isDark
-    ? {
-      bg: '#111111',
-      card: '#1C1C1C',
-      card2: '#242424',
-      border: 'rgba(255,255,255,0.08)',
-      text: '#F5F0E8',
-      muted: '#9CA3AF',
-    }
-    : {
-      bg: '#FFFFFF',
-      card: '#FFFFFF',
-      card2: '#F5F5F5',
-      border: '#F0EBE6',
-      text: '#000000',
-      muted: '#6B6B6B',
-    };
+  const D = isDark ? {
+    bg: '#111111',
+    card: '#1C1C1C',
+    card2: '#242424',
+    border: 'rgba(255,255,255,0.08)',
+    text: '#F5F0E8',
+    muted: '#9CA3AF',
+    subtle: '#6B7280',
+  } : {
+    bg: '#FFFFFF',
+    card: '#FFFFFF',
+    card2: '#F5F5F5',
+    border: '#F0EBE6',
+    text: '#000000',
+    muted: '#6B6B6B',
+    subtle: '#9CA3AF',
+  };
 
   const handleAddToCart = (item: (typeof items)[number]) => {
     addItem({
@@ -66,15 +66,17 @@ export default function FavoritesPage() {
       style={{
         minHeight: '100dvh',
         background: D.bg,
-        fontFamily: "'DM Sans', sans-serif",
+        fontFamily: "'Poppins', sans-serif",
         maxWidth: 480,
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
+        transition: 'background 0.25s',
       }}
     >
       <GuestTopBar />
-      {/* Header */}
+      
+      {/* ── Header ── */}
       <div style={{ padding: '35px 20px 16px' }}>
         <div
           style={{
@@ -95,6 +97,15 @@ export default function FavoritesPage() {
               padding: 4,
               display: 'flex',
               alignItems: 'center',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              borderRadius: 8,
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
             }}
             aria-label="Back"
           >
@@ -102,7 +113,7 @@ export default function FavoritesPage() {
           </button>
           <h1
             style={{
-              fontFamily: "'Baloo 2', sans-serif",
+              fontFamily: "'Poppins', sans-serif",
               fontSize: 26,
               fontWeight: 700,
               color: BRAND,
@@ -114,7 +125,7 @@ export default function FavoritesPage() {
 
           <span
             style={{
-              fontFamily: "'Baloo 2', sans-serif",
+              fontFamily: "'Poppins', sans-serif",
               fontSize: 22,
               fontWeight: 700,
               color: BRAND,
@@ -125,7 +136,7 @@ export default function FavoritesPage() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* ── Content ── */}
       <div
         style={{
           flex: 1,
@@ -140,6 +151,7 @@ export default function FavoritesPage() {
               padding: '80px 0',
               color: D.muted,
               fontSize: 14,
+              fontFamily: "'Poppins', sans-serif",
             }}
           >
             Loading favorites...
@@ -167,6 +179,7 @@ export default function FavoritesPage() {
                 fontSize: 14,
                 marginTop: 16,
                 marginBottom: 0,
+                fontFamily: "'Poppins', sans-serif",
               }}
             >
               No favorites yet
@@ -174,10 +187,11 @@ export default function FavoritesPage() {
 
             <p
               style={{
-                color: D.muted,
+                color: D.subtle,
                 fontSize: 12,
                 marginTop: 4,
                 marginBottom: 0,
+                fontFamily: "'Poppins', sans-serif",
               }}
             >
               Tap the heart on any dish to save it here.
@@ -196,6 +210,21 @@ export default function FavoritesPage() {
                 fontSize: 14,
                 fontWeight: 700,
                 cursor: 'pointer',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#e64a1a';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = BRAND;
               }}
             >
               Browse Menu
@@ -219,7 +248,7 @@ export default function FavoritesPage() {
                   alignItems: 'center',
                 }}
               >
-                {/* Image */}
+                {/* ── Image ── */}
                 <button
                   type="button"
                   onClick={() => router.push(`/guest/menu/${item.id}`)}
@@ -238,6 +267,20 @@ export default function FavoritesPage() {
                     position: 'relative',
                     border: 'none',
                     padding: 0,
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
                   }}
                   aria-label={`View ${item.name}`}
                 >
@@ -255,11 +298,11 @@ export default function FavoritesPage() {
                       }}
                     />
                   ) : (
-                    <span>{item.emoji || '🍽️'}</span>
+                    <span style={{ fontSize: 34 }}>{item.emoji || '🍽️'}</span>
                   )}
                 </button>
 
-                {/* Details */}
+                {/* ── Details ── */}
                 <button
                   type="button"
                   onClick={() => router.push(`/guest/menu/${item.id}`)}
@@ -275,7 +318,7 @@ export default function FavoritesPage() {
                 >
                   <p
                     style={{
-                      fontFamily: "'Baloo 2', sans-serif",
+                      fontFamily: "'Poppins', sans-serif",
                       fontSize: 17,
                       fontWeight: 600,
                       color: BRAND,
@@ -290,7 +333,7 @@ export default function FavoritesPage() {
 
                   <p
                     style={{
-                      fontFamily: "'Baloo 2', sans-serif",
+                      fontFamily: "'Poppins', sans-serif",
                       fontSize: 15,
                       fontWeight: 700,
                       color: D.text,
@@ -301,7 +344,7 @@ export default function FavoritesPage() {
                   </p>
                 </button>
 
-                {/* Add to cart */}
+                {/* ── Add to cart ── */}
                 <button
                   type="button"
                   onClick={() => handleAddToCart(item)}
@@ -317,13 +360,29 @@ export default function FavoritesPage() {
                     justifyContent: 'center',
                     cursor: 'pointer',
                     flexShrink: 0,
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#e64a1a';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = BRAND;
+                    e.currentTarget.style.transform = 'scale(1)';
                   }}
                   aria-label={`Add ${item.name} to cart`}
                 >
                   <Plus size={17} />
                 </button>
 
-                {/* Remove favorite */}
+                {/* ── Remove favorite ── */}
                 <button
                   type="button"
                   onClick={() => handleRemoveFavorite(item.id)}
@@ -337,6 +396,21 @@ export default function FavoritesPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                    borderRadius: 6,
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
                   }}
                   aria-label={`Remove ${item.name} from favorites`}
                 >

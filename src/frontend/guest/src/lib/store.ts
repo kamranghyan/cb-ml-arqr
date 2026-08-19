@@ -31,7 +31,23 @@ export const useCartStore = create<CartStore>((set, get) => ({
 
   addItem: (item) => {
     const id = `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    set((s) => ({ items: [...s.items, { ...item, id }] }));
+    // Check if item already exists with same options
+    set((s) => {
+      const existing = s.items.find(
+        (i) => i.menuItemId === item.menuItemId && 
+        JSON.stringify(i.options) === JSON.stringify(item.options)
+      );
+      if (existing) {
+        return {
+          items: s.items.map((i) =>
+            i.id === existing.id
+              ? { ...i, quantity: i.quantity + 1 }
+              : i
+          ),
+        };
+      }
+      return { items: [...s.items, { ...item, id }] };
+    });
   },
 
   removeItem: (id) =>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Volume2, VolumeX, RefreshCw, Wifi, WifiOff, Radio, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { formatTimer, timerColorClass, timerBarColor, playNewOrderBeep } from '@/lib/utils';
-import { fetchOrders, patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL } from '@/lib/orders-api';
+import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL } from '@/lib/orders-api';
 import type { KdsOrder, KdsStatus } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
@@ -85,14 +85,60 @@ export default function KitchenDisplayPage() {
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setApiState('loading');
     try {
-      const fresh = await fetchOrders(); const freshIds = new Set(fresh.map((o: any) => o.id));
-      const newOnes = fresh.filter((o: any) => !prevIds.current.has(o.id));
-      if (newOnes.length > 0 && prevIds.current.size > 0) newOnes.forEach((o: any) => { showToast(`🔔 New order #${o.id} — Table ${o.table}`); if (audio) playNewOrderBeep(); });
+      // ✅ FIX: Get restaurantId from auth user, NOT from guest-scope
+      const restaurantId = user?.restaurantId;
+      if (!restaurantId) {
+        console.warn('⚠️ No restaurantId found for current user');
+        setApiState('error');
+        setApiError('No restaurant assigned to this account');
+        return;
+      }
+      
+      console.log('🔍 KDS Fetching orders for restaurant:', restaurantId);
+      
+      // Use URL to avoid duplicate params
+      const url = new URL('/api/orders', window.location.origin);
+      url.searchParams.set('rid', restaurantId);
+      
+      console.log('📡 KDS Request URL:', url.toString());
+      
+      const res = await fetch(url.toString(), { cache: 'no-store' });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      
+      const data = await res.json();
+      console.log('✅ KDS API RAW RESPONSE:', data);
+      
+      const fresh = data.orders ?? [];
+      const freshIds = new Set<string>(fresh.map((o: any) => String(o.orderId)));
+      
+      const newOnes = fresh.filter((o: any) => !prevIds.current.has(o.orderId));
+      if (newOnes.length > 0 && prevIds.current.size > 0) {
+        newOnes.forEach((o: any) => { 
+          showToast(`🔔 New order #${o.orderId.slice(0, 6).toUpperCase()} — Table ${o.tableId ? 'Dine-in' : 'Walk-in'}`); 
+          if (audio) playNewOrderBeep(); 
+        });
+      }
       prevIds.current = freshIds;
-      setOrders(prev => { const m = new Map(prev.map(o => [o.id, o])); return fresh.map((o: any) => { const e = m.get(o.id); if (!e) return o; const er = STATUS_RANK[e.status] ?? 0; const fr = STATUS_RANK[o.status] ?? 0; const status = er > fr ? e.status : o.status; return { ...o, status, elapsedSeconds: e.elapsedSeconds, items: e.items }; }); });
+      
+      setOrders(prev => {
+        const m = new Map(prev.map(o => [o.id, o]));
+        return fresh.map((o: any) => {
+          // ✅ NORMALISE KDS ORDER
+          const kdsOrder = normaliseOrder(o);
+          const e = m.get(kdsOrder.id);
+          if (!e) return kdsOrder;
+          const er = STATUS_RANK[e.status] ?? 0;
+          const fr = STATUS_RANK[kdsOrder.status] ?? 0;
+          const status = er > fr ? e.status : kdsOrder.status;
+          return { ...kdsOrder, status, elapsedSeconds: e.elapsedSeconds, items: e.items };
+        });
+      });
       setApiState('live'); pollStart.current = Date.now();
-    } catch (err: any) { setApiError(err?.message ?? 'Failed'); setApiState('error'); }
-  }, [audio]);
+    } catch (err: any) { 
+      console.error('❌ KDS API ERROR:', err);
+      setApiError(err?.message ?? 'Failed'); setApiState('error'); 
+    }
+  }, [user]);
 
   useEffect(() => { loadOrders(); const id = setInterval(() => loadOrders(true), POLL_INTERVAL); return () => clearInterval(id); }, [loadOrders]);
 
@@ -107,7 +153,13 @@ export default function KitchenDisplayPage() {
 
   const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
 
-  const filtered = orders.filter(o => { if (filter === 'all') return o.status !== 'delivered'; if (filter === 'delivered') return o.status === 'delivered'; return o.status === filter; }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
+  // ✅ Remove tableId filter from KDS - show ALL orders
+  const filtered = orders.filter(o => { 
+    if (filter === 'all') return o.status !== 'delivered'; 
+    if (filter === 'delivered') return o.status === 'delivered'; 
+    return o.status === filter; 
+  }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
+  
   const counts = { pending: orders.filter(o => o.status === 'new').length, preparing: orders.filter(o => o.status === 'preparing').length, ready: orders.filter(o => o.status === 'ready').length };
   const [currentDate, setCurrentDate] = useState('')
   

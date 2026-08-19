@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false,
+  reactStrictMode: true,
   async rewrites() {
     return [
       // AR assets proxy only — menu uses the API route proxy for auth headers
