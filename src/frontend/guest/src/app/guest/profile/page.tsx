@@ -475,6 +475,7 @@ export default function ProfilePage() {
               outline: 'none',
               opacity: saved ? 0.5 : 1, 
             }}
+            //
             onFocus={(e) => {
               e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
             }}
