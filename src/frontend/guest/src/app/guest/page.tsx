@@ -5,11 +5,10 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Search, ChevronRight, Star, Truck, Plus, Loader2 } from 'lucide-react';
+import { Search, ChevronRight, Star, Plus, Loader2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import {
   fetchMenuItems,
-  fetchRestaurants,
   fetchCategories,
   type ApiMenuItem,
   type RestaurantData,
@@ -23,28 +22,14 @@ import Image from 'next/image';
 
 const BRAND = '#ff5723';
 
-// ── Placeholder data ───────────────────────────────────────────────────────────
+// Placeholder data
 const PLACEHOLDER_CUISINE_TAGS = ['Sandwiches', 'Chinese', 'Thai Seafood', 'Beverages'];
 const PLACEHOLDER_HOURS = '10:00AM – 11:00PM';
 const PLACEHOLDER_RATING = '4.8/5 (100+)';
 const PLACEHOLDER_DELIVERY = 'Free Delivery';
-
-// ✅ Static fallback values
 const STATIC_RESTAURANT_NAME = 'Cheezious';
 const STATIC_TAGLINE = '';
 const STATIC_IMAGE = '/images/menu/Restaurant-banner.avif';
-
-const CAT_EMOJI: Record<string, string> = {
-  all: '🍽️', starters: '🥗', mains: '🍽️', desserts: '🍰', beverages: '🥤',
-  drinks: '🥤', coffee: '☕', hot: '☕', iced: '🧊', pizza: '🍕',
-  burgers: '🍔', pasta: '🍝', seafood: '🐟', grill: '🔥', soup: '🍜',
-  bread: '🍞', cake: '🎂', other: '🍽️',
-};
-function getCatEmoji(cat: string) {
-  const c = cat.toLowerCase();
-  for (const [k, v] of Object.entries(CAT_EMOJI)) if (c.includes(k)) return v;
-  return '🍽️';
-}
 
 function GuestContent() {
   const params = useSearchParams();
@@ -54,17 +39,15 @@ function GuestContent() {
   const tid = params.get('tid') || '';
   const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
 
-  // ✅ State with static fallback values
   const [restaurantImage, setRestaurantImage] = useState('');
   const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
-  const [tagline, setTagline] = useState(STATIC_TAGLINE); // ✅ New state for tagline
+  const [tagline, setTagline] = useState(STATIC_TAGLINE);
   const [zone, setZone] = useState('Main Hall');
   const [items, setItems] = useState<ApiMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const { addItem } = useCartStore();
   const [search, setSearch] = useState('');
-
 
   useEffect(() => {
     const n = parseInt(tableNum, 10);
@@ -80,30 +63,21 @@ function GuestContent() {
       return;
     }
 
-    // ✅ Fetch Restaurant Data
     const fetchRestaurantData = async () => {
       try {
         console.log('🏪 Fetching restaurant by ID:', rid);
-
         const restaurant = await fetchRestaurantById(rid);
-
         console.log('✅ Restaurant response:', restaurant);
 
         if (restaurant) {
           setRestaurantData(restaurant);
-
-          // ✅ Use restaurant name from API
           if (restaurant.name?.trim()) {
             setRestName(restaurant.name.trim());
           }
-
-          // ✅ Use description as the tagline when available
           const description = (restaurant as RestaurantData & { description?: string }).description;
           if (description?.trim()) {
             setTagline(description.trim());
           }
-
-          // ✅ Use restaurant banner from API
           if (restaurant.bannerUrl?.trim()) {
             setRestaurantImage(restaurant.bannerUrl.trim());
           }
@@ -120,12 +94,10 @@ function GuestContent() {
           fetchCategories(rid),
         ]);
 
-        // Only active items should make a category visible
         const activeItems = itemsData.filter(
           (item) => item.status !== 'inactive'
         );
 
-        // Get category IDs/names that actually contain items
         const usedCategoryIds = new Set(
           activeItems
             .map((item) => item.categoryId?.trim())
@@ -138,12 +110,9 @@ function GuestContent() {
             .filter(Boolean)
         );
 
-        // Only keep categories that have at least one item
         const visibleCategories = categoriesData.filter((category) => {
           const categoryId = category.categoryId?.trim() || '';
-
           const categoryName = category.name?.trim().toLowerCase();
-
           return (
             (categoryId && usedCategoryIds.has(categoryId)) ||
             (categoryName && usedCategoryNames.has(categoryName))
@@ -159,13 +128,11 @@ function GuestContent() {
 
       } catch (err) {
         console.error('❌ Failed to fetch menu data:', err);
-
         setItems([]);
         setCategories([]);
       }
     };
 
-    // ✅ Fetch both in parallel
     Promise.all([fetchRestaurantData(), fetchMenuData()])
       .finally(() => {
         console.log('✅ All data fetching complete!');
@@ -174,22 +141,8 @@ function GuestContent() {
 
   }, [qrRid, tid, tableNum]);
 
-
-
-  const isQrScan = params.has('rid') && params.has('tid');
   const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
-  const cats = categories.map(c => ({
-    id: c.categoryId,
-    name: c.name,
-    imageUrl: c.imageUrl,
-  }));
-
-  console.log("FINAL CATEGORIES:", categories);
-  console.log("ITEMS:", items);
-  console.log("CATEGORIES:", categories);
-
-  // Popular = first 4 items
   const popular = items.filter(i => i.status !== 'inactive').slice(0, 7);
 
   const D = isDark ? {
@@ -205,21 +158,18 @@ function GuestContent() {
     (i.name.toLowerCase().includes(search.toLowerCase()) ||
       (i.description ?? '').toLowerCase().includes(search.toLowerCase()))
   );
-  const guestUrl = `/guest?rid=${qrRid}&tid=${tid}`;
 
-  // ✅ Display name: Restaurant Name or Static
   const displayName = restName || STATIC_RESTAURANT_NAME;
   const displayTagline = tagline || STATIC_TAGLINE;
 
   function getSocialUrl(url?: string | null) {
     if (!url?.trim()) return null;
-
     const value = url.trim();
-
     return /^https?:\/\//i.test(value)
       ? value
       : `https://${value}`;
   }
+
   function SocialIcon({
     platform,
     url,
@@ -228,7 +178,6 @@ function GuestContent() {
     url?: string | null;
   }) {
     const socialUrl = getSocialUrl(url);
-
     if (!socialUrl) return null;
 
     const icons: Record<string, string> = {
@@ -239,9 +188,8 @@ function GuestContent() {
       tiktok: '/images/social/tiktok.png',
       x: '/images/social/x.png',
     };
-    //
-    const icon = icons[platform];
 
+    const icon = icons[platform];
     if (!icon) return null;
 
     return (
@@ -299,9 +247,8 @@ function GuestContent() {
     }}>
       <GuestTopBar />
 
-      {/* Scrollable content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {/* ── Hero ────────────────────────────────────────────────────────────── */}
+        {/* Hero */}
         <div style={{
           position: 'relative',
           width: '100%',
@@ -310,8 +257,7 @@ function GuestContent() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundImage: `url(${restaurantData?.bannerUrl?.trim() || STATIC_IMAGE
-            })`,
+          backgroundImage: `url(${restaurantData?.bannerUrl?.trim() || STATIC_IMAGE})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
@@ -334,7 +280,7 @@ function GuestContent() {
           </p>
         </div>
 
-        {/* ── Restaurant info strip ────────────────────────────────────────── */}
+        {/* Restaurant info strip */}
         <div style={{ background: BRAND, padding: '20px 20px 22px', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{
@@ -347,7 +293,6 @@ function GuestContent() {
               {displayName}
             </h1>
 
-            {/* ✅ Tagline - now shows below restaurant name and above address */}
             {displayTagline && (
               <p style={{
                 fontSize: 14,
@@ -362,7 +307,6 @@ function GuestContent() {
               </p>
             )}
 
-            {/* ✅ Show address from API if available */}
             {restaurantData?.address && (
               <p style={{
                 fontSize: 12.5,
@@ -400,6 +344,7 @@ function GuestContent() {
                 restaurantData?.openingHours || PLACEHOLDER_HOURS
               }
             </p>
+
             {restaurantData?.socialMedia && (
               <div
                 style={{
@@ -411,35 +356,12 @@ function GuestContent() {
                   maxWidth: '100%',
                 }}
               >
-                <SocialIcon
-                  platform="instagram"
-                  url={restaurantData.socialMedia.instagram}
-                />
-
-                <SocialIcon
-                  platform="facebook"
-                  url={restaurantData.socialMedia.facebook}
-                />
-
-                <SocialIcon
-                  platform="youtube"
-                  url={restaurantData.socialMedia.youtube}
-                />
-
-                <SocialIcon
-                  platform="linkedin"
-                  url={restaurantData.socialMedia.linkedin}
-                />
-
-                <SocialIcon
-                  platform="tiktok"
-                  url={restaurantData.socialMedia.tiktok}
-                />
-
-                <SocialIcon
-                  platform="x"
-                  url={restaurantData.socialMedia.x}
-                />
+                <SocialIcon platform="instagram" url={restaurantData.socialMedia.instagram} />
+                <SocialIcon platform="facebook" url={restaurantData.socialMedia.facebook} />
+                <SocialIcon platform="youtube" url={restaurantData.socialMedia.youtube} />
+                <SocialIcon platform="linkedin" url={restaurantData.socialMedia.linkedin} />
+                <SocialIcon platform="tiktok" url={restaurantData.socialMedia.tiktok} />
+                <SocialIcon platform="x" url={restaurantData.socialMedia.x} />
               </div>
             )}
           </div>
@@ -452,15 +374,13 @@ function GuestContent() {
                 fontWeight: 700,
                 color: '#fff',
                 fontFamily: "'Poppins', sans-serif",
-              }}><span>
-                  {
-                    restaurantData?.ratingValue
-                      ?
-                      `${restaurantData.ratingValue}/5 (${restaurantData.ratingCount ?? 0}+)`
-                      :
-                      PLACEHOLDER_RATING
-                  }
-                </span></span>
+              }}>
+                {
+                  restaurantData?.ratingValue
+                    ? `${restaurantData.ratingValue}/5 (${restaurantData.ratingCount ?? 0}+)`
+                    : PLACEHOLDER_RATING
+                }
+              </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
               <Image
@@ -475,7 +395,6 @@ function GuestContent() {
                   display: 'block',
                 }}
               />
-
               <span style={{
                 fontSize: 12.5,
                 color: '#fff',
@@ -484,14 +403,11 @@ function GuestContent() {
                 {restaurantData?.deliveryNote || PLACEHOLDER_DELIVERY}
               </span>
             </div>
-
           </div>
-
         </div>
 
-        {/* ── Padded content ── //*/}
+        {/* Padded content */}
         <div style={{ padding: '20px 20px 0' }}>
-
           {/* Search */}
           <div style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: D.sub, pointerEvents: 'none', zIndex: 1 }} />
@@ -580,16 +496,16 @@ function GuestContent() {
                   }}>
                     {(item as any).imageUrl
                       ? <Image
-                        src={(item as any).imageUrl}
-                        alt={item.name}
-                        width={44}
-                        height={44}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover'
-                        }}
-                      />
+                          src={(item as any).imageUrl}
+                          alt={item.name}
+                          width={44}
+                          height={44}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
