@@ -1,4 +1,4 @@
-  /**
+/**
    * Orders API — KDS integration
    * All routes public — no auth required
    */
@@ -142,7 +142,7 @@
    * The orders proxy derives tenant + restaurant from this token, so every call
    * must carry it — the screen shows only the branch the user belongs to.
    */
-  async function authHeaders(): Promise<Record<string, string>> {
+  export async function authHeaders(): Promise<Record<string, string>> {
     try {
       const { getValidIdToken } = await import('@/lib/cognito');
       const token = await getValidIdToken();

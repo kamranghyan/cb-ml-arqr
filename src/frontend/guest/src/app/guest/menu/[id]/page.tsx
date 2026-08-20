@@ -325,38 +325,7 @@ export default function ItemDetailPage() {
               <ChevronLeft size={28} strokeWidth={2.5} />
             </button>
 
-            {/* ✅ Restaurant Logo Square Box (Fetched from API) */}
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
-                background: D.card2,
-                border: `1px solid ${D.border}`,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              {restaurantLogo ? (
-                <Image
-                  src={restaurantLogo}
-                  alt="Restaurant Logo"
-                  width={40}
-                  height={40}
-                  unoptimized
-                  style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-                />
-              ) : (
-                <span style={{ fontSize: 20 }}>🏠</span>
-              )}
-            </div>
           </div>
-
-        </div>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "20px" }}>
           {/* Title */}
           <h1 style={{
             fontFamily: "'Poppins', sans-serif",
@@ -365,6 +334,9 @@ export default function ItemDetailPage() {
             color: D.text,
             margin: 0,
             flex: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}>
             {item?.name}
           </h1>

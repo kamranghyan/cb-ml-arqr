@@ -4,11 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Volume2, VolumeX, RefreshCw, Wifi, WifiOff, Radio, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { formatTimer, timerColorClass, timerBarColor, playNewOrderBeep } from '@/lib/utils';
-import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL } from '@/lib/orders-api';
+import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL, connectWebSocket, authHeaders } from '@/lib/orders-api';
 import type { KdsOrder, KdsStatus } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { connectWebSocket } from '@/lib/orders-api';
 
 type Filter = 'all' | 'new' | 'preparing' | 'ready' | 'delivered';
 type WsState = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -45,6 +44,8 @@ export default function KitchenDisplayPage() {
   const prevIds = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const wsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioRef = useRef(audio);
+  useEffect(() => { audioRef.current = audio; }, [audio]);
 
   async function handleLogout() { setLoggingOut(true); await logout(); router.push('/login/kds'); }
 
@@ -69,7 +70,7 @@ export default function KitchenDisplayPage() {
           setOrders(prev => {
             const exists = prev.find(o => (o as any)._apiId === orderId || o.id === displayId);
             if (exists) { showToast(`📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`); return prev.map(o => ((o as any)._apiId === orderId || o.id === displayId) ? { ...o, status: kdsStatus } : o); }
-            else if (msg.lineItems || msg.items) { const n = normaliseOrder(msg); showToast(`🔔 WS: New order #${n.id} — Table ${n.table}`); if (audio) playNewOrderBeep(); return [n, ...prev]; }
+            else if (msg.lineItems || msg.items) { const n = normaliseOrder(msg); showToast(`🔔 WS: New order #${n.id} — Table ${n.table}`); if (audioRef.current) playNewOrderBeep(); return [n, ...prev]; }
             return prev;
           });
         }
@@ -77,7 +78,7 @@ export default function KitchenDisplayPage() {
     };
     ws.onerror = () => { setWsState('error'); addWsLog('✗ WebSocket error'); };
     ws.onclose = (e) => { setWsState('disconnected'); addWsLog(`✗ Disconnected (code ${e.code})`); if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRetryRef.current = setTimeout(connectWs, 5000); };
-  }, [audio]);
+  }, []);
 
   useEffect(() => { connectWs(); return () => { if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRef.current?.close(); }; }, [connectWs]);
   const wsSend = (p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } };
@@ -85,28 +86,21 @@ export default function KitchenDisplayPage() {
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setApiState('loading');
     try {
-      // ✅ FIX: Get restaurantId from auth user, NOT from guest-scope
-      const restaurantId = user?.restaurantId;
-      if (!restaurantId) {
-        console.warn('⚠️ No restaurantId found for current user');
+      // The proxy derives restaurantId from the signed-in user's token, server-side —
+      // this is just a friendlier early error for the "not linked to a branch" case.
+      if (!user?.restaurantId) {
         setApiState('error');
         setApiError('No restaurant assigned to this account');
         return;
       }
-      
-      console.log('🔍 KDS Fetching orders for restaurant:', restaurantId);
-      
-      // Use URL to avoid duplicate params
-      const url = new URL('/api/orders', window.location.origin);
-      url.searchParams.set('rid', restaurantId);
-      
-      console.log('📡 KDS Request URL:', url.toString());
-      
-      const res = await fetch(url.toString(), { cache: 'no-store' });
+
+      const res = await fetch('/api/orders', {
+        cache: 'no-store',
+        headers: await authHeaders(),   // was missing — every poll was 403ing without this
+      });
       if (!res.ok) throw new Error(`API ${res.status}`);
-      
+
       const data = await res.json();
-      console.log('✅ KDS API RAW RESPONSE:', data);
       
       const fresh = data.orders ?? [];
       const freshIds = new Set<string>(fresh.map((o: any) => String(o.orderId)));

@@ -145,30 +145,14 @@ export default function CartPage() {
       {/* ── Header: Arrow + Logo + Title + Edit ── */}
       <div style={{ padding: '35px 20px 25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: "20px" }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: "10px" }}>
             <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex', transition: 'all 0.2s ease', outline: 'none', borderRadius: 8 }}>
               <ChevronLeft size={28} strokeWidth={2.5} />
             </button>
+            <h1 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart</h1>
+            <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span>
 
-            {/* ✅ Restaurant Logo Square Box */}
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: D.card2, border: `1px solid ${D.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {restaurantLogo ? (
-                <Image src={restaurantLogo} alt="Logo" width={40} height={40} unoptimized style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
-              ) : (
-                <span style={{ fontSize: 20 }}>🏠</span>
-              )}
-            </div>
-
-            {/* <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, padding: 4, display: 'flex', transition: 'all 0.2s ease', outline: 'none', borderRadius: 8 }}>
-              <ChevronLeft size={20} strokeWidth={2.5} />
-            </button>
-<p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 16, fontWeight: 700, color: BRAND, margin: 0 }}>Menu detail</p> */}
           </div>
-
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-          <h1 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 26, fontWeight: 700, color: BRAND, margin: 0 }}>Your Cart<span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 22, fontWeight: 700, color: BRAND }}>({items.length})</span></h1>
-
           {items.length > 0 && (
             <button onClick={() => setEditMode(e => !e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, color: BRAND, transition: 'all 0.2s ease', outline: 'none', padding: '4px 8px', borderRadius: 8 }}>{editMode ? 'Done' : 'Edit'}</button>
           )}
