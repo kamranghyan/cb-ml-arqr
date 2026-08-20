@@ -4,14 +4,14 @@ app.api.v1.endpoints.tenants
 Tenant (company) management — platform admin only, except /tenants/me
 which a tenant owner uses to read its own record.
 
-GET    /auth/tenants           list all tenants                [admin]
-GET    /auth/tenants/me        my own tenant                   [tenant]
-GET    /auth/tenants/{id}      one tenant                      [admin]
-PATCH  /auth/tenants/{id}      suspend / activate / change plan[admin]
-DELETE /auth/tenants/{id}      delete tenant + its owner user  [admin]
+GET    /auth/tenants        list all tenants                 [admin]
+GET    /auth/tenants/me     my own tenant                    [tenant]
+GET    /auth/tenants/{id}   one tenant                       [admin]
+PATCH  /auth/tenants/{id}   suspend / activate               [admin]
+DELETE /auth/tenants/{id}   delete tenant + its owner user   [admin]
 
-GET    /auth/users             users of my tenant | all        [tenant|admin]
-DELETE /auth/users/{username}  delete a user                   [tenant|admin]
+GET    /auth/users          users of my tenant | all         [tenant|admin]
+DELETE /auth/users/{username}  delete a user                 [tenant|admin]
 """
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ async def get_tenant(
     return tenants.get(tenantId)
 
 
-@router.patch("/tenants/{tenantId}", summary="Update a tenant (suspend / plan)")
+@router.patch("/tenants/{tenantId}", summary="Update a tenant (suspend / activate)")
 async def update_tenant(
     tenantId: str,
     body: TenantUpdateBody,
@@ -126,7 +126,6 @@ async def list_users(
     user: Annotated[UserContext, Depends(require_admin_or_tenant)],
     cognito: Annotated[CognitoService, Depends(get_cognito_service)],
 ):
-    # A tenant owner sees only its own people; an admin sees everyone.
     scope = "" if user.is_admin() else user.tenant_id
     users = cognito.list_users(tenant_id=scope)
     return {"users": users, "count": len(users)}
@@ -138,7 +137,6 @@ async def delete_user(
     user: Annotated[UserContext, Depends(require_admin_or_tenant)],
     cognito: Annotated[CognitoService, Depends(get_cognito_service)],
 ):
-    # A tenant owner may only delete users belonging to its own tenant.
     if not user.is_admin():
         target = next(
             (u for u in cognito.list_users(tenant_id=user.tenant_id)
