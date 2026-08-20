@@ -10,6 +10,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1053.0",
     "clsx": "^2.1.1",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.383.0",
     "next": "^14.2.35",
     "qrcode": "^1.5.4",
