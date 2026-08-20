@@ -154,8 +154,3 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# =========================================================================
-# Shared Lambda Layers Vendors & Packages
-# =========================================================================
-src/lambdas/layers/shared_layer/python/
