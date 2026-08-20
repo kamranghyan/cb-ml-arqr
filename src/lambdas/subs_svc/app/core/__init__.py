@@ -1,0 +1,1 @@
+"""Core module for Subscription Service - config, security, dependencies."""

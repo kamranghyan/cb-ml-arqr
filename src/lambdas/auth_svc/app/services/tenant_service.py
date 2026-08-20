@@ -4,8 +4,7 @@ app.services.tenant_service
 TenantTable CRUD.
 
 A tenant is a company (e.g. "McDonald's Pakistan") that owns 1..N restaurants.
-`restaurantCount` is kept on the record so plan limits can be checked without
-scanning RestaurantTable on every create.
+`restaurantCount` is kept on the record for tracking.
 """
 from __future__ import annotations
 
@@ -13,14 +12,12 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
-from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 from shared.exceptions import BadRequestError, ResourceNotFoundError, StorageError
 from shared.structured_logger import get_logger
 
 from app.core.config import get_settings
-from app.models.schemas import PLAN_LIMITS
 
 log = get_logger("auth.tenant")
 _settings = get_settings()
@@ -60,7 +57,6 @@ class TenantService:
         self,
         company_name: str,
         email: str,
-        plan_tier: str = "starter",
     ) -> dict:
         if not company_name:
             raise BadRequestError("companyName is required")
@@ -72,8 +68,6 @@ class TenantService:
             "companyName":     company_name,
             "email":           email,
             "isActive":        True,
-            "planTier":        plan_tier,
-            "maxRestaurants":  PLAN_LIMITS.get(plan_tier, 1),
             "restaurantCount": 0,
             "createdAt":       now,
             "updatedAt":       now,
@@ -83,21 +77,16 @@ class TenantService:
         except ClientError as exc:
             raise StorageError("Could not create tenant") from exc
 
-        log.info("tenant.created", tenant_id=tenant_id,
-                 company=company_name, plan=plan_tier)
+        log.info("tenant.created", tenant_id=tenant_id, company=company_name)
         return item
 
     def update(self, tenant_id: str, changes: dict) -> dict:
         self.get(tenant_id)  # 404 guard
 
-        allowed = {"companyName", "isActive", "planTier"}
+        allowed = {"companyName", "isActive"}
         updates = {k: v for k, v in changes.items() if k in allowed and v is not None}
         if not updates:
             raise BadRequestError("No updatable fields provided")
-
-        # Changing the plan also changes the restaurant allowance.
-        if "planTier" in updates:
-            updates["maxRestaurants"] = PLAN_LIMITS.get(updates["planTier"], 1)
 
         updates["updatedAt"] = _now()
 
@@ -127,26 +116,15 @@ class TenantService:
             raise StorageError("Could not delete tenant") from exc
         log.info("tenant.deleted", tenant_id=tenant_id)
 
-    # ── Plan limits ───────────────────────────────────────────────────
+    # ── Restaurant limits (Delegated / Handled elsewhere) ───────────────
 
     def can_add_restaurant(self, tenant_id: str) -> tuple[bool, str]:
         """
-        Returns (allowed, reason). Used by menu_svc before creating a restaurant.
+        Returns (allowed, reason). Plan-based checks are now handled by subscription_svc.
         """
         tenant = self.get(tenant_id)
         if not tenant.get("isActive", True):
             return False, "Tenant account is suspended"
-
-        max_r = int(tenant.get("maxRestaurants", 1))
-        if max_r == -1:
-            return True, ""
-
-        count = int(tenant.get("restaurantCount", 0))
-        if count >= max_r:
-            return False, (
-                f"Plan limit reached ({count}/{max_r} restaurants). "
-                f"Upgrade your plan to add more."
-            )
         return True, ""
 
     def adjust_restaurant_count(self, tenant_id: str, delta: int) -> None:
