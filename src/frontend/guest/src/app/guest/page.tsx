@@ -39,6 +39,7 @@ function GuestContent() {
   const tid = params.get('tid') || '';
   const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
 
+  // ✅ State with static fallback values
   const [restaurantImage, setRestaurantImage] = useState('');
   const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
   const [tagline, setTagline] = useState(STATIC_TAGLINE);
@@ -63,6 +64,7 @@ function GuestContent() {
       return;
     }
 
+    // ✅ Fetch Restaurant Data
     const fetchRestaurantData = async () => {
       try {
         console.log('🏪 Fetching restaurant by ID:', rid);
@@ -248,7 +250,7 @@ function GuestContent() {
       <GuestTopBar />
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {/* Hero */}
+        {/* ── Hero ────────────────────────────────────────────────────────────── */}
         <div style={{
           position: 'relative',
           width: '100%',
@@ -280,7 +282,7 @@ function GuestContent() {
           </p>
         </div>
 
-        {/* Restaurant info strip */}
+        {/* ── Restaurant info strip ────────────────────────────────────────── */}
         <div style={{ background: BRAND, padding: '20px 20px 22px', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{
@@ -406,7 +408,7 @@ function GuestContent() {
           </div>
         </div>
 
-        {/* Padded content */}
+        {/* ── Padded content ── */}
         <div style={{ padding: '20px 20px 0' }}>
           {/* Search */}
           <div style={{ position: 'relative' }}>
