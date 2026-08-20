@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: MenuLay — subscription_svc Lambda (FastAPI + Mangum + Shared Layer)
+Description: MenuLay — subscription_svc Lambda (FastAPI + Mangum + Shared Layer + EventBridge Listener)
 
 Parameters:
   Environment:
@@ -27,6 +27,10 @@ Parameters:
     Type: String
     Default: INFO
     AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+  EventBusName:
+    Type: String
+    Default: arqr-event-bus-dev
+    Description: EventBridge Custom Bus Name for inter-service communication
 
 Globals:
   Function:
@@ -45,6 +49,7 @@ Globals:
         COGNITO_REGION: !Ref CognitoRegion
         COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
         COGNITO_CLIENT_ID: !Ref CognitoClientId
+        EVENT_BUS_NAME: !Ref EventBusName
 
 Resources:
 
@@ -194,6 +199,36 @@ Resources:
             Path: /api/v1/webhooks/{proxy+}
             Method: ANY
 
+  # ---------- EVENTBRIDGE LISTENER: PAYMENT SUCCEEDED ----------
+  PaymentSucceededEventHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "subs-payment-event-handler-${Environment}"
+      Description: Consumer for payment.succeeded events from EventBridge
+      CodeUri: ./
+      Handler: app.events.payment_handler.handle_payment_succeeded
+      Layers:
+        - !Ref SharedLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}/index/*"
+      Events:
+        PaymentSucceededRule:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBusName
+            Pattern:
+              source:
+                - "app.payment_svc"
+              detail-type:
+                - "payment.succeeded"
+
   SubscriptionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -207,6 +242,9 @@ Outputs:
   FunctionName:
     Description: Subscription Lambda function name
     Value: !Ref SubscriptionFunction
+  PaymentEventHandlerName:
+    Description: Payment Event Bridge Consumer Lambda Function
+    Value: !Ref PaymentSucceededEventHandler
   SharedLayerArn:
     Description: Shared layer ARN
     Value: !Ref SharedLayer
