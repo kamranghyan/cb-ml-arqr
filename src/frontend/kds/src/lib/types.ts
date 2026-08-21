@@ -7,7 +7,7 @@ export interface Allergen {
   emoji: string;
   status: AllergenStatus;
 }
-
+//
 export interface MenuItem {
   id: string;
   name: string;
