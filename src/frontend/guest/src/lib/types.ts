@@ -59,6 +59,13 @@ export interface CartItem {
     doneness?: string;
     side?: string;
     sauce?: string;
+    addOnIds?: string[];
+    addOns?: Array<{        // ✅ NEW
+      addOnId: string;
+      name: string;
+      priceMinorUnits: number;
+    }>;
+
   };
   notes?: string;
 }

@@ -69,7 +69,12 @@ export default function CartPage() {
   const discount = promoApplied ? Math.round(calculateSubtotal() * 0.1) : 0;
   const taxAmt = Math.round(calculateSubtotal() * 0.06);
   const grandTotal = calculateSubtotal() - discount + taxAmt;
-
+  // Cart page pe console mein yeh run karein
+  console.log('Cart items:', items.map(item => ({
+    name: item.name,
+    addOns: item.options?.addOns,
+    addOnsTotal: item.options?.addOns?.reduce((sum, a) => sum + a.priceMinorUnits, 0)
+  })));
   const applyPromo = () => { if (promo.trim().toUpperCase() === 'HAPPY20') setPromoApplied(true); };
 
   const placeOrder = async () => {
@@ -79,18 +84,28 @@ export default function CartPage() {
     try {
       const tid = sessionStorage.getItem('lm_tid') ?? tableId ?? 'table-01';
       const lineItems = items.map(item => {
-        let unitPrice = item.price;
-        if (item.options?.sizeMultiplier) unitPrice = item.price * item.options.sizeMultiplier;
-        if (item.options?.toppingsTotal) unitPrice += item.options.toppingsTotal;
-        unitPrice = Math.round(unitPrice);
+        const basePrice = item.price;
+
+        // ✅ Get add-ons from cart
+        const addOns = item.options?.addOns || [];
+        const addOnsTotal = addOns.reduce((sum, a) => sum + (a.priceMinorUnits / 100), 0);
+
         return {
           itemId: item.menuItemId,
           name: item.name,
           quantity: item.quantity,
-          unitPriceMinorUnits: Math.round(unitPrice * 100),
-          totalPriceMinorUnits: Math.round(unitPrice * item.quantity * 100),
+          unitPriceMinorUnits: Math.round(basePrice * 100),  // ✅ Base price only
+          totalPriceMinorUnits: Math.round((basePrice + addOnsTotal) * item.quantity * 100),
+          addOns: addOns.map(a => ({
+            addOnId: a.addOnId,
+            name: a.name,
+            quantity: 1,
+            priceMinorUnits: a.priceMinorUnits
+          })),
+          addOnsTotalMinorUnits: Math.round(addOnsTotal * 100)
         };
       });
+
       const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
       const payload = {
         restaurantId: scope.restaurantId,
@@ -613,6 +628,7 @@ export default function CartPage() {
       </div>
 
       {/* ── Proceed to Checkout ── */}
+
       {items.length > 0 && (
         <div style={{
           position: 'fixed',
@@ -623,7 +639,7 @@ export default function CartPage() {
           maxWidth: 480,
           padding: '0 20px',
           boxSizing: 'border-box',
-          zIndex: 10
+          zIndex: 10,
         }}>
           <button
             onClick={() => router.push('/guest/checkout')}

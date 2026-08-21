@@ -37,7 +37,9 @@ function GuestContent() {
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const qrRid = params.get('rid') || '';
   const tid = params.get('tid') || '';
-  const tableNum = tid.replace(/^[Tt](?:able[-_]?)?/, '').replace(/\D/g, '') || '—';
+
+  // ✅ State for table number
+  const [tableNumber, setTableNumber] = useState<string>('');
 
   // ✅ State with static fallback values
   const [restaurantImage, setRestaurantImage] = useState('');
@@ -50,12 +52,15 @@ function GuestContent() {
   const { addItem } = useCartStore();
   const [search, setSearch] = useState('');
 
+
   useEffect(() => {
-    const n = parseInt(tableNum, 10);
-    setZone(n >= 11 ? 'Private Dining' : n >= 9 ? 'Garden Terrace' : 'Main Hall');
+    // ── 🔥 FORCE: Pehle se stored table number clear karein ──
+    sessionStorage.removeItem('lm_table');
+    console.log('🗑️ Cleared old lm_table from session');
+
+    // ── Store IDs in session ──
     if (qrRid) sessionStorage.setItem('lm_rid', qrRid);
     if (tid) sessionStorage.setItem('lm_tid', tid);
-    if (tableNum !== '—') sessionStorage.setItem('lm_table', tableNum);
 
     const rid = qrRid;
     if (!rid) {
@@ -64,13 +69,103 @@ function GuestContent() {
       return;
     }
 
-    // ✅ Fetch Restaurant Data
+    // ── ✅ FIX: Correct API endpoint use karein ──
+    const fetchTableDetails = async () => {
+      try {
+        if (rid) {
+          console.log('🔍 Fetching all tables for restaurant:', rid);
+
+          // ✅ CORRECT ENDPOINT
+          const res = await fetch(`/api/menu/restaurants/${rid}/tables`);
+          console.log('📡 Response status:', res.status);
+
+          if (res.ok) {
+            const data = await res.json();
+            console.log('✅ All tables response:', data);
+
+            // 🔥 Extract tables array
+            const tables = data.tables || data.data || [];
+            console.log('📋 Total tables:', tables.length);
+
+            // Find matching table by tableId
+            const matchedTable = tables.find((t: any) => t.tableId === tid);
+
+            if (matchedTable) {
+              console.log('✅ Matched table:', matchedTable);
+
+              let tableNumFormatted = matchedTable.tableNumber;
+              if (!tableNumFormatted.startsWith('T-')) {
+                const num = tableNumFormatted.replace(/[^0-9]/g, '');
+                if (num) {
+                  tableNumFormatted = `T-${num.padStart(2, '0')}`;
+                }
+              }
+
+              // ✅ Set table number
+              sessionStorage.setItem('lm_table', tableNumFormatted);
+              setTableNumber(tableNumFormatted);
+              console.log('✅ Table number set from API:', tableNumFormatted);
+
+              if (matchedTable.zone) {
+                setZone(matchedTable.zone);
+                console.log('✅ Zone set from API:', matchedTable.zone);
+              }
+              return; // ✅ API se mil gaya
+            } else {
+              console.warn('⚠️ No table found with tableId:', tid);
+              console.log('📋 Available tableIds:', tables.map((t: any) => t.tableId));
+            }
+          } else {
+            console.warn('⚠️ API returned error status:', res.status);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch tables:', err);
+      }
+
+      // ── ❌ FALLBACK ──
+      console.log('⚠️ API failed, using fallback...');
+
+      let tableNumFromSession = '';
+
+      // URL se check karein
+      const urlTableNum = params.get('table') || params.get('tableNumber') || '';
+      if (urlTableNum) {
+        if (urlTableNum.startsWith('T-')) {
+          tableNumFromSession = urlTableNum;
+        } else {
+          const num = urlTableNum.replace(/[^0-9]/g, '');
+          if (num) {
+            tableNumFromSession = `T-${num.padStart(2, '0')}`;
+          }
+        }
+      }
+
+      // tid se extract karein
+      if (!tableNumFromSession && tid) {
+        const match = tid.match(/[Tt](?:able)?[-_]?(\d+)/);
+        if (match) {
+          tableNumFromSession = `T-${match[1].padStart(2, '0')}`;
+        }
+      }
+
+      // Last resort
+      if (!tableNumFromSession) {
+        console.warn('⚠️ No table number found. Using default T-01');
+        tableNumFromSession = 'T-01';
+      }
+
+      sessionStorage.setItem('lm_table', tableNumFromSession);
+      setTableNumber(tableNumFromSession);
+      console.log('⚠️ Table number set from fallback:', tableNumFromSession);
+    };
+
+    // ── Fetch Restaurant Data ──
     const fetchRestaurantData = async () => {
       try {
         console.log('🏪 Fetching restaurant by ID:', rid);
         const restaurant = await fetchRestaurantById(rid);
         console.log('✅ Restaurant response:', restaurant);
-
         if (restaurant) {
           setRestaurantData(restaurant);
           if (restaurant.name?.trim()) {
@@ -89,29 +184,26 @@ function GuestContent() {
       }
     };
 
+    // ── Fetch Menu Data ──
     const fetchMenuData = async () => {
       try {
         const [itemsData, categoriesData] = await Promise.all([
           fetchMenuItems(rid),
           fetchCategories(rid),
         ]);
-
         const activeItems = itemsData.filter(
           (item) => item.status !== 'inactive'
         );
-
         const usedCategoryIds = new Set(
           activeItems
             .map((item) => item.categoryId?.trim())
             .filter(Boolean)
         );
-
         const usedCategoryNames = new Set(
           activeItems
             .map((item) => item.categoryName?.trim().toLowerCase())
             .filter(Boolean)
         );
-
         const visibleCategories = categoriesData.filter((category) => {
           const categoryId = category.categoryId?.trim() || '';
           const categoryName = category.name?.trim().toLowerCase();
@@ -120,14 +212,11 @@ function GuestContent() {
             (categoryName && usedCategoryNames.has(categoryName))
           );
         });
-
         setItems(itemsData);
         setCategories(visibleCategories);
-
-        console.log('🍔 ALL ITEMS:', itemsData);
-        console.log('📂 ALL CATEGORIES:', categoriesData);
-        console.log('✅ VISIBLE CATEGORIES:', visibleCategories);
-
+        console.log('🍔 ALL ITEMS:', itemsData.length);
+        console.log('📂 ALL CATEGORIES:', categoriesData.length);
+        console.log('✅ VISIBLE CATEGORIES:', visibleCategories.length);
       } catch (err) {
         console.error('❌ Failed to fetch menu data:', err);
         setItems([]);
@@ -135,13 +224,19 @@ function GuestContent() {
       }
     };
 
-    Promise.all([fetchRestaurantData(), fetchMenuData()])
-      .finally(() => {
-        console.log('✅ All data fetching complete!');
-        setLoading(false);
-      });
+    // ── Fetch All Data ──
+    const fetchAllData = async () => {
+      setLoading(true);
+      await fetchTableDetails(); // ✅ Correct endpoint se table number set hoga
+      await Promise.all([fetchRestaurantData(), fetchMenuData()]);
+      setLoading(false);
+      console.log('✅ All data fetching complete!');
+      console.log('📋 Final table number in session:', sessionStorage.getItem('lm_table'));
+      console.log('📋 Final table number in state:', tableNumber);
+    };
 
-  }, [qrRid, tid, tableNum]);
+    fetchAllData();
+  }, [qrRid, tid, params]);
 
   const menuUrl = `/guest/menu?rid=${qrRid}&tid=${tid}`;
 
@@ -498,16 +593,16 @@ function GuestContent() {
                   }}>
                     {(item as any).imageUrl
                       ? <Image
-                          src={(item as any).imageUrl}
-                          alt={item.name}
-                          width={44}
-                          height={44}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                          }}
-                        />
+                        src={(item as any).imageUrl}
+                        alt={item.name}
+                        width={44}
+                        height={44}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
                       : item.emoji}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>

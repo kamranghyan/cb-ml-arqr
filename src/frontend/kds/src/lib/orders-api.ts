@@ -6,9 +6,7 @@
   import type { KdsOrder, KdsStatus } from './types';
 
   const PROXY = {
-    list:  () => '/api/orders',
     patch: (id: string) => `/api/orders/${id}`,
-    post:  () => '/api/orders',
   };
 
   export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -46,11 +44,6 @@
       delivered:       boolean;
       cancelled:       boolean;
     };
-  }
-
-  interface ApiOrdersResponse {
-    orders: ApiOrder[];
-    count:  number;
   }
 
   // ── tenantId included in payload ───────────────────────────────────────────────
@@ -150,25 +143,6 @@
     } catch {
       return {};
     }
-  }
-
-  export async function fetchOrders(): Promise<(KdsOrder & { _apiId: string })[]> {
-    const res = await fetch(PROXY.list(), {
-      cache: 'no-store',
-      headers: await authHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      if (res.status === 403) {
-        throw new Error(
-          'This kitchen account is not linked to a restaurant. ' +
-          'Ask your manager to re-create it for a specific branch.'
-        );
-      }
-      throw new Error(`Orders API ${res.status}: ${text}`);
-    }
-    const data: ApiOrdersResponse = await res.json();
-    return (data.orders ?? []).map(normaliseOrder);
   }
 
   // ── PATCH — public, tenantId auto-included ────────────────────────────────────

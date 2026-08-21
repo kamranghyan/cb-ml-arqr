@@ -430,49 +430,7 @@ export default function TenantHistory() {
             gap: 10,
             flexWrap: 'wrap',
           }}>
-            <button
-              onClick={handlePrintAll}
-              disabled={shown.length === 0 || printingAll}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 18px',
-                borderRadius: 10,
-                border: `1.5px solid ${shown.length === 0 ? colors.border : BRAND}`,
-                background: shown.length === 0 ? colors.card2 : BRAND,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: shown.length === 0 ? 'not-allowed' : 'pointer',
-                color: shown.length === 0 ? colors.subtle : '#fff',
-                whiteSpace: 'nowrap',
-                opacity: shown.length === 0 ? 0.5 : 1,
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                fontFamily: "'Poppins', sans-serif",
-              }}
-              onFocus={(e) => {
-                if (shown.length > 0) {
-                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-                }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-              onMouseEnter={(e) => {
-                if (shown.length > 0) {
-                  e.currentTarget.style.background = '#e64a1a';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (shown.length > 0) {
-                  e.currentTarget.style.background = BRAND;
-                }
-              }}
-            >
-              {printingAll ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Printer size={16} />}
-              <span>{printingAll ? 'Printing…' : 'Print All'}</span>
-            </button>
+
             <button
               onClick={load}
               style={{
