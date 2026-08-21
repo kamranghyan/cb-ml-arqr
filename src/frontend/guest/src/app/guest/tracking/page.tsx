@@ -1,8 +1,10 @@
+// app/guest/tracking/page.tsx
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike } from 'lucide-react';
+import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, Plus, Minus } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
@@ -20,26 +22,40 @@ interface LineItem {
   totalPriceMinorUnits: number;
   imageUrl?: string;
   prepTime?: number;
+  addOns?: Array<{
+    addOnId: string;
+    name: string;
+    quantity: number;
+    priceMinorUnits: number;
+  }>;
+  addOnsTotalMinorUnits?: number;
 }
-interface ApiOrder { 
-  orderId: string; 
-  status: string; 
-  tableId?: string; 
-  lineItems: LineItem[]; 
-  placedAt?: string; 
+
+interface ApiOrder {
+  orderId: string;
+  status: string;
+  tableId?: string;
+  lineItems: LineItem[];
+  placedAt?: string;
   totalAmountMinorUnits?: number;
   prepTime?: string;
   estimatedTime?: string;
-  orderType?: string; 
+  orderType?: string;
 }
 
 const STATUS_STEPS = [
-  { key: 'RECEIVED', label: 'Order Confirmed', icon: CheckCircle, desc: '9:41 AM · Payment successful' },
-  { key: 'PREPARING', label: 'Preparing Your Order', icon: ChefHat, desc: 'Barista is brewing now…' },
+  { key: 'RECEIVED', label: 'Order Confirmed', icon: CheckCircle, desc: 'Payment successful' },
+  { key: 'PREPARING', label: 'Preparing Your Order', icon: ChefHat, desc: 'Chef is cooking your order…' },
   { key: 'READY', label: 'Ready for Pickup', icon: Bell, desc: "You'll be notified" },
   { key: 'DELIVERED', label: 'Enjoy & Review', icon: Bike, desc: 'Rate your experience' },
 ];
-const STATUS_RANK: Record<string, number> = { 'RECEIVED': 0, 'PENDING': 0, 'PREPARING': 1, 'IN_PROGRESS': 1, 'KITCHEN_ACCEPTED': 1, 'READY': 2, 'READY_TO_SERVE': 2, 'FOOD_READY': 2, 'DELIVERED': 3, 'COMPLETED': 3 };
+
+const STATUS_RANK: Record<string, number> = {
+  'RECEIVED': 0, 'PENDING': 0,
+  'PREPARING': 1, 'IN_PROGRESS': 1, 'KITCHEN_ACCEPTED': 1,
+  'READY': 2, 'READY_TO_SERVE': 2, 'FOOD_READY': 2,
+  'DELIVERED': 3, 'COMPLETED': 3
+};
 
 function getStepIndex(status: string): number {
   const s = (status ?? '').toUpperCase();
@@ -49,8 +65,11 @@ function getStepIndex(status: string): number {
   if (['DELIVERED', 'COMPLETED'].includes(s)) return 3;
   return 0;
 }
-function formatTime(iso?: string) { if (!iso) return '—'; return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }); }
-function formatRs(minor?: number) { if (!minor) return 'Rs 0'; return 'Rs ' + (minor / 100).toLocaleString('en-PK'); }
+
+function formatRs(minor?: number) {
+  if (!minor) return 'Rs 0';
+  return 'Rs ' + (minor / 100).toLocaleString('en-PK');
+}
 
 const POLL_MS = 5000;
 
@@ -88,52 +107,32 @@ export default function TrackingPage() {
     if (!hasSession) { window.location.href = '/guest'; return; }
     setSessionTid(sessionStorage.getItem('lm_tid') ?? '');
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
-    
-    console.log('📌 SESSION DATA:', {
-      sessionTid: sessionStorage.getItem('lm_tid'),
-      sessionTable: sessionStorage.getItem('lm_table')
-    });
   }, []);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const { restaurantId } = getGuestScope();
-      console.log('🔍 Fetching orders for restaurant:', restaurantId);
-      
-      // ✅ FIX: Use URL object to prevent duplicate query parameters
       const url = new URL('/api/orders', window.location.origin);
       url.searchParams.set('rid', restaurantId);
-      
+
       const res = await fetch(url.toString(), { cache: 'no-store' });
       if (!res.ok) throw new Error(`API ${res.status}`);
-      
+
       const data = await res.json();
-      console.log('✅ API RAW RESPONSE:', data);
-      
       const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) =>
         new Date(b.placedAt ?? 0).getTime() - new Date(a.placedAt ?? 0).getTime()
       );
-      
-      console.log('📦 Total Orders in API:', all.length);
-      
+
       if (all.length > 0) {
         const latestOrder = all[0];
         if (latestOrder.prepTime) {
           setPrepTime(latestOrder.prepTime);
         } else if (latestOrder.estimatedTime) {
           setPrepTime(latestOrder.estimatedTime);
-        } else if (latestOrder.lineItems && latestOrder.lineItems.length > 0) {
-          const prepTimes = latestOrder.lineItems
-            .map((item: LineItem) => item.prepTime || 0)
-            .filter((t: number) => t > 0);
-          if (prepTimes.length > 0) {
-            const maxPrep = Math.max(...prepTimes);
-            setPrepTime(`${maxPrep}-${maxPrep + 5} mins`);
-          }
         }
       }
-      
+
       setOrders(prev => {
         const prevMap = new Map(prev.map(o => [o.orderId, o]));
         return all.map((o: ApiOrder) => {
@@ -147,60 +146,45 @@ export default function TrackingPage() {
       });
       setLastSync(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
       setError('');
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error('❌ API ERROR:', e);
-      setError(e?.message ?? 'Failed'); 
-    }
-    finally { setLoading(false); }
+      setError(e?.message ?? 'Failed');
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); const id = setInterval(() => load(true), POLL_MS); return () => clearInterval(id); }, [load]);
 
-  // ✅ FIX: MATCH UUID TABLE ID WITH SESSION SHORT ID
+  // ── Table matching ──
   const myOrders = orders.filter(o => {
     if (!o.tableId) return false;
-    
-    const orderTable = o.tableId.toString().trim().toLowerCase();
-    const sessionT = sessionTid.trim().toLowerCase();
-    const sessionTableRaw = sessionTable.trim().toLowerCase();
+    const orderTableId = o.tableId.toString().trim().toLowerCase();
+    const normalizedSessionTid = sessionTid.trim().toLowerCase();
+    const sessionTableNum = sessionTable.trim().toLowerCase();
 
-    console.log(`🔎 Comparing: OrderTable="${orderTable}" | SessionTid="${sessionT}" | SessionTable="${sessionTableRaw}"`);
-
-    // 1. Direct match
-    if (orderTable === sessionT) return true;
-
-    // 2. If sessionT contains "table-01" and orderTable is UUID, we cannot match directly
-    // We need to match based on sessionTableRaw
-    if (sessionTableRaw) {
-      // Check if orderTable ends with the sessionTable number
-      const sessionNumber = sessionTableRaw.replace(/[^0-9]/g, '');
-      if (sessionNumber && orderTable.endsWith(sessionNumber)) {
-        return true;
+    if (orderTableId === normalizedSessionTid) return true;
+    if (sessionTableNum) {
+      const sessionNumber = sessionTableNum.replace(/[^0-9]/g, '');
+      if (sessionNumber) {
+        if (orderTableId.includes(sessionNumber)) return true;
+        if (orderTableId.endsWith(sessionNumber)) return true;
       }
     }
-
-    // 3. Fallback: Extract number from sessionT and check if orderTable ends with it
-    const sessionNumberFromTid = sessionT.replace(/[^0-9]/g, '');
-    if (sessionNumberFromTid && orderTable.endsWith(sessionNumberFromTid)) {
+    const sessionNumberFromTid = normalizedSessionTid.replace(/[^0-9]/g, '');
+    if (sessionNumberFromTid && orderTableId.includes(sessionNumberFromTid)) {
       return true;
     }
-
     return false;
   });
 
-  console.log('🟢 myOrders count:', myOrders.length);
-  console.log('🟡 All Orders count:', orders.length);
-
-  // ✅ FALLBACK: Agar myOrders empty hai toh saare orders show karo (Debugging ke liye)
   const displayOrders = myOrders.length > 0 ? myOrders : orders;
-  
   const activeOrders = displayOrders.filter(o => !['TIMED_OUT', 'CANCELLED'].includes((o.status ?? '').toUpperCase()));
   const latest = (activeOrders.length > 0 ? activeOrders : displayOrders)[0];
-  
+
   const getItemImage = (itemId: string) => {
     const menuItem = menuItems.find(item => item.id === itemId);
     return (menuItem as any)?.imageUrl ?? '';
   };
+
   const currentStep = latest ? getStepIndex(latest.status) : 0;
   const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
 
@@ -211,8 +195,7 @@ export default function TrackingPage() {
     if (!match) return `Ready in approx. ${prepTime}`;
     const totalPrep = parseInt(match[1]);
     const remaining = Math.max(0, totalPrep - (currentStep * 5));
-    const range = `${remaining}-${remaining + 5}`;
-    return `Ready in approx. ${range} minutes`;
+    return `Ready in approx. ${remaining}-${remaining + 5} minutes`;
   };
 
   const cancelOrder = async () => {
@@ -252,6 +235,10 @@ export default function TrackingPage() {
 
   const progressPct = latest ? (currentStep / (STATUS_STEPS.length - 1)) * 100 : 0;
 
+  // ── Calculate totals ──
+  const itemsTotal = latest?.lineItems?.reduce((sum, li) => sum + (li.unitPriceMinorUnits || 0) * li.quantity, 0) || 0;
+  const addOnsGrandTotal = latest?.lineItems?.reduce((sum, li) => sum + (li.addOnsTotalMinorUnits || 0), 0) || 0;
+
   return (
     <div style={{
       minHeight: '100dvh',
@@ -283,10 +270,8 @@ export default function TrackingPage() {
             background: D.card,
             borderRadius: '24px 24px 0 0',
             padding: '28px 24px 40px',
-            fontFamily: "'Poppins', sans-serif",
           }}>
             <h3 style={{
-              fontFamily: "'Poppins', sans-serif",
               fontSize: 19,
               fontWeight: 700,
               color: D.text,
@@ -298,7 +283,6 @@ export default function TrackingPage() {
               color: D.muted,
               margin: '0 0 24px',
               textAlign: 'center',
-              fontFamily: "'Poppins', sans-serif",
             }}>This action cannot be undone. Please contact staff if needed.</p>
             {cancelError && (
               <p style={{
@@ -306,7 +290,6 @@ export default function TrackingPage() {
                 color: BRAND,
                 textAlign: 'center',
                 margin: '0 0 12px',
-                fontFamily: "'Poppins', sans-serif",
               }}>{cancelError}</p>
             )}
             <div style={{ display: 'flex', gap: 12 }}>
@@ -323,23 +306,8 @@ export default function TrackingPage() {
                   fontSize: 14,
                   fontWeight: 700,
                   cursor: 'pointer',
-                  fontFamily: "'Poppins', sans-serif",
                   transition: 'all 0.2s ease',
                   outline: 'none',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
-                  e.currentTarget.style.borderColor = BRAND;
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.borderColor = D.border;
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = D.card2;
                 }}
               >
                 Keep Order
@@ -361,28 +329,9 @@ export default function TrackingPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  fontFamily: "'Poppins', sans-serif",
                   opacity: cancelling ? 0.7 : 1,
                   transition: 'all 0.2s ease',
                   outline: 'none',
-                }}
-                onFocus={(e) => {
-                  if (!cancelling) {
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
-                  }
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-                onMouseEnter={(e) => {
-                  if (!cancelling) {
-                    e.currentTarget.style.background = '#e64a1a';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!cancelling) {
-                    e.currentTarget.style.background = BRAND;
-                  }
                 }}
               >
                 {cancelling
@@ -412,24 +361,11 @@ export default function TrackingPage() {
               transition: 'all 0.2s ease',
               outline: 'none',
             }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = D.card;
-            }}
           >
             <ArrowLeft size={18} color={D.text} />
           </button>
           <div style={{ textAlign: 'center' }}>
             <h1 style={{
-              fontFamily: "'Poppins', sans-serif",
               fontSize: 18,
               fontWeight: 700,
               color: D.text,
@@ -439,7 +375,6 @@ export default function TrackingPage() {
               fontSize: 11,
               color: D.muted,
               margin: 0,
-              fontFamily: "'Poppins', sans-serif",
             }}>Order #{latest.orderId.slice(0, 8).toUpperCase()}</p>}
           </div>
           <button
@@ -457,18 +392,6 @@ export default function TrackingPage() {
               transition: 'all 0.2s ease',
               outline: 'none',
             }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = D.card;
-            }}
           >
             <RefreshCw size={16} color={D.muted} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -481,11 +404,7 @@ export default function TrackingPage() {
         {loading && orders.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 0', gap: 12 }}>
             <div style={{ width: 28, height: 28, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{
-              color: D.muted,
-              fontSize: 14,
-              fontFamily: "'Poppins', sans-serif",
-            }}>Fetching your orders…</p>
+            <p style={{ color: D.muted, fontSize: 14 }}>Fetching your orders…</p>
           </div>
         )}
 
@@ -493,12 +412,7 @@ export default function TrackingPage() {
         {!loading && orders.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <span style={{ fontSize: 40, opacity: 0.2 }}>📋</span>
-            <p style={{
-              color: D.muted,
-              fontSize: 14,
-              marginTop: 12,
-              fontFamily: "'Poppins', sans-serif",
-            }}>No orders yet</p>
+            <p style={{ color: D.muted, fontSize: 14, marginTop: 12 }}>No orders yet</p>
             <button
               onClick={() => router.push('/guest/menu')}
               style={{
@@ -511,21 +425,8 @@ export default function TrackingPage() {
                 fontSize: 14,
                 fontWeight: 700,
                 cursor: 'pointer',
-                fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
                 outline: 'none',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.3)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#e64a1a';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = BRAND;
               }}
             >
               Browse Menu
@@ -559,7 +460,6 @@ export default function TrackingPage() {
                 {(() => { const Icon = STATUS_STEPS[currentStep]?.icon; return isCancelled ? '❌' : Icon ? <Icon size={36} color={BRAND} /> : <span>🍽️</span>; })()}
               </div>
               <h2 style={{
-                fontFamily: "'Poppins', sans-serif",
                 fontSize: 21,
                 fontWeight: 700,
                 color: D.text,
@@ -567,18 +467,13 @@ export default function TrackingPage() {
               }}>
                 {isCancelled ? 'Order Cancelled' : STATUS_STEPS[currentStep]?.label ?? 'Processing…'}
               </h2>
-              
-              {/* ✅ Dynamic prep time display */}
               <p style={{
                 fontSize: 13,
                 color: D.muted,
                 margin: '0 0 20px',
-                fontFamily: "'Poppins', sans-serif",
               }}>
                 {getRemainingTime()}
               </p>
-
-              {/* Progress bar */}
               {!isCancelled && (
                 <div style={{ height: 6, background: D.card2, borderRadius: 3, overflow: 'hidden', margin: '0 8px' }}>
                   <div style={{ height: '100%', background: BRAND, borderRadius: 3, width: `${progressPct}%`, transition: 'width 1s ease' }} />
@@ -634,7 +529,6 @@ export default function TrackingPage() {
                       <div style={{ flex: 1, paddingTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <p style={{
-                            fontFamily: "'Poppins', sans-serif",
                             fontSize: 15,
                             fontWeight: 600,
                             color: done || current ? D.text : D.sub,
@@ -647,14 +541,12 @@ export default function TrackingPage() {
                             padding: '2px 8px',
                             borderRadius: 20,
                             fontWeight: 700,
-                            fontFamily: "'Poppins', sans-serif",
                           }}>Live</span>}
                         </div>
                         <p style={{
                           fontSize: 12,
                           color: D.muted,
                           margin: '2px 0 0',
-                          fontFamily: "'Poppins', sans-serif",
                         }}>{step.desc}</p>
                       </div>
                     </div>
@@ -663,7 +555,7 @@ export default function TrackingPage() {
               </div>
             )}
 
-            {/* ── Items ordered ── */}
+            {/* ── Items ordered with Add-Ons ── */}
             <div style={{
               background: D.card,
               border: `1.5px solid ${D.border}`,
@@ -678,92 +570,184 @@ export default function TrackingPage() {
                 letterSpacing: 1.5,
                 textTransform: 'uppercase',
                 margin: '0 0 12px',
-                fontFamily: "'Poppins', sans-serif",
               }}>Items Ordered</p>
-              {(latest.lineItems ?? []).map((li, i) => (
-                <div key={i} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                  borderBottom: i < (latest.lineItems?.length ?? 0) - 1 ? `1px solid ${D.border}` : 'none'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 10,
-                        background: D.card2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 20,
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {getItemImage(li.itemId) ? (
-                        <Image
-                          src={getItemImage(li.itemId)}
-                          alt={li.name}
-                          width={48}
-                          height={48}
-                          unoptimized
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                        />
-                      ) : (
-                        '🍽️'
-                      )}
-                    </div>
-                    <div>
-                      <p style={{
-                        fontFamily: "'Poppins', sans-serif",
+
+              {(latest.lineItems ?? []).map((li, i) => {
+                const basePrice = li.unitPriceMinorUnits || 0;
+                const addOnsTotal = li.addOnsTotalMinorUnits || 0;
+                const itemTotal = li.totalPriceMinorUnits || 0;
+                const hasAddOns = addOnsTotal > 0 && li.addOns && li.addOns.length > 0;
+
+                return (
+                  <div key={i} style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '10px 0',
+                    borderBottom: i < (latest.lineItems?.length ?? 0) - 1 ? `1px solid ${D.border}` : 'none'
+                  }}>
+                    {/* Item Row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 10,
+                          background: D.card2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 20,
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                        }}>
+                          {getItemImage(li.itemId) ? (
+                            <Image
+                              src={getItemImage(li.itemId)}
+                              alt={li.name}
+                              width={48}
+                              height={48}
+                              unoptimized
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : ('🍽️')}
+                        </div>
+                        <div>
+                          <p style={{
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: D.text,
+                            margin: 0
+                          }}>{li.name}</p>
+                          <p style={{
+                            fontSize: 11,
+                            color: D.muted,
+                            margin: 0,
+                          }}>× {li.quantity}</p>
+                        </div>
+                      </div>
+                      <span style={{
                         fontSize: 14,
-                        fontWeight: 600,
-                        color: D.text,
-                        margin: 0
-                      }}>{li.name}</p>
-                      <p style={{
-                        fontSize: 11,
-                        color: D.muted,
-                        margin: 0,
-                        fontFamily: "'Poppins', sans-serif",
-                      }}>× {li.quantity}</p>
+                        fontWeight: 700,
+                        color: BRAND
+                      }}>{formatRs(itemTotal)}</span>
                     </div>
+
+                    {/* ✅ Add-Ons Breakdown */}
+                    {hasAddOns && li.addOns && li.addOns.length > 0 && (
+                      <div style={{
+                        marginTop: 8,
+                        marginLeft: 60,
+                        paddingLeft: 12,
+                        borderLeft: `2px solid ${BRAND}40`,
+                      }}>
+                        {li.addOns.map((addon, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            padding: '2px 0',
+                          }}>
+                            <span style={{
+                              fontSize: 12,
+                              color: D.muted,
+                            }}>
+                              + {addon.name} × {addon.quantity}
+                            </span>
+                            <span style={{
+                              fontSize: 12,
+                              color: D.muted,
+                            }}>
+                              {formatRs(addon.priceMinorUnits * addon.quantity)}
+                            </span>
+                          </div>
+                        ))}
+                        
+                        {/* Add-Ons Total */}
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          padding: '4px 0 2px 0',
+                          borderTop: `1px dotted ${D.border}`,
+                          marginTop: 2,
+                        }}>
+                          <span style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: D.text,
+                          }}>
+                            Add-ons Total
+                          </span>
+                          <span style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: BRAND,
+                          }}>
+                            {formatRs(addOnsTotal)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <span style={{
-                    fontFamily: "'Poppins', sans-serif",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: BRAND
-                  }}>{formatRs(li.totalPriceMinorUnits)}</span>
-                </div>
-              ))}
+                );
+              })}
+
+              {/* ── Total Breakdown ── */}
               <div style={{
                 display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                flexDirection: 'column',
+                gap: 4,
                 paddingTop: 12,
                 marginTop: 4,
                 borderTop: `1.5px solid ${D.border}`
               }}>
-                <span style={{
-                  fontFamily: "'Poppins', sans-serif",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: D.text
-                }}>Total</span>
-                <span style={{
-                  fontFamily: "'Poppins', sans-serif",
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: D.text
-                }}>{formatRs(latest.totalAmountMinorUnits)}</span>
+                {/* Items Subtotal */}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{
+                    fontSize: 13,
+                    color: D.muted,
+                  }}>Items Total</span>
+                  <span style={{
+                    fontSize: 13,
+                    color: D.muted,
+                  }}>
+                    {formatRs(itemsTotal)}
+                  </span>
+                </div>
+
+                {/* Add-Ons Total */}
+                {addOnsGrandTotal > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{
+                      fontSize: 13,
+                      color: D.muted,
+                    }}>Add-ons Total</span>
+                    <span style={{
+                      fontSize: 13,
+                      color: D.muted,
+                    }}>
+                      {formatRs(addOnsGrandTotal)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Grand Total */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  paddingTop: 8,
+                  marginTop: 4,
+                  borderTop: `1.5px solid ${D.border}`
+                }}>
+                  <span style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: D.text
+                  }}>Total</span>
+                  <span style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: D.text
+                  }}>{formatRs(latest.totalAmountMinorUnits)}</span>
+                </div>
               </div>
             </div>
 
@@ -774,7 +758,6 @@ export default function TrackingPage() {
                 fontSize: 11,
                 color: D.sub,
                 marginBottom: 16,
-                fontFamily: "'Poppins', sans-serif",
               }}>Updated {lastSync} · Auto-refresh every 5s</p>
             )}
           </>
@@ -806,27 +789,9 @@ export default function TrackingPage() {
               fontSize: 14,
               fontWeight: 700,
               cursor: 'pointer',
-              fontFamily: "'Poppins', sans-serif",
               transition: 'all 0.2s ease',
               outline: 'none',
               marginBottom: "10px"
-
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-              e.currentTarget.style.borderColor = D.border;
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6';
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = D.card;
-              e.currentTarget.style.borderColor = D.border;
             }}
           >
             Cancel Order

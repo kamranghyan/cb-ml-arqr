@@ -1,0 +1,29 @@
+# samconfig.toml
+# SAM CLI configuration for Subscription Service deployment
+
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "subscription-svc-dev"
+s3_bucket = "menulay-sam-deployments"
+s3_prefix = "subscription-svc-dev"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+parameter_overrides = "Environment=\"dev\" CognitoRegion=\"ap-south-1\" CognitoUserPoolId=\"ap-south-1_RkmSFSjU4\" TenantTable=\"TenantTable-dev\" RestaurantTable=\"RestaurantTable-dev\" LogLevel=\"INFO\" EventBusName=\"arqr-event-bus-dev\""
+resolve_s3 = true
+disable_rollback = true
+image_repositories = []
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.local_start_api.parameters]
+port = 3000
+parameter_overrides = "Environment=dev CognitoUserPoolId=us-east-1_XXXXXXXXX CognitoClientId=XXXXXXXXXXXXXXXXXXXXXXXXXX CognitoRegion=us-east-1"
+
+[default.sync.parameters]
+watch = true
+resource = "subscription-svc"
+[default.global.parameters]
+region = "ap-south-1"

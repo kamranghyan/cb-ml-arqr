@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: MenuLay — subscription_svc Lambda (FastAPI + Mangum + Shared Layer + EventBridge Listener)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  CognitoRegion:
+    Type: String
+    Default: ap-south-1
+  CognitoUserPoolId:
+    Type: String
+    Default: ap-south-1_RkmSFSjU4
+  CognitoClientId:
+    Type: String
+    Default: 5c5e7traqqso952olhnuoife01
+    NoEcho: true
+  TenantTable:
+    Type: String
+    Default: TenantTable-dev
+  RestaurantTable:
+    Type: String
+    Default: RestaurantTable-dev
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+  EventBusName:
+    Type: String
+    Default: arqr-event-bus-dev
+    Description: EventBridge Custom Bus Name for inter-service communication
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 60
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: !Ref LogLevel
+        TENANT_TABLE: !Ref TenantTable
+        PLAN_TABLE: !Sub "PlanTypesTable-${Environment}"
+        SUBSCRIPTION_TABLE: !Sub "TenantSubscriptionTable-${Environment}"
+        RESTAURANT_TABLE: !Ref RestaurantTable
+        COGNITO_REGION: !Ref CognitoRegion
+        COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+        COGNITO_CLIENT_ID: !Ref CognitoClientId
+        EVENT_BUS_NAME: !Ref EventBusName
+
+Resources:
+
+  # ---------- SHARED LAMBDA LAYER ----------
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "menulay-shared-${Environment}"
+      Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
+      ContentUri: ../layers/shared_layer
+      CompatibleRuntimes:
+        - python3.13
+      CompatibleArchitectures:
+        - arm64
+      RetentionPolicy: Delete
+
+  # ---------- DYNAMODB TABLES ----------
+  PlanTypesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "PlanTypesTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  TenantSubscriptionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "TenantSubscriptionTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------- API GATEWAY ----------
+  SubscriptionApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "subscription-svc-api-${Environment}"
+      StageName: !Ref Environment
+
+  # ---------- SINGLE LAMBDA FOR API + CRON ----------
+  SubscriptionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "subscription-svc-${Environment}"
+      Description: Subscription Service — FastAPI + Mangum + Expiration Cron
+      CodeUri: ./
+      Handler: handler.handler
+      Layers:
+        - !Ref SharedLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/PlanTypesTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/PlanTypesTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantSubscriptionTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantSubscriptionTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}/index/*"
+      Events:
+        DailyExpiry:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 0 * * ? *)
+            Description: Check and expire subscriptions daily
+
+        Health:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /health
+            Method: GET
+
+        Plans:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/plans
+            Method: ANY
+
+        PlansProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/plans/{proxy+}
+            Method: ANY
+
+        Subscriptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/subscriptions
+            Method: ANY
+
+        SubscriptionsProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/subscriptions/{proxy+}
+            Method: ANY
+
+        Webhooks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/webhooks
+            Method: ANY
+
+        WebhooksProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SubscriptionApi
+            Path: /api/v1/webhooks/{proxy+}
+            Method: ANY
+
+  # ---------- EVENTBRIDGE LISTENER: PAYMENT SUCCEEDED ----------
+  PaymentSucceededEventHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "subs-payment-event-handler-${Environment}"
+      Description: Consumer for payment.succeeded events from EventBridge
+      CodeUri: ./
+      Handler: app.events.payment_handler.handle_payment_succeeded
+      Layers:
+        - !Ref SharedLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}/index/*"
+      Events:
+        PaymentSucceededRule:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBusName
+            Pattern:
+              source:
+                - "app.payment_svc"
+              detail-type:
+                - "payment.succeeded"
+
+  SubscriptionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/subscription-svc-${Environment}"
+      RetentionInDays: 30
+
+Outputs:
+  ApiEndpoint:
+    Description: Subscription API endpoint
+    Value: !Sub "https://${SubscriptionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+  FunctionName:
+    Description: Subscription Lambda function name
+    Value: !Ref SubscriptionFunction
+  PaymentEventHandlerName:
+    Description: Payment Event Bridge Consumer Lambda Function
+    Value: !Ref PaymentSucceededEventHandler
+  SharedLayerArn:
+    Description: Shared layer ARN
+    Value: !Ref SharedLayer

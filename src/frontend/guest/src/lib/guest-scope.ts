@@ -1,18 +1,4 @@
-/**
- * guest-scope.ts
- * ==============
- * Where a guest "is": which restaurant and which table.
- *
- * Both come from the QR code on the table:
- *     /guest?rid=<restaurantId>&tid=<tableId>
- *
- * They are kept in sessionStorage so the guest can move between menu, item,
- * cart and tracking pages without the ids falling out of the URL. Nothing is
- * hardcoded — the same build serves every branch of every company.
- *
- * The tenant is deliberately absent: the guest never needs to know it, and the
- * server resolves it from the restaurant.
- */
+// lib/guest-scope.ts
 
 const RID_KEY = 'lm_rid'
 const TID_KEY = 'lm_tid'
@@ -20,7 +6,7 @@ const TABLE_NUM_KEY = 'lm_table'
 
 export interface GuestScope {
   restaurantId: string
-  tableId:      string
+  tableId: string
   tableNumber?: string
 }
 
@@ -38,16 +24,37 @@ function writeSession(key: string, value: string): void {
   try {
     sessionStorage.setItem(key, value)
   } catch {
-    /* private mode — the URL still carries the ids */
+    /* private mode */
   }
 }
 
 /**
- * Resolve the guest's scope, preferring the URL (a fresh scan) and falling
- * back to the session (moving between pages in the same visit).
- *
- * Pass the page's search params so this works during render.
+ * Check if string is a UUID
  */
+function isUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
+/**
+ * Extract table number ONLY from table format strings
+ * Does NOT extract from UUID
+ */
+export function extractTableNumber(tableId: string): string {
+  if (!tableId) return ''
+  
+  // Don't extract from UUID
+  if (isUUID(tableId)) return ''
+  
+  // Only extract if it's in table format (table-12, T-12, table_12, etc.)
+  const match = tableId.match(/^[Tt](?:able)?[-_]?(\d+)$/)
+  if (match) {
+    const num = parseInt(match[1], 10)
+    return `T-${num.toString().padStart(2, '0')}`
+  }
+  
+  return ''
+}
+
 export function getGuestScope(params?: URLSearchParams): GuestScope {
   const search =
     params ??
@@ -56,36 +63,47 @@ export function getGuestScope(params?: URLSearchParams): GuestScope {
       : new URLSearchParams())
 
   const restaurantId = search.get('rid') || readSession(RID_KEY)
-  const tableId      = search.get('tid') || readSession(TID_KEY)
-  const tableNumber  = readSession(TABLE_NUM_KEY)
+  const tableId = search.get('tid') || readSession(TID_KEY)
+  
+  // Priority for table number:
+  // 1. URL param 'table' or 'tableNumber'
+  // 2. Session storage 'lm_table'
+  // 3. Extract from tableId ONLY if NOT UUID
+  let tableNumber = search.get('table') || search.get('tableNumber') || ''
+  
+  if (!tableNumber) {
+    tableNumber = readSession(TABLE_NUM_KEY)
+  }
+  
+  // If still no table number and tableId is NOT UUID, try to extract
+  if (!tableNumber && tableId && !isUUID(tableId)) {
+    const extracted = extractTableNumber(tableId)
+    if (extracted) {
+      tableNumber = extracted
+    }
+  }
 
   // Remember a fresh scan for the rest of the visit.
   if (search.get('rid')) writeSession(RID_KEY, search.get('rid')!)
   if (search.get('tid')) writeSession(TID_KEY, search.get('tid')!)
   
-  // Extract table number from tableId if not present
-  let extractedTableNumber = tableNumber
-  if (!extractedTableNumber && tableId) {
-    const match = tableId.match(/table[-_]?(\d+)/i)
-    if (match) {
-      extractedTableNumber = match[1]
-      writeSession(TABLE_NUM_KEY, extractedTableNumber)
-    }
+  // Save table number only if valid
+  if (tableNumber && tableNumber.startsWith('T-')) {
+    writeSession(TABLE_NUM_KEY, tableNumber)
   }
 
-  return { restaurantId, tableId, tableNumber: extractedTableNumber }
+  return { restaurantId, tableId, tableNumber: tableNumber || undefined }
 }
 
-/** True when we know which restaurant the guest is sitting in. */
 export function hasScope(scope: GuestScope): boolean {
   return Boolean(scope.restaurantId)
 }
 
-/** Keep rid/tid on internal links so a refresh still works. */
 export function withScope(path: string, scope: GuestScope): string {
   const url = new URL(path, 'http://local')
   if (scope.restaurantId) url.searchParams.set('rid', scope.restaurantId)
-  if (scope.tableId)      url.searchParams.set('tid', scope.tableId)
+  if (scope.tableId) url.searchParams.set('tid', scope.tableId)
+  if (scope.tableNumber) url.searchParams.set('table', scope.tableNumber)
   return `${url.pathname}${url.search}`
 }
 

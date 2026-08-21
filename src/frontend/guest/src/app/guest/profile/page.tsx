@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, User, MapPin, Sun, Moon, FileText, Heart, QrCode, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useGuestProfileStore } from '@/lib/guest-profile-store';
-import { clearGuestScope } from '@/lib/guest-scope';
+import { clearGuestScope , extractTableNumber} from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import jsQR from 'jsqr';
@@ -237,15 +237,25 @@ export default function ProfilePage() {
       console.log('✅ Parsed as JSON:', data);
 
       if (data.restaurantId && data.tableId) {
+        // Format table number
+        let tableNumber = data.tableNumber || data.tableId;
+        // If tableNumber is just a number, format it as T-XX
+        if (tableNumber && !tableNumber.startsWith('T-')) {
+          const num = tableNumber.replace(/[^0-9]/g, '');
+          if (num) {
+            tableNumber = `T-${num.padStart(2, '0')}`;
+          }
+        }
+
         console.log('✅ Setting session data:', {
           rid: data.restaurantId,
           tid: data.tableId,
-          table: data.tableNumber || ''
+          table: tableNumber
         });
 
         sessionStorage.setItem('lm_rid', data.restaurantId);
         sessionStorage.setItem('lm_tid', data.tableId);
-        sessionStorage.setItem('lm_table', data.tableNumber || '');
+        sessionStorage.setItem('lm_table', tableNumber || '');
 
         console.log('✅ Redirecting to /guest/menu');
         router.push('/guest/menu');
@@ -262,14 +272,26 @@ export default function ProfilePage() {
 
         const rid = url.searchParams.get('rid');
         const tid = url.searchParams.get('tid');
+        let tableNum = url.searchParams.get('table') || url.searchParams.get('tableNumber') || '';
 
-        console.log('URL params:', { rid, tid });
+        console.log('URL params:', { rid, tid, tableNum });
 
         if (rid && tid) {
+          // Format table number
+          if (tableNum && !tableNum.startsWith('T-')) {
+            const num = tableNum.replace(/[^0-9]/g, '');
+            if (num) {
+              tableNum = `T-${num.padStart(2, '0')}`;
+            }
+          } else if (!tableNum) {
+            // Extract from tid if not provided
+            const extracted = extractTableNumber(tid);
+            if (extracted) tableNum = extracted;
+          }
+
           console.log('✅ Setting session from URL params');
           sessionStorage.setItem('lm_rid', rid);
           sessionStorage.setItem('lm_tid', tid);
-          const tableNum = url.searchParams.get('table') || '';
           if (tableNum) sessionStorage.setItem('lm_table', tableNum);
 
           console.log('✅ Redirecting to /guest/menu');
@@ -336,13 +358,13 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div style={{ 
-        minHeight: '100dvh', 
-        background: D.bg, 
-        fontFamily: "'Poppins', sans-serif", 
-        maxWidth: 480, 
-        margin: '0 auto', 
-        display: 'flex', 
+      <div style={{
+        minHeight: '100dvh',
+        background: D.bg,
+        fontFamily: "'Poppins', sans-serif",
+        maxWidth: 480,
+        margin: '0 auto',
+        display: 'flex',
         flexDirection: 'column',
         transition: 'background 0.25s',
       }}>
@@ -350,14 +372,14 @@ export default function ProfilePage() {
 
         {/* ── Header ── */}
         <div style={{ padding: '35px 20px 16px' }}>
-          <button 
-            onClick={() => router.back()} 
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer', 
-              color: BRAND, 
-              padding: 4, 
+          <button
+            onClick={() => router.back()}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: BRAND,
+              padding: 4,
               display: 'flex',
               transition: 'all 0.2s ease',
               outline: 'none',
@@ -373,56 +395,56 @@ export default function ProfilePage() {
           >
             <ChevronLeft size={28} strokeWidth={2.5} />
           </button>
-          <h1 style={{ 
-            fontFamily: "'Poppins', sans-serif", 
-            textAlign: "center", 
-            fontSize: 26, 
-            fontWeight: 700, 
-            color: BRAND, 
-            margin: '8px 0 0' 
+          <h1 style={{
+            fontFamily: "'Poppins', sans-serif",
+            textAlign: "center",
+            fontSize: 26,
+            fontWeight: 700,
+            color: BRAND,
+            margin: '8px 0 0'
           }}>Profile</h1>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 120px' }}>
 
           {/* ── Avatar ── */}
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            margin: '12px 0 32px' 
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            margin: '12px 0 32px'
           }}>
-            <div style={{ 
-              width: 84, 
-              height: 84, 
-              borderRadius: '50%', 
-              background: BRAND, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              marginBottom: 12 
+            <div style={{
+              width: 84,
+              height: 84,
+              borderRadius: '50%',
+              background: BRAND,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12
             }}>
               {initials
-                ? <span style={{ 
-                    fontFamily: "'Poppins', sans-serif", 
-                    fontSize: 30, 
-                    fontWeight: 700, 
-                    color: '#fff' 
-                  }}>{initials}</span>
+                ? <span style={{
+                  fontFamily: "'Poppins', sans-serif",
+                  fontSize: 30,
+                  fontWeight: 700,
+                  color: '#fff'
+                }}>{initials}</span>
                 : <User size={36} color="#fff" strokeWidth={1.75} />}
             </div>
-            <p style={{ 
-              fontFamily: "'Poppins', sans-serif", 
-              fontSize: 19, 
-              fontWeight: 600, 
-              color: D.text, 
-              margin: 0 
+            <p style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontSize: 19,
+              fontWeight: 600,
+              color: D.text,
+              margin: 0
             }}>{fullName || 'Guest'}</p>
             {tableNum && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <MapPin size={12} color={D.muted} />
-                <span style={{ 
-                  fontSize: 12, 
+                <span style={{
+                  fontSize: 12,
                   color: D.muted,
                   fontFamily: "'Poppins', sans-serif",
                 }}>Table {tableNum}</span>
@@ -431,51 +453,51 @@ export default function ProfilePage() {
           </div>
 
           {/* ── Your Details ── */}
-          <h2 style={{ 
-            fontFamily: "'Poppins', sans-serif", 
-            fontSize: 17, 
-            fontWeight: 700, 
-            color: D.text, 
-            margin: '0 0 12px' 
+          <h2 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 17,
+            fontWeight: 700,
+            color: D.text,
+            margin: '0 0 12px'
           }}>Your Details</h2>
-          <input 
-            className='searchInput' 
-            value={nameInput} 
-            onChange={e => setNameInput(e.target.value)} 
-            placeholder="Full Name" 
+          <input
+            className='searchInput'
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            placeholder="Full Name"
             style={inputStyle}
             onFocus={handleFocus}
             onBlur={handleBlur}
           />
-          <input 
-            className='searchInput' 
-            value={phoneInput} 
-            onChange={e => setPhoneInput(e.target.value)} 
-            placeholder="Phone Number" 
-            type="tel" 
+          <input
+            className='searchInput'
+            value={phoneInput}
+            onChange={e => setPhoneInput(e.target.value)}
+            placeholder="Phone Number"
+            type="tel"
             style={{ ...inputStyle, marginBottom: 14 }}
             onFocus={handleFocus}
             onBlur={handleBlur}
           />
-          <button 
+          <button
             onClick={handleSave}
-            style={{ 
-              width: '100%', 
-              height: 46, 
-              borderRadius: 12, 
-              background: saved ? '#e64a1a' : BRAND, 
-              color: '#fff', 
-              border: 'none', 
-              fontSize: 14, 
-              fontWeight: 700, 
-              cursor: 'pointer', 
-              marginBottom: 28, 
+            style={{
+              width: '100%',
+              height: 46,
+              borderRadius: 12,
+              background: saved ? '#e64a1a' : BRAND,
+              color: '#fff',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              marginBottom: 28,
               fontFamily: "'Poppins', sans-serif",
               transition: 'all 0.2s ease',
               outline: 'none',
-              opacity: saved ? 0.5 : 1, 
+              opacity: saved ? 0.5 : 1,
             }}
-            
+
             onFocus={(e) => {
               e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`;
             }}
@@ -497,29 +519,29 @@ export default function ProfilePage() {
           </button>
 
           {/* ── Preferences ── */}
-          <h2 style={{ 
-            fontFamily: "'Poppins', sans-serif", 
-            fontSize: 17, 
-            fontWeight: 700, 
-            color: D.text, 
-            margin: '0 0 12px' 
+          <h2 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 17,
+            fontWeight: 700,
+            color: D.text,
+            margin: '0 0 12px'
           }}>Preferences</h2>
           <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
-            <button 
+            <button
               onClick={() => isDark && toggle()}
-              style={{ 
-                flex: 1, 
-                height: 48, 
-                borderRadius: 12, 
-                border: `2px solid ${BRAND}`, 
-                background: !isDark ? BRAND : D.card, 
-                color: !isDark ? '#fff' : BRAND, 
-                fontSize: 14, 
-                fontWeight: 600, 
-                cursor: 'pointer', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 12,
+                border: `2px solid ${BRAND}`,
+                background: !isDark ? BRAND : D.card,
+                color: !isDark ? '#fff' : BRAND,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 gap: 8,
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -534,21 +556,21 @@ export default function ProfilePage() {
             >
               <Sun size={16} /> Light
             </button>
-            <button 
+            <button
               onClick={() => !isDark && toggle()}
-              style={{ 
-                flex: 1, 
-                height: 48, 
-                borderRadius: 12, 
-                border: `2px solid ${BRAND}`, 
-                background: isDark ? BRAND : D.card, 
-                color: isDark ? '#fff' : BRAND, 
-                fontSize: 14, 
-                fontWeight: 600, 
-                cursor: 'pointer', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 12,
+                border: `2px solid ${BRAND}`,
+                background: isDark ? BRAND : D.card,
+                color: isDark ? '#fff' : BRAND,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 gap: 8,
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -567,17 +589,17 @@ export default function ProfilePage() {
 
           {/* ── Quick links ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-            <button 
+            <button
               onClick={() => router.push('/guest/tracking')}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12, 
-                padding: '14px 16px', 
-                background: D.card, 
-                border: `1.5px solid ${D.border}`, 
-                borderRadius: 14, 
-                cursor: 'pointer', 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 16px',
+                background: D.card,
+                border: `1.5px solid ${D.border}`,
+                borderRadius: 14,
+                cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
                 outline: 'none',
@@ -598,26 +620,26 @@ export default function ProfilePage() {
               }}
             >
               <FileText size={18} color={BRAND} />
-              <span style={{ 
-                flex: 1, 
-                fontSize: 15, 
-                color: D.text, 
+              <span style={{
+                flex: 1,
+                fontSize: 15,
+                color: D.text,
                 fontWeight: 500,
                 fontFamily: "'Poppins', sans-serif",
               }}>My Orders</span>
               <ChevronRight size={16} color={D.muted} />
             </button>
-            <button 
+            <button
               onClick={() => router.push('/guest/favorites')}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12, 
-                padding: '14px 16px', 
-                background: D.card, 
-                border: `1.5px solid ${D.border}`, 
-                borderRadius: 14, 
-                cursor: 'pointer', 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 16px',
+                background: D.card,
+                border: `1.5px solid ${D.border}`,
+                borderRadius: 14,
+                cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
                 outline: 'none',
@@ -638,10 +660,10 @@ export default function ProfilePage() {
               }}
             >
               <Heart size={18} color={BRAND} />
-              <span style={{ 
-                flex: 1, 
-                fontSize: 15, 
-                color: D.text, 
+              <span style={{
+                flex: 1,
+                fontSize: 15,
+                color: D.text,
                 fontWeight: 500,
                 fontFamily: "'Poppins', sans-serif",
               }}>Favorites</span>
@@ -650,7 +672,7 @@ export default function ProfilePage() {
           </div>
 
           {/* ── Switch table button ── */}
-          <button 
+          <button
             onClick={handleSwitchTable}
             style={{
               width: '100%',
@@ -760,10 +782,10 @@ export default function ProfilePage() {
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <h3 style={{ 
-                color: '#fff', 
-                fontSize: 18, 
-                fontWeight: 700, 
+              <h3 style={{
+                color: '#fff',
+                fontSize: 18,
+                fontWeight: 700,
                 margin: 0,
                 fontFamily: "'Poppins', sans-serif",
               }}>
@@ -805,45 +827,45 @@ export default function ProfilePage() {
                   pointerEvents: 'none',
                   boxShadow: 'inset 0 0 30px rgba(255,87,35,0.1)',
                 }}>
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: -2, 
-                    left: -2, 
-                    width: 20, 
-                    height: 20, 
-                    borderTop: '3px solid #ff5723', 
-                    borderLeft: '3px solid #ff5723', 
-                    borderRadius: '4px 0 0 0' 
+                  <div style={{
+                    position: 'absolute',
+                    top: -2,
+                    left: -2,
+                    width: 20,
+                    height: 20,
+                    borderTop: '3px solid #ff5723',
+                    borderLeft: '3px solid #ff5723',
+                    borderRadius: '4px 0 0 0'
                   }} />
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: -2, 
-                    right: -2, 
-                    width: 20, 
-                    height: 20, 
-                    borderTop: '3px solid #ff5723', 
-                    borderRight: '3px solid #ff5723', 
-                    borderRadius: '0 4px 0 0' 
+                  <div style={{
+                    position: 'absolute',
+                    top: -2,
+                    right: -2,
+                    width: 20,
+                    height: 20,
+                    borderTop: '3px solid #ff5723',
+                    borderRight: '3px solid #ff5723',
+                    borderRadius: '0 4px 0 0'
                   }} />
-                  <div style={{ 
-                    position: 'absolute', 
-                    bottom: -2, 
-                    left: -2, 
-                    width: 20, 
-                    height: 20, 
-                    borderBottom: '3px solid #ff5723', 
-                    borderLeft: '3px solid #ff5723', 
-                    borderRadius: '0 0 0 4px' 
+                  <div style={{
+                    position: 'absolute',
+                    bottom: -2,
+                    left: -2,
+                    width: 20,
+                    height: 20,
+                    borderBottom: '3px solid #ff5723',
+                    borderLeft: '3px solid #ff5723',
+                    borderRadius: '0 0 0 4px'
                   }} />
-                  <div style={{ 
-                    position: 'absolute', 
-                    bottom: -2, 
-                    right: -2, 
-                    width: 20, 
-                    height: 20, 
-                    borderBottom: '3px solid #ff5723', 
-                    borderRight: '3px solid #ff5723', 
-                    borderRadius: '0 0 4px 0' 
+                  <div style={{
+                    position: 'absolute',
+                    bottom: -2,
+                    right: -2,
+                    width: 20,
+                    height: 20,
+                    borderBottom: '3px solid #ff5723',
+                    borderRight: '3px solid #ff5723',
+                    borderRadius: '0 0 4px 0'
                   }} />
                 </div>
 
@@ -859,14 +881,14 @@ export default function ProfilePage() {
                     fontFamily: "'Poppins', sans-serif",
                   }}>
                     <span style={{ color: '#fff', fontSize: 12 }}>
-                      <span style={{ 
-                        display: 'inline-block', 
-                        width: 8, 
-                        height: 8, 
-                        borderRadius: '50%', 
-                        background: '#4ade80', 
-                        marginRight: 8, 
-                        animation: 'pulse 1.5s ease-in-out infinite' 
+                      <span style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: '#4ade80',
+                        marginRight: 8,
+                        animation: 'pulse 1.5s ease-in-out infinite'
                       }} />
                       Scanning...
                     </span>
@@ -882,9 +904,9 @@ export default function ProfilePage() {
                   borderRadius: 10,
                   textAlign: 'center',
                 }}>
-                  <p style={{ 
-                    color: BRAND, 
-                    fontSize: 13, 
+                  <p style={{
+                    color: BRAND,
+                    fontSize: 13,
                     margin: 0,
                     fontFamily: "'Poppins', sans-serif",
                   }}>{scanError}</p>
@@ -898,9 +920,9 @@ export default function ProfilePage() {
                 borderRadius: 10,
                 textAlign: 'center',
               }}>
-                <p style={{ 
-                  color: '#9CA3AF', 
-                  fontSize: 12, 
+                <p style={{
+                  color: '#9CA3AF',
+                  fontSize: 12,
                   margin: 0,
                   fontFamily: "'Poppins', sans-serif",
                 }}>

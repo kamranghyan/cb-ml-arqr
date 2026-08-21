@@ -165,200 +165,197 @@ export default function CheckoutPage() {
     setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4));
   };
 
-const placeOrder = async () => {
-  console.log('═══════════════════════════════════════════════');
-  console.log('🔄 PLACE ORDER STARTED');
-  console.log('═══════════════════════════════════════════════');
+  const placeOrder = async () => {
+    console.log('═══════════════════════════════════════════════');
+    console.log('🔄 PLACE ORDER STARTED');
+    console.log('═══════════════════════════════════════════════');
 
-  if (!items.length) {
-    console.log('❌ Cart is empty, cannot place order');
-    setOrderError('Cart is empty');
-    return;
-  }
-
-  setPlacing(true);
-  setOrderError('');
-
-  try {
-    const scope = getGuestScope();
-    console.log('📋 Guest Scope:', scope);
-
-    // ── 1. Get table ID for dine-in ──
-    let tableId = '';
-    if (orderType === 'dine_in') {
-      const sessionTid = sessionStorage.getItem('lm_tid');
-      tableId = sessionTid ?? `table-${tableNumber.padStart(2, '0')}`;
-      console.log('📋 Dine-in table ID:', tableId);
-    } else {
-      console.log('📋 Order type:', orderType, '- No table ID needed');
+    if (!items.length) {
+      console.log('❌ Cart is empty, cannot place order');
+      setOrderError('Cart is empty');
+      return;
     }
 
-    // ── 2. Calculate line items ──
-    console.log('📋 Calculating prices for items...');
-    const lineItems = items.map((item) => {
-      // ✅ FIX: Use BASE price (without size multiplier)
-      let unitPrice = item.price; // Base price from menu item
-      
-      // ❌ DO NOT apply size multiplier to unitPrice
-      // Size selection is for display/total calculation only
-      
-      // ✅ Add toppings total (add-ons are extra charges)
-      if (item.options?.toppingsTotal) {
-        unitPrice += item.options.toppingsTotal;
+    setPlacing(true);
+    setOrderError('');
+
+    try {
+      const scope = getGuestScope();
+      console.log('📋 Guest Scope:', scope);
+
+      // ── 1. Get table ID for dine-in ──
+      let tableId = '';
+      if (orderType === 'dine_in') {
+        const sessionTid = sessionStorage.getItem('lm_tid');
+        tableId = sessionTid ?? `table-${tableNumber.padStart(2, '0')}`;
+        console.log('📋 Dine-in table ID:', tableId);
+      } else {
+        console.log('📋 Order type:', orderType, '- No table ID needed');
       }
 
-      console.log(`   Item: ${item.name}`);
-      console.log(`      Base price: ${item.price}`);
-      console.log(`      Size multiplier: ${item.options?.sizeMultiplier || 1} (for display only)`);
-      console.log(`      Toppings total: ${item.options?.toppingsTotal || 0}`);
-      console.log(`      Final unit price (base + toppings): ${unitPrice}`);
-      console.log(`      Quantity: ${item.quantity}`);
-      console.log(`      Total: ${unitPrice * item.quantity}`);
+      // ── 2. Calculate line items ──
+      console.log('📋 Calculating prices for items...');
+      // app/guest/checkout/page.tsx - placeOrder
 
-      return {
-        itemId: item.menuItemId,
-        name: item.name,
-        quantity: item.quantity,
-        unitPriceMinorUnits: Math.round(unitPrice * 100),
-        totalPriceMinorUnits: Math.round(unitPrice * item.quantity * 100),
+      const lineItems = items.map((item) => {
+        const basePrice = item.price;
+        const addOns = item.options?.addOns || [];
+        const addOnsTotal = addOns.reduce((sum, a) => sum + (a.priceMinorUnits / 100), 0);
+
+        return {
+          itemId: item.menuItemId,
+          name: item.name,
+          quantity: item.quantity,
+          unitPriceMinorUnits: Math.round(basePrice * 100),  // ✅ 129900
+
+          // ✅ FIX: Sirf base price × quantity
+          totalPriceMinorUnits: Math.round(basePrice * item.quantity * 100),  // ✅ 129900
+
+          addOns: addOns.map(a => ({
+            addOnId: a.addOnId,
+            name: a.name,
+            quantity: 1,
+            priceMinorUnits: a.priceMinorUnits  // ✅ 15000
+          })),
+          addOnsTotalMinorUnits: Math.round(addOnsTotal * 100)  // ✅ 15000
+        };
+      });
+
+      const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
+      console.log('📋 Line items total:', lineItemsTotal / 100);
+
+      // ── 3. Build payload ──
+      const payload: any = {
+        restaurantId: scope.restaurantId,
+        currencyCode: 'PKR',
+        lineItems: lineItems,
+        totalAmountMinorUnits: lineItemsTotal,
+        orderType: orderType,
+        tableId: tableId,
+        customerName: fullName || null,
+        contactPhone: phone || null,
+        paymentMethod: paymentMethod,
       };
-    });
 
-    const lineItemsTotal = lineItems.reduce((s, li) => s + li.totalPriceMinorUnits, 0);
-    console.log('📋 Line items total:', lineItemsTotal / 100);
-
-    // ── 3. Build payload ──
-    const payload: any = {
-      restaurantId: scope.restaurantId,
-      currencyCode: 'PKR',
-      lineItems: lineItems,
-      totalAmountMinorUnits: lineItemsTotal,
-      orderType: orderType,
-      tableId: tableId,
-      customerName: fullName || null,
-      contactPhone: phone || null,
-      paymentMethod: paymentMethod,
-    };
-
-    // ── 4. Add order-type specific fields ──
-    if (orderType === 'dine_in') {
-      console.log('📋 Processing DINE-IN order');
-    } else if (orderType === 'pickup') {
-      console.log('📋 Processing PICKUP order');
-      if (!fullName.trim()) {
-        throw new Error('Full name is required for pickup orders');
-      }
-      if (!phone.trim()) {
-        throw new Error('Phone number is required for pickup orders');
-      }
-      if (!pickupTime) {
-        throw new Error('Pickup time is required');
-      }
-      payload.customerName = fullName.trim();
-      payload.contactPhone = phone.trim();
-      const pickupDate = new Date(pickupTime);
-      payload.pickupTime = pickupDate.toISOString();
-      console.log(`   pickupTime: ${payload.pickupTime}`);
-    } else if (orderType === 'delivery') {
-      console.log('📋 Processing DELIVERY order');
-      if (!deliveryAddress.trim()) {
-        throw new Error('Delivery address is required');
-      }
-      if (!contactPhone.trim()) {
-        throw new Error('Contact phone is required for delivery');
-      }
-      payload.deliveryAddress = deliveryAddress.trim();
-      payload.contactPhone = contactPhone.trim();
-      payload.deliveryFeeMinorUnits = 0;
-    }
-
-    // ── 5. Add notes if provided ──
-    if (notes.trim()) {
-      payload.notes = notes.trim();
-    }
-
-    // ── 6. Add payment method info ──
-    if (paymentMethod === 'Card' && cardNumber) {
-      payload.cardLast4 = cardNumber.slice(-4);
-    }
-    if (paymentMethod === 'Digital Wallet' && walletProvider) {
-      payload.walletProvider = walletProvider;
-    }
-
-    console.log('═══════════════════════════════════════════════');
-    console.log('📦 FINAL ORDER PAYLOAD:');
-    console.log(JSON.stringify(payload, null, 2));
-    console.log('═══════════════════════════════════════════════');
-
-    // ── 7. Call guest orders API ──
-    const res = await fetch('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      const errorMsg = data?.error || data?.message || `Error ${res.status}`;
-      console.log(`❌ Order failed: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-
-    console.log('✅ Order placed successfully!');
-    console.log(`📋 Order ID: ${data.orderId}`);
-
-    // ── 8. Get prep time ──
-    let prepTimeValue = '20-30 mins';
-    if (data.prepTime) {
-      prepTimeValue = data.prepTime;
-    } else if (data.estimatedTime) {
-      prepTimeValue = data.estimatedTime;
-    } else {
-      try {
-        const menuRes = await fetch(`/api/menu/restaurants/${scope.restaurantId}/items`, {
-          headers: { 'x-tenant-id': scope.restaurantId }
-        });
-        if (menuRes.ok) {
-          const menuData = await menuRes.json();
-          const prepTimeMap: Record<string, number> = {};
-          menuData.items?.forEach((item: any) => {
-            prepTimeMap[item.itemId] = item.prepTime || 20;
-          });
-          let maxPrepTime = 0;
-          items.forEach(cartItem => {
-            const prepTime = prepTimeMap[cartItem.menuItemId] || 20;
-            if (prepTime > maxPrepTime) maxPrepTime = prepTime;
-          });
-          prepTimeValue = `${maxPrepTime}-${maxPrepTime + 5} mins`;
+      // ── 4. Add order-type specific fields ──
+      if (orderType === 'dine_in') {
+        console.log('📋 Processing DINE-IN order');
+      } else if (orderType === 'pickup') {
+        console.log('📋 Processing PICKUP order');
+        if (!fullName.trim()) {
+          throw new Error('Full name is required for pickup orders');
         }
-      } catch (menuErr) {
-        console.log('⚠️ Could not fetch prep time, using default');
+        if (!phone.trim()) {
+          throw new Error('Phone number is required for pickup orders');
+        }
+        if (!pickupTime) {
+          throw new Error('Pickup time is required');
+        }
+        payload.customerName = fullName.trim();
+        payload.contactPhone = phone.trim();
+        const pickupDate = new Date(pickupTime);
+        payload.pickupTime = pickupDate.toISOString();
+        console.log(`   pickupTime: ${payload.pickupTime}`);
+      } else if (orderType === 'delivery') {
+        console.log('📋 Processing DELIVERY order');
+        if (!deliveryAddress.trim()) {
+          throw new Error('Delivery address is required');
+        }
+        if (!contactPhone.trim()) {
+          throw new Error('Contact phone is required for delivery');
+        }
+        payload.deliveryAddress = deliveryAddress.trim();
+        payload.contactPhone = contactPhone.trim();
+        payload.deliveryFeeMinorUnits = 0;
       }
-    }
-    setPrepTime(prepTimeValue);
 
-    // ── 9. Save profile and clear cart ──
-    if (fullName.trim()) {
-      savedProfile.setFullName(fullName.trim());
-    }
-    if (phone.trim()) {
-      savedProfile.setPhone(phone.trim());
-    }
+      // ── 5. Add notes if provided ──
+      if (notes.trim()) {
+        payload.notes = notes.trim();
+      }
 
-    setOrderId(data.orderId ?? '');
-    clearCart();
-    setPlaced(true);
+      // ── 6. Add payment method info ──
+      if (paymentMethod === 'Card' && cardNumber) {
+        payload.cardLast4 = cardNumber.slice(-4);
+      }
+      if (paymentMethod === 'Digital Wallet' && walletProvider) {
+        payload.walletProvider = walletProvider;
+      }
 
-  } catch (err: any) {
-    console.log('❌ ORDER ERROR:', err);
-    setOrderError(err?.message ?? 'Failed to place order.');
-  } finally {
-    setPlacing(false);
-  }
-};
+      console.log('═══════════════════════════════════════════════');
+      console.log('📦 FINAL ORDER PAYLOAD:');
+      console.log(JSON.stringify(payload, null, 2));
+      console.log('═══════════════════════════════════════════════');
+
+      // ── 7. Call guest orders API ──
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const errorMsg = data?.error || data?.message || `Error ${res.status}`;
+        console.log(`❌ Order failed: ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      console.log('✅ Order placed successfully!');
+      console.log(`📋 Order ID: ${data.orderId}`);
+
+      // ── 8. Get prep time ──
+      let prepTimeValue = '20-30 mins';
+      if (data.prepTime) {
+        prepTimeValue = data.prepTime;
+      } else if (data.estimatedTime) {
+        prepTimeValue = data.estimatedTime;
+      } else {
+        try {
+          const menuRes = await fetch(`/api/menu/restaurants/${scope.restaurantId}/items`, {
+            headers: { 'x-tenant-id': scope.restaurantId }
+          });
+          if (menuRes.ok) {
+            const menuData = await menuRes.json();
+            const prepTimeMap: Record<string, number> = {};
+            menuData.items?.forEach((item: any) => {
+              prepTimeMap[item.itemId] = item.prepTime || 20;
+            });
+            let maxPrepTime = 0;
+            items.forEach(cartItem => {
+              const prepTime = prepTimeMap[cartItem.menuItemId] || 20;
+              if (prepTime > maxPrepTime) maxPrepTime = prepTime;
+            });
+            prepTimeValue = `${maxPrepTime}-${maxPrepTime + 5} mins`;
+          }
+        } catch (menuErr) {
+          console.log('⚠️ Could not fetch prep time, using default');
+        }
+      }
+      setPrepTime(prepTimeValue);
+
+      // ── 9. Save profile and clear cart ──
+      if (fullName.trim()) {
+        savedProfile.setFullName(fullName.trim());
+      }
+      if (phone.trim()) {
+        savedProfile.setPhone(phone.trim());
+      }
+
+      setOrderId(data.orderId ?? '');
+      clearCart();
+      setPlaced(true);
+
+    } catch (err: any) {
+      console.log('❌ ORDER ERROR:', err);
+      setOrderError(err?.message ?? 'Failed to place order.');
+    } finally {
+      setPlacing(false);
+    }
+  };
 
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)', selected: "rgba(255, 87, 35, 0.12)",

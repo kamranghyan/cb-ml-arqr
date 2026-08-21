@@ -33,6 +33,7 @@ from app.core.dependencies import (
     get_tenant_id,
 )
 from app.models.order import (
+    AddOn,  # ✅ NEW: Add this import
     LineItem,
     OrderRecord,
     OrderRequest,
@@ -62,12 +63,9 @@ async def create_order(
     user: Annotated[UserContext | None,     Depends(optional_user)] = None,
 ):
     order_id = str(uuid.uuid4())
-    # tenant comes from X-Tenant-Id (guest has no token); a logged-in
-    # staff token, if present, may override with its own tenant claim.
     if user is not None and getattr(user, "tenant_id", None):
         tenant_id = user.tenant_id
 
-    # Build the domain OrderRequest from the wire body + tenant from JWT
     request = OrderRequest(
         tenantId=tenant_id,
         restaurantId=body.restaurantId,
@@ -80,17 +78,24 @@ async def create_order(
                 quantity=item.quantity,
                 unitPriceMinorUnits=item.unitPriceMinorUnits,
                 totalPriceMinorUnits=item.totalPriceMinorUnits,
+                addOns=[
+                    AddOn(
+                        addOnId=addon.addOnId,
+                        name=addon.name,
+                        quantity=addon.quantity,
+                        priceMinorUnits=addon.priceMinorUnits
+                    )
+                    for addon in (item.addOns or [])
+                ],
+                addOnsTotalMinorUnits=item.addOnsTotalMinorUnits or 0,
             )
             for item in body.lineItems
         ],
         totalAmountMinorUnits=body.totalAmountMinorUnits,
         guestConnectionId=body.guestConnectionId,
-
         orderType=body.orderType,
-
         customerName=body.customerName,
         pickupTime=body.pickupTime,
-
         deliveryAddress=body.deliveryAddress,
         contactPhone=body.contactPhone,
         deliveryFeeMinorUnits=body.deliveryFeeMinorUnits,
@@ -115,15 +120,12 @@ async def create_order(
     except DuplicateOrderError:
         raise BadRequestError("Order already exists.")
 
-    # Clear the Redis cart (best-effort). Only dine-in carts are keyed by
-    # table — pickup and delivery have no table to clear.
     if body.tableId:
         CartService().clear_cart(tenant_id, body.tableId)
 
-    # Start Step Functions
     try:
         execution_arn = sfn.start_new_order(order_id, request)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         repo.rollback_order(record)
         log.error("sfn.start.failed", order_id=order_id, exc_message=str(exc))
         raise BadRequestError(f"Step Functions unavailable: {exc}") from exc
@@ -135,8 +137,8 @@ async def create_order(
     )
 
     return {
-        "orderId":                   order_id,
-        "status":                    "RECEIVED",
+        "orderId": order_id,
+        "status": "RECEIVED",
         "stepFunctionsExecutionArn": execution_arn,
     }
 
@@ -151,7 +153,20 @@ async def list_orders(
     hours:        Annotated[int, Query(ge=1, le=24)] = 4,
 ):
     orders = repo.list_orders(restaurantId, tenant_id, hours=hours)
-    return {"orders": clean_decimals(orders), "count": len(orders)}
+    
+    # ✅ Process each order to ensure add-ons are included
+    processed_orders = []
+    for order in orders:
+        processed_order = clean_decimals(order)
+        if "lineItems" in processed_order:
+            for item in processed_order["lineItems"]:
+                if "addOns" not in item:
+                    item["addOns"] = []
+                if "addOnsTotalMinorUnits" not in item:
+                    item["addOnsTotalMinorUnits"] = 0
+        processed_orders.append(processed_order)
+    
+    return {"orders": processed_orders, "count": len(processed_orders)}
 
 
 # ── GET /orders/{orderId} ─────────────────────────────────────────────────────
@@ -165,7 +180,17 @@ async def get_order(
     order = repo.get_order(orderId, tenant_id)
     if not order:
         raise ResourceNotFoundError(resource="Order", identifier=orderId)
-    return {"order": clean_decimals(dict(order)), "sfnStatus": None}
+    
+    # ✅ Ensure add-ons are included
+    processed_order = clean_decimals(dict(order))
+    if "lineItems" in processed_order:
+        for item in processed_order["lineItems"]:
+            if "addOns" not in item:
+                item["addOns"] = []
+            if "addOnsTotalMinorUnits" not in item:
+                item["addOnsTotalMinorUnits"] = 0
+    
+    return {"order": processed_order, "sfnStatus": None}
 
 
 # ── PATCH /orders/{orderId} ───────────────────────────────────────────────────
@@ -192,14 +217,12 @@ async def update_order(
     )
     new_status = update.derived_status
 
-    # Update DynamoDB (critical)
     try:
         repo.update_status(orderId, tenant_id, new_status)
         log.info("order.status.updated", order_id=orderId, status=new_status)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("order.status.update.failed", order_id=orderId, exc_message=str(exc))
 
-    # Start SFN for notifications (non-fatal)
     exec_name = f"{orderId}-{int(datetime.now(timezone.utc).timestamp())}"
     execution_arn = sfn.start_status_update(orderId, order, update, exec_name)
 

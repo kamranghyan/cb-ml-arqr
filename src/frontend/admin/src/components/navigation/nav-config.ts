@@ -28,8 +28,8 @@ export const NAV: NavSection[] = [
   {
     section: 'Operations',
     items: [
-      { href: '/orders',  label: 'Kitchen Orders', icon: ChefHat, permission: 'orders:read' },
-      { href: '/history', label: 'Order History',  icon: Receipt, permission: 'orders:read' },
+      { href: '/orders', label: 'Kitchen Orders', icon: ChefHat, permission: 'orders:read' },
+      { href: '/history', label: 'Order History', icon: Receipt, permission: 'orders:read' },
     ],
   },
   {
@@ -37,15 +37,22 @@ export const NAV: NavSection[] = [
     section: 'Customers',
     items: [
       { href: '/tenants', label: 'Tenants', icon: Building2, permission: 'tenants:read' },
-      { href: '/users',   label: 'Users',   icon: Users,     permission: 'users:read' },
+      { href: '/users', label: 'Users', icon: Users, permission: 'users:read' },
     ],
   },
   {
     // Company owners only.
     section: 'My Company',
     items: [
-      { href: '/restaurants', label: 'Restaurants', icon: Store,   permission: 'restaurants:read' },
-      { href: '/staff',       label: 'Staff',       icon: UserCog, permission: 'staff:read' },
+      { href: '/restaurants', label: 'Restaurants', icon: Store, permission: 'restaurants:read' },
+      { href: '/staff', label: 'Staff', icon: UserCog, permission: 'staff:read' },
+    ],
+  },
+  {
+    section: 'Subscription',
+    items: [
+      { href: '/Plans', label: 'My Plans', icon: Settings, permission: 'settings:read' },
+      { href: '/Invoices', label: 'Invoices', icon: Settings, permission: 'settings:read' },
     ],
   },
   {
@@ -54,6 +61,7 @@ export const NAV: NavSection[] = [
       { href: '/settings', label: 'Settings', icon: Settings, permission: 'settings:read' },
     ],
   },
+
 ]
 
 /**
