@@ -2,16 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Volume2, VolumeX, RefreshCw, Wifi, WifiOff, Radio, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { formatTimer, timerColorClass, timerBarColor, playNewOrderBeep } from '@/lib/utils';
-import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL } from '@/lib/orders-api';
+import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL, connectWebSocket, authHeaders } from '@/lib/orders-api';
 import type { KdsOrder, KdsStatus } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { connectWebSocket } from '@/lib/orders-api';
 
 type Filter = 'all' | 'new' | 'preparing' | 'ready' | 'delivered';
 type WsState = 'connecting' | 'connected' | 'disconnected' | 'error';
+type KdsOrderItemWithImage = KdsOrder['items'][number] & { imageUrl?: string };
 
 const STATUS_NEXT: Record<KdsStatus, KdsStatus | null> = {
   new: 'preparing', preparing: 'ready', ready: 'delivered', delivered: null,
@@ -45,6 +46,8 @@ export default function KitchenDisplayPage() {
   const prevIds = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const wsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioRef = useRef(audio);
+  useEffect(() => { audioRef.current = audio; }, [audio]);
 
   async function handleLogout() { setLoggingOut(true); await logout(); router.push('/login/kds'); }
 
@@ -69,7 +72,7 @@ export default function KitchenDisplayPage() {
           setOrders(prev => {
             const exists = prev.find(o => (o as any)._apiId === orderId || o.id === displayId);
             if (exists) { showToast(`📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`); return prev.map(o => ((o as any)._apiId === orderId || o.id === displayId) ? { ...o, status: kdsStatus } : o); }
-            else if (msg.lineItems || msg.items) { const n = normaliseOrder(msg); showToast(`🔔 WS: New order #${n.id} — Table ${n.table}`); if (audio) playNewOrderBeep(); return [n, ...prev]; }
+            else if (msg.lineItems || msg.items) { const n = normaliseOrder(msg); showToast(`🔔 WS: New order #${n.id} — Table ${n.table}`); if (audioRef.current) playNewOrderBeep(); return [n, ...prev]; }
             return prev;
           });
         }
@@ -77,7 +80,7 @@ export default function KitchenDisplayPage() {
     };
     ws.onerror = () => { setWsState('error'); addWsLog('✗ WebSocket error'); };
     ws.onclose = (e) => { setWsState('disconnected'); addWsLog(`✗ Disconnected (code ${e.code})`); if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRetryRef.current = setTimeout(connectWs, 5000); };
-  }, [audio]);
+  }, []);
 
   useEffect(() => { connectWs(); return () => { if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRef.current?.close(); }; }, [connectWs]);
   const wsSend = (p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } };
@@ -85,41 +88,34 @@ export default function KitchenDisplayPage() {
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setApiState('loading');
     try {
-      // ✅ FIX: Get restaurantId from auth user, NOT from guest-scope
-      const restaurantId = user?.restaurantId;
-      if (!restaurantId) {
-        console.warn('⚠️ No restaurantId found for current user');
+      // The proxy derives restaurantId from the signed-in user's token, server-side —
+      // this is just a friendlier early error for the "not linked to a branch" case.
+      if (!user?.restaurantId) {
         setApiState('error');
         setApiError('No restaurant assigned to this account');
         return;
       }
-      
-      console.log('🔍 KDS Fetching orders for restaurant:', restaurantId);
-      
-      // Use URL to avoid duplicate params
-      const url = new URL('/api/orders', window.location.origin);
-      url.searchParams.set('rid', restaurantId);
-      
-      console.log('📡 KDS Request URL:', url.toString());
-      
-      const res = await fetch(url.toString(), { cache: 'no-store' });
+
+      const res = await fetch('/api/orders', {
+        cache: 'no-store',
+        headers: await authHeaders(),   // was missing — every poll was 403ing without this
+      });
       if (!res.ok) throw new Error(`API ${res.status}`);
-      
+
       const data = await res.json();
-      console.log('✅ KDS API RAW RESPONSE:', data);
-      
+
       const fresh = data.orders ?? [];
       const freshIds = new Set<string>(fresh.map((o: any) => String(o.orderId)));
-      
+
       const newOnes = fresh.filter((o: any) => !prevIds.current.has(o.orderId));
       if (newOnes.length > 0 && prevIds.current.size > 0) {
-        newOnes.forEach((o: any) => { 
-          showToast(`🔔 New order #${o.orderId.slice(0, 6).toUpperCase()} — Table ${o.tableId ? 'Dine-in' : 'Walk-in'}`); 
-          if (audio) playNewOrderBeep(); 
+        newOnes.forEach((o: any) => {
+          showToast(`🔔 New order #${o.orderId.slice(0, 6).toUpperCase()} — Table ${o.tableId ? 'Dine-in' : 'Walk-in'}`);
+          if (audio) playNewOrderBeep();
         });
       }
       prevIds.current = freshIds;
-      
+
       setOrders(prev => {
         const m = new Map(prev.map(o => [o.id, o]));
         return fresh.map((o: any) => {
@@ -134,9 +130,9 @@ export default function KitchenDisplayPage() {
         });
       });
       setApiState('live'); pollStart.current = Date.now();
-    } catch (err: any) { 
+    } catch (err: any) {
       console.error('❌ KDS API ERROR:', err);
-      setApiError(err?.message ?? 'Failed'); setApiState('error'); 
+      setApiError(err?.message ?? 'Failed'); setApiState('error');
     }
   }, [user]);
 
@@ -154,15 +150,15 @@ export default function KitchenDisplayPage() {
   const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
 
   // ✅ Remove tableId filter from KDS - show ALL orders
-  const filtered = orders.filter(o => { 
-    if (filter === 'all') return o.status !== 'delivered'; 
-    if (filter === 'delivered') return o.status === 'delivered'; 
-    return o.status === filter; 
+  const filtered = orders.filter(o => {
+    if (filter === 'all') return o.status !== 'delivered';
+    if (filter === 'delivered') return o.status === 'delivered';
+    return o.status === filter;
   }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
-  
+
   const counts = { pending: orders.filter(o => o.status === 'new').length, preparing: orders.filter(o => o.status === 'preparing').length, ready: orders.filter(o => o.status === 'ready').length };
   const [currentDate, setCurrentDate] = useState('')
-  
+
   useEffect(() => {
     const tick = () => {
       const now = new Date()
@@ -215,47 +211,47 @@ export default function KitchenDisplayPage() {
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
   return (
-    <div style={{ 
-      minHeight: '100dvh', 
-      background: D.bg, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      fontFamily: "'Poppins', sans-serif", 
-      transition: 'background 0.25s' 
+    <div style={{
+      minHeight: '100dvh',
+      background: D.bg,
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: "'Poppins', sans-serif",
+      transition: 'background 0.25s'
     }}>
 
       {toast && (
-        <div style={{ 
-          position: 'fixed', 
-          top: 80, 
-          right: 20, 
-          zIndex: 50, 
-          background: D.card, 
-          border: `1.5px solid ${TONE.orange.border}`, 
-          borderRadius: 18, 
-          padding: '12px 16px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 12, 
-          boxShadow: '0 8px 24px rgba(255,87,35,0.15)', 
+        <div style={{
+          position: 'fixed',
+          top: 80,
+          right: 20,
+          zIndex: 50,
+          background: D.card,
+          border: `1.5px solid ${TONE.orange.border}`,
+          borderRadius: 18,
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          boxShadow: '0 8px 24px rgba(255,87,35,0.15)',
           maxWidth: 320,
           fontFamily: "'Poppins', sans-serif",
         }}>
-          <div style={{ 
-            width: 32, 
-            height: 32, 
-            borderRadius: 10, 
-            background: TONE.orange.bg, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            fontSize: 16, 
-            flexShrink: 0 
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            background: TONE.orange.bg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            flexShrink: 0
           }}>🔔</div>
-          <p style={{ 
-            fontSize: 13, 
-            fontWeight: 600, 
-            color: D.text, 
+          <p style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: D.text,
             margin: 0,
             fontFamily: "'Poppins', sans-serif",
           }}>{toast}</p>
@@ -282,20 +278,20 @@ export default function KitchenDisplayPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <img src='./Images/logo.png' alt="Menulay Logo" style={{ width: 120, height: 32, objectFit: 'contain' }} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <p style={{ 
-              color: '#fff', 
-              fontSize: 16, 
-              fontWeight: 700, 
-              margin: 0, 
-              fontFamily: "'Poppins', sans-serif", 
-              lineHeight: 1 
+            <p style={{
+              color: '#fff',
+              fontSize: 16,
+              fontWeight: 700,
+              margin: 0,
+              fontFamily: "'Poppins', sans-serif",
+              lineHeight: 1
             }}>KDS</p>
-            <p style={{ 
-              color: 'rgba(255,255,255,0.7)', 
-              fontSize: 8, 
-              fontWeight: 700, 
-              letterSpacing: 1, 
-              textTransform: 'uppercase', 
+            <p style={{
+              color: 'rgba(255,255,255,0.7)',
+              fontSize: 8,
+              fontWeight: 700,
+              letterSpacing: 1,
+              textTransform: 'uppercase',
               margin: 0,
               fontFamily: "'Poppins', sans-serif",
             }}>Kitchen Display</p>
@@ -303,45 +299,45 @@ export default function KitchenDisplayPage() {
         </div>
 
         {/* Center - Status Badges (Desktop) */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 8,
           flex: '0 1 auto',
           fontFamily: "'Poppins', sans-serif",
         }} className="desktop-status">
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6, 
-            background: apiColor.bg, 
-            border: `1px solid ${apiColor.border}`, 
-            borderRadius: 16, 
-            padding: '4px 10px' 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: apiColor.bg,
+            border: `1px solid ${apiColor.border}`,
+            borderRadius: 16,
+            padding: '4px 10px'
           }}>
             {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
-            <span style={{ 
-              fontSize: 10, 
-              fontWeight: 700, 
-              color: apiColor.text, 
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: apiColor.text,
               textTransform: 'uppercase',
               fontFamily: "'Poppins', sans-serif",
             }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
           </div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6, 
-            background: wsColor.bg, 
-            border: `1px solid ${wsColor.border}`, 
-            borderRadius: 16, 
-            padding: '4px 10px' 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: wsColor.bg,
+            border: `1px solid ${wsColor.border}`,
+            borderRadius: 16,
+            padding: '4px 10px'
           }}>
             <Radio size={12} color={wsColor.text} />
-            <span style={{ 
-              fontSize: 10, 
-              fontWeight: 700, 
-              color: wsColor.text, 
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: wsColor.text,
               textTransform: 'uppercase',
               fontFamily: "'Poppins', sans-serif",
             }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
@@ -356,27 +352,27 @@ export default function KitchenDisplayPage() {
             {/* Counts */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               {[{ val: counts.pending, label: 'P' }, { val: counts.preparing, label: 'Pr' }, { val: counts.ready, label: 'R' }].map(s => (
-                <div key={s.label} style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  padding: '2px 8px', 
-                  borderRadius: 8, 
-                  background: 'rgba(255,255,255,0.12)', 
-                  border: '1px solid rgba(255,255,255,0.15)' 
+                <div key={s.label} style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '2px 8px',
+                  borderRadius: 8,
+                  background: 'rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.15)'
                 }}>
-                  <span style={{ 
-                    fontSize: 16, 
-                    fontWeight: 700, 
-                    color: '#fff', 
-                    fontFamily: "'Poppins', sans-serif", 
-                    lineHeight: 1 
+                  <span style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: '#fff',
+                    fontFamily: "'Poppins', sans-serif",
+                    lineHeight: 1
                   }}>{s.val}</span>
-                  <span style={{ 
-                    fontSize: 7, 
-                    color: 'rgba(255,255,255,0.6)', 
-                    fontWeight: 700, 
-                    textTransform: 'uppercase', 
+                  <span style={{
+                    fontSize: 7,
+                    color: 'rgba(255,255,255,0.6)',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
                     letterSpacing: 0.5,
                     fontFamily: "'Poppins', sans-serif",
                   }}>{s.label}</span>
@@ -388,17 +384,17 @@ export default function KitchenDisplayPage() {
 
             {/* Clock */}
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <p style={{ 
-                fontFamily: 'monospace', 
-                fontSize: 18, 
-                fontWeight: 800, 
-                color: '#fff', 
-                margin: 0, 
-                lineHeight: 1 
+              <p style={{
+                fontFamily: 'monospace',
+                fontSize: 18,
+                fontWeight: 800,
+                color: '#fff',
+                margin: 0,
+                lineHeight: 1
               }}>{clock || '00:00:00'}</p>
-              <p style={{ 
-                fontSize: 10, 
-                color: 'rgba(255,255,255,0.5)', 
+              <p style={{
+                fontSize: 10,
+                color: 'rgba(255,255,255,0.5)',
                 margin: 0,
                 fontFamily: "'Poppins', sans-serif",
               }}>{currentDate}</p>
@@ -407,19 +403,19 @@ export default function KitchenDisplayPage() {
             <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.2)' }} />
 
             {/* Audio Toggle */}
-            <button 
-              onClick={() => setAudio(!audio)} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 4, 
-                padding: '6px 10px', 
-                borderRadius: 8, 
-                border: '1.5px solid rgba(255,255,255,0.2)', 
-                background: 'rgba(255,255,255,0.08)', 
-                color: '#fff', 
-                fontSize: 11, 
-                fontWeight: 700, 
+            <button
+              onClick={() => setAudio(!audio)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1.5px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -442,19 +438,19 @@ export default function KitchenDisplayPage() {
             </button>
 
             {/* Theme Toggle */}
-            <button 
-              onClick={toggle} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 4, 
-                padding: '6px 10px', 
-                borderRadius: 8, 
-                border: '1.5px solid rgba(255,255,255,0.2)', 
-                background: 'rgba(255,255,255,0.08)', 
-                color: '#fff', 
-                fontSize: 11, 
-                fontWeight: 700, 
+            <button
+              onClick={toggle}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1.5px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -477,20 +473,20 @@ export default function KitchenDisplayPage() {
             </button>
 
             {/* Logout */}
-            <button 
-              onClick={handleLogout} 
-              disabled={loggingOut} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 4, 
-                padding: '6px 12px', 
-                borderRadius: 8, 
-                border: '1.5px solid rgba(255,255,255,0.2)', 
-                background: 'rgba(255,255,255,0.08)', 
-                color: '#fff', 
-                fontSize: 11, 
-                fontWeight: 700, 
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1.5px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 opacity: loggingOut ? 0.6 : 1,
@@ -521,18 +517,18 @@ export default function KitchenDisplayPage() {
           </div>
 
           {/* Mobile Menu Button */}
-          <button 
-            onClick={toggleMobileMenu} 
-            style={{ 
-              display: 'none', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              width: 38, 
-              height: 38, 
-              borderRadius: 8, 
-              border: '1.5px solid rgba(255,255,255,0.2)', 
-              background: 'rgba(255,255,255,0.1)', 
-              color: '#fff', 
+          <button
+            onClick={toggleMobileMenu}
+            style={{
+              display: 'none',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 38,
+              height: 38,
+              borderRadius: 8,
+              border: '1.5px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.1)',
+              color: '#fff',
               cursor: 'pointer',
               flexShrink: 0,
               transition: 'all 0.2s ease',
@@ -574,55 +570,55 @@ export default function KitchenDisplayPage() {
         }} className="mobile-dropdown">
           {/* Status Badges */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6, 
-              background: apiColor.bg, 
-              border: `1px solid ${apiColor.border}`, 
-              borderRadius: 16, 
-              padding: '4px 10px' 
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: apiColor.bg,
+              border: `1px solid ${apiColor.border}`,
+              borderRadius: 16,
+              padding: '4px 10px'
             }}>
               {apiState === 'live' ? <Wifi size={12} color={apiColor.text} /> : apiState === 'error' ? <WifiOff size={12} color={apiColor.text} /> : <RefreshCw size={12} color={apiColor.text} className="animate-spin" />}
-              <span style={{ 
-                fontSize: 10, 
-                fontWeight: 700, 
-                color: apiColor.text, 
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: apiColor.text,
                 textTransform: 'uppercase',
                 fontFamily: "'Poppins', sans-serif",
               }}>{apiState === 'live' ? 'REST' : apiState === 'error' ? 'Error' : '…'}</span>
             </div>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6, 
-              background: wsColor.bg, 
-              border: `1px solid ${wsColor.border}`, 
-              borderRadius: 16, 
-              padding: '4px 10px' 
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: wsColor.bg,
+              border: `1px solid ${wsColor.border}`,
+              borderRadius: 16,
+              padding: '4px 10px'
             }}>
               <Radio size={12} color={wsColor.text} />
-              <span style={{ 
-                fontSize: 10, 
-                fontWeight: 700, 
-                color: wsColor.text, 
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: wsColor.text,
                 textTransform: 'uppercase',
                 fontFamily: "'Poppins', sans-serif",
               }}>WS {wsState === 'connected' ? 'Live' : wsState === 'connecting' ? '…' : 'Off'}</span>
               {wsState === 'connected' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
             </div>
           </div>
-          
+
           {/* Compact counts for mobile */}
           <div style={{ display: 'flex', gap: 8 }}>
             {[{ val: counts.pending, label: 'Pending' }, { val: counts.preparing, label: 'Preparing' }, { val: counts.ready, label: 'Ready' }].map(s => (
-              <div key={s.label} style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 4, 
-                padding: '4px 10px', 
-                borderRadius: 8, 
-                background: 'rgba(255,255,255,0.05)', 
+              <div key={s.label} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 10px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.05)',
                 border: `1px solid ${D.border}`,
                 fontFamily: "'Poppins', sans-serif",
               }}>
@@ -631,22 +627,22 @@ export default function KitchenDisplayPage() {
               </div>
             ))}
           </div>
-          
+
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {/* Audio Toggle */}
-            <button 
-              onClick={() => setAudio(!audio)} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                padding: '8px 14px', 
-                borderRadius: 8, 
-                border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`, 
-                background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0', 
-                color: audio ? D.text : BRAND, 
-                fontSize: 12, 
-                fontWeight: 700, 
+            <button
+              onClick={() => setAudio(!audio)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: `1.5px solid ${audio ? 'rgba(255,255,255,0.2)' : '#FFD0D0'}`,
+                background: audio ? 'rgba(255,255,255,0.08)' : '#FFF0F0',
+                color: audio ? D.text : BRAND,
+                fontSize: 12,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -663,19 +659,19 @@ export default function KitchenDisplayPage() {
             </button>
 
             {/* Theme Toggle */}
-            <button 
-              onClick={toggle} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                padding: '8px 14px', 
-                borderRadius: 8, 
-                border: `1.5px solid ${D.border}`, 
-                background: D.card2, 
-                color: D.text, 
-                fontSize: 12, 
-                fontWeight: 700, 
+            <button
+              onClick={toggle}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: `1.5px solid ${D.border}`,
+                background: D.card2,
+                color: D.text,
+                fontSize: 12,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 transition: 'all 0.2s ease',
@@ -692,20 +688,20 @@ export default function KitchenDisplayPage() {
             </button>
 
             {/* Logout */}
-            <button 
-              onClick={handleLogout} 
-              disabled={loggingOut} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                padding: '8px 14px', 
-                borderRadius: 8, 
-                border: '1.5px solid #FFD0D0', 
-                background: '#FFF0F0', 
-                color: BRAND, 
-                fontSize: 12, 
-                fontWeight: 700, 
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: '1.5px solid #FFD0D0',
+                background: '#FFF0F0',
+                color: BRAND,
+                fontSize: 12,
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'Poppins', sans-serif",
                 opacity: loggingOut ? 0.6 : 1,
@@ -734,34 +730,34 @@ export default function KitchenDisplayPage() {
 
       {/* ── API error ── */}
       {apiState === 'error' && (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 12, 
-          padding: '10px 16px', 
-          background: TONE.danger.bg, 
-          borderBottom: `1px solid ${TONE.danger.border}`, 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          background: TONE.danger.bg,
+          borderBottom: `1px solid ${TONE.danger.border}`,
           flexShrink: 0,
           fontFamily: "'Poppins', sans-serif",
         }}>
           <WifiOff size={14} color={TONE.danger.text} />
-          <p style={{ 
-            fontSize: 12, 
-            color: TONE.danger.text, 
-            flex: 1, 
+          <p style={{
+            fontSize: 12,
+            color: TONE.danger.text,
+            flex: 1,
             margin: 0,
             fontFamily: "'Poppins', sans-serif",
           }}>{apiError}</p>
-          <button 
-            onClick={() => loadOrders()} 
-            style={{ 
-              padding: '4px 14px', 
-              borderRadius: 8, 
-              background: TONE.danger.bg, 
-              border: `1px solid ${TONE.danger.border}`, 
-              color: TONE.danger.text, 
-              fontSize: 12, 
-              fontWeight: 700, 
+          <button
+            onClick={() => loadOrders()}
+            style={{
+              padding: '4px 14px',
+              borderRadius: 8,
+              background: TONE.danger.bg,
+              border: `1px solid ${TONE.danger.border}`,
+              color: TONE.danger.text,
+              fontSize: 12,
+              fontWeight: 700,
               cursor: 'pointer',
               fontFamily: "'Poppins', sans-serif",
               transition: 'all 0.2s ease',
@@ -835,8 +831,8 @@ export default function KitchenDisplayPage() {
           );
         })}
         <div style={{ width: 1, height: 16, background: D.border, margin: '0 4px', flexShrink: 0 }} />
-        <button 
-          onClick={() => setFilter('delivered')} 
+        <button
+          onClick={() => setFilter('delivered')}
           style={{
             padding: '4px 12px',
             borderRadius: 16,
@@ -875,27 +871,27 @@ export default function KitchenDisplayPage() {
 
       {/* ── WS log ── */}
       {wsLog.length > 0 && (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 8, 
-          padding: '4px 12px', 
-          background: TONE.green.bg, 
-          borderBottom: `1px solid ${TONE.green.border}`, 
-          flexShrink: 0, 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '4px 12px',
+          background: TONE.green.bg,
+          borderBottom: `1px solid ${TONE.green.border}`,
+          flexShrink: 0,
           overflow: 'hidden',
           fontFamily: "'Poppins', sans-serif",
         }}>
           <Radio size={10} color={TONE.green.text} style={{ flexShrink: 0 }} />
-          <p style={{ 
-            fontSize: 9, 
-            color: TONE.green.text, 
-            fontFamily: 'monospace', 
-            overflow: 'hidden', 
-            textOverflow: 'ellipsis', 
-            whiteSpace: 'nowrap', 
-            flex: 1, 
-            margin: 0 
+          <p style={{
+            fontSize: 9,
+            color: TONE.green.text,
+            fontFamily: 'monospace',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            margin: 0
           }}>{wsLog[0]}</p>
           <span style={{ fontSize: 8, color: D.subtle, flexShrink: 0 }}>{wsLog.length}</span>
         </div>
@@ -903,32 +899,35 @@ export default function KitchenDisplayPage() {
 
       {/* ── Loading ── */}
       {apiState === 'loading' && orders.length === 0 && (
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          gap: 16, 
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
           padding: '20px',
           fontFamily: "'Poppins', sans-serif",
         }}>
-          <div style={{ 
-            width: 40, 
-            height: 40, 
-            border: `3px solid ${BRAND}`, 
-            borderTopColor: 'transparent', 
-            borderRadius: '50%', 
-            animation: 'spin 0.8s linear infinite' 
+          <div style={{
+            width: 40,
+            height: 40,
+            border: `3px solid ${BRAND}`,
+            borderTopColor: 'transparent',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
           }} />
-          <p style={{ 
-            fontSize: 14, 
-            color: D.muted, 
+          <p style={{
+            fontSize: 14,
+            color: D.muted,
             fontWeight: 600,
             fontFamily: "'Poppins', sans-serif",
           }}>Loading orders…</p>
         </div>
       )}
+
+      {/* ── Grid ── */}
+      // app/kds/page.tsx - Modified section
 
       {/* ── Grid ── */}
       {(apiState !== 'loading' || orders.length > 0) && (
@@ -942,24 +941,24 @@ export default function KitchenDisplayPage() {
           overflowY: 'auto',
         }}>
           {filtered.length === 0 && (
-            <div style={{ 
-              gridColumn: '1/-1', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              padding: '40px 16px', 
-              gap: 12, 
-              border: `2px dashed ${D.border}`, 
-              borderRadius: 20, 
+            <div style={{
+              gridColumn: '1/-1',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '40px 16px',
+              gap: 12,
+              border: `2px dashed ${D.border}`,
+              borderRadius: 20,
               background: D.card,
               fontFamily: "'Poppins', sans-serif",
             }}>
               <span style={{ fontSize: 32, opacity: 0.2 }}>✔️</span>
-              <p style={{ 
-                fontSize: 13, 
-                color: D.muted, 
-                fontWeight: 600, 
+              <p style={{
+                fontSize: 13,
+                color: D.muted,
+                fontWeight: 600,
                 margin: 0,
                 fontFamily: "'Poppins', sans-serif",
               }}>No orders in this category</p>
@@ -968,8 +967,8 @@ export default function KitchenDisplayPage() {
 
           {filtered.map(order => {
             const pct = Math.min(100, (order.elapsedSeconds / order.maxSeconds) * 100);
-            const isUrgent = pct >= 90; 
-            const isAdvancing = advancing === order.id; 
+            const isUrgent = pct >= 90;
+            const isAdvancing = advancing === order.id;
             const allDone = order.items.every(i => i.done);
             return (
               <div key={order.id} style={{
@@ -985,111 +984,138 @@ export default function KitchenDisplayPage() {
                 fontFamily: "'Poppins', sans-serif",
               }}>
                 <div style={{ height: 4, background: STRIP_COLOR[order.status] }} />
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'flex-start', 
-                  justifyContent: 'space-between', 
-                  padding: '10px 14px 8px', 
-                  borderBottom: `1px solid ${D.border}` 
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px 8px',
+                  borderBottom: `1px solid ${D.border}`
                 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <p style={{ 
-                        fontFamily: 'monospace', 
-                        fontSize: 12, 
-                        fontWeight: 800, 
-                        color: D.text, 
-                        margin: 0 
+                      <p style={{
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: D.text,
+                        margin: 0
                       }}>#{order.id}</p>
                       {allDone && order.status !== 'delivered' && (
-                        <span style={{ 
-                          fontSize: 8, 
-                          background: TONE.green.bg, 
-                          border: `1px solid ${TONE.green.border}`, 
-                          color: TONE.green.text, 
-                          padding: '1px 6px', 
-                          borderRadius: 12, 
+                        <span style={{
+                          fontSize: 8,
+                          background: TONE.green.bg,
+                          border: `1px solid ${TONE.green.border}`,
+                          color: TONE.green.text,
+                          padding: '1px 6px',
+                          borderRadius: 12,
                           fontWeight: 700,
                           fontFamily: "'Poppins', sans-serif",
                         }}>DONE</span>
                       )}
                     </div>
-                    <p style={{ 
-                      fontSize: 10, 
-                      color: D.muted, 
+                    <p style={{
+                      fontSize: 10,
+                      color: D.muted,
                       margin: '2px 0 0',
                       fontFamily: "'Poppins', sans-serif",
                     }}>🪑 Table {order.table} · {order.zone}</p>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <p style={{ 
-                      fontFamily: 'monospace', 
-                      fontSize: 18, 
-                      fontWeight: 800, 
-                      margin: 0 
+                    <p style={{
+                      fontFamily: 'monospace',
+                      fontSize: 18,
+                      fontWeight: 800,
+                      margin: 0
                     }} className={timerColorClass(order.elapsedSeconds, order.maxSeconds)}>
                       {formatTimer(order.elapsedSeconds)}
                     </p>
-                    <p style={{ 
-                      fontSize: 9, 
-                      color: D.subtle, 
+                    <p style={{
+                      fontSize: 9,
+                      color: D.subtle,
                       margin: '1px 0 0',
                       fontFamily: "'Poppins', sans-serif",
                     }}>{order.placedAt}</p>
                   </div>
                 </div>
                 <div style={{ height: 3, background: D.border }}>
-                  <div style={{ 
-                    height: '100%', 
-                    borderRadius: 4, 
-                    transition: 'width 1s', 
-                    width: `${pct}%`, 
-                    background: timerBarColor(order.elapsedSeconds, order.maxSeconds) 
+                  <div style={{
+                    height: '100%',
+                    borderRadius: 4,
+                    transition: 'width 1s',
+                    width: `${pct}%`,
+                    background: timerBarColor(order.elapsedSeconds, order.maxSeconds)
                   }} />
                 </div>
+
+                {/* ✅ Items with Images */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px', flex: 1 }}>
                   {order.items.map((dish, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{dish.emoji}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {/* ✅ Item Image instead of emoji */}
+                      <div style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: D.card2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {(dish as KdsOrderItemWithImage).imageUrl ? (
+                          <Image
+                            src={(dish as KdsOrderItemWithImage).imageUrl!}
+                            alt={dish.name}
+                            width={40}
+                            height={40}
+                            unoptimized
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 20 }}>{dish.emoji || '🍽️'}</span>
+                        )}
+                      </div>
+
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ 
-                          fontSize: 11, 
-                          fontWeight: 700, 
-                          margin: 0, 
-                          overflow: 'hidden', 
-                          textOverflow: 'ellipsis', 
-                          whiteSpace: 'nowrap', 
-                          color: dish.done ? D.subtle : D.text, 
+                        <p style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          margin: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: dish.done ? D.subtle : D.text,
                           textDecoration: dish.done ? 'line-through' : 'none',
                           fontFamily: "'Poppins', sans-serif",
                         }}>{dish.name}</p>
-                        {dish.mods && <p style={{ 
-                          fontSize: 9, 
-                          color: D.subtle, 
+                        {dish.mods && <p style={{
+                          fontSize: 9,
+                          color: D.subtle,
                           margin: 0,
                           fontFamily: "'Poppins', sans-serif",
                         }}>{dish.mods}</p>}
                       </div>
-                      <span style={{ 
-                        fontSize: 11, 
-                        color: D.muted, 
-                        fontWeight: 600, 
+                      <span style={{
+                        fontSize: 11,
+                        color: D.muted,
+                        fontWeight: 600,
                         flexShrink: 0,
                         fontFamily: "'Poppins', sans-serif",
                       }}>×{dish.qty}</span>
-                      <button 
-                        onClick={() => toggleDish(order.id, i)} 
-                        style={{ 
-                          width: 20, 
-                          height: 20, 
-                          borderRadius: 5, 
-                          border: `1.5px solid ${dish.done ? BRAND : D.border}`, 
-                          background: dish.done ? BRAND : D.card, 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          cursor: 'pointer', 
-                          flexShrink: 0, 
+                      <button
+                        onClick={() => toggleDish(order.id, i)}
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          border: `1.5px solid ${dish.done ? BRAND : D.border}`,
+                          background: dish.done ? BRAND : D.card,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          flexShrink: 0,
                           transition: 'all 0.2s',
                           outline: 'none',
                         }}
@@ -1105,24 +1131,25 @@ export default function KitchenDisplayPage() {
                     </div>
                   ))}
                 </div>
+
                 {order.note && (
-                  <div style={{ 
-                    margin: '0 10px 6px', 
-                    padding: '6px 10px', 
-                    background: TONE.amber.bg, 
-                    border: `1px solid ${TONE.amber.border}`, 
-                    borderRadius: 10, 
-                    display: 'flex', 
-                    alignItems: 'flex-start', 
+                  <div style={{
+                    margin: '0 10px 6px',
+                    padding: '6px 10px',
+                    background: TONE.amber.bg,
+                    border: `1px solid ${TONE.amber.border}`,
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'flex-start',
                     gap: 4,
                     fontFamily: "'Poppins', sans-serif",
                   }}>
                     <span style={{ color: TONE.amber.text, fontSize: 10, marginTop: 1 }}>⚠</span>
-                    <p style={{ 
-                      fontSize: 9, 
-                      color: TONE.amber.text, 
-                      lineHeight: 1.4, 
-                      margin: 0, 
+                    <p style={{
+                      fontSize: 9,
+                      color: TONE.amber.text,
+                      lineHeight: 1.4,
+                      margin: 0,
                       fontWeight: 600,
                       fontFamily: "'Poppins', sans-serif",
                     }}>{order.note}</p>
@@ -1162,14 +1189,14 @@ export default function KitchenDisplayPage() {
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      {isAdvancing && i === 0 ? 
-                        <div style={{ 
-                          width: 12, 
-                          height: 12, 
-                          border: `2px solid ${btn.color}`, 
-                          borderTopColor: 'transparent', 
-                          borderRadius: '50%', 
-                          animation: 'spin 0.8s linear infinite' 
+                      {isAdvancing && i === 0 ?
+                        <div style={{
+                          width: 12,
+                          height: 12,
+                          border: `2px solid ${btn.color}`,
+                          borderTopColor: 'transparent',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite'
                         }} /> : btn.label
                       }
                     </button>

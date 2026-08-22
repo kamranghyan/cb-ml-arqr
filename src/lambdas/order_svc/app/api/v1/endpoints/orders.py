@@ -5,15 +5,12 @@ POST   /orders             → create order (auth: admin/tenant)
 GET    /orders             → list orders  (auth: admin/tenant/kitchen)
 GET    /orders/{orderId}   → get order    (auth: admin/tenant/kitchen)
 PATCH  /orders/{orderId}   → update order (auth: admin/tenant/kitchen)
-
-All order routes require authentication — no public access.
-SKIP_MENU env var bypasses menu validation (dev/test only).
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -33,7 +30,7 @@ from app.core.dependencies import (
     get_tenant_id,
 )
 from app.models.order import (
-    AddOn,  # ✅ NEW: Add this import
+    AddOn,
     LineItem,
     OrderRecord,
     OrderRequest,
@@ -57,10 +54,10 @@ _settings = get_settings()
 @router.post("", status_code=201, summary="Create a new order")
 async def create_order(
     body: CreateOrderBody,
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    repo: Annotated[OrderRepository, Depends(get_order_repo)],
-    sfn: Annotated[StepFunctionsService, Depends(get_sfn_service)],
-    user: Annotated[UserContext | None, Depends(optional_user)] = None,
+    tenant_id: Annotated[str,              Depends(get_tenant_id)],
+    repo: Annotated[OrderRepository,        Depends(get_order_repo)],
+    sfn:  Annotated[StepFunctionsService,   Depends(get_sfn_service)],
+    user: Annotated[UserContext | None,     Depends(optional_user)] = None,
 ):
     order_id = str(uuid.uuid4())
     if user is not None and getattr(user, "tenant_id", None):
@@ -101,18 +98,60 @@ async def create_order(
         deliveryFeeMinorUnits=body.deliveryFeeMinorUnits,
     )
 
+    # Menu validation (skippable in dev/test)
+    if not _settings.skip_menu_validation:
+        try:
+            validate_menu_items(
+                get_dynamodb_client(), _settings.item_table,
+                tenant_id, request.restaurantId, request.lineItems,
+            )
+        except MenuValidationError as exc:
+            raise BadRequestError(exc.message) from exc
+
+    # Write to DynamoDB
+    now = datetime.now(timezone.utc)
+    record = OrderRecord.build(request, order_id, execution_arn="PENDING", now=now)
+
+    try:
+        repo.write_order(record)
+    except DuplicateOrderError:
+        raise BadRequestError("Order already exists.")
+
+    if body.tableId:
+        CartService().clear_cart(tenant_id, body.tableId)
+
+    try:
+        execution_arn = sfn.start_new_order(order_id, request)
+    except Exception as exc:
+        repo.rollback_order(record)
+        log.error("sfn.start.failed", order_id=order_id, exc_message=str(exc))
+        raise BadRequestError(f"Step Functions unavailable: {exc}") from exc
+
+    log.info(
+        "order.placed",
+        order_id=order_id, tenant_id=tenant_id, restaurant_id=body.restaurantId,
+        order_type=body.orderType,
+    )
+
+    return {
+        "orderId": order_id,
+        "status": "RECEIVED",
+        "stepFunctionsExecutionArn": execution_arn,
+    }
+
+
 # ── GET /orders ───────────────────────────────────────────────────────────────
 
 @router.get("", summary="List recent orders for a restaurant")
 async def list_orders(
     restaurantId: Annotated[str, Query()],
-    tenant_id:    Annotated[str, Depends(get_tenant_id)],
+    tenantId:     Annotated[str, Depends(get_tenant_id)],
     repo:         Annotated[OrderRepository, Depends(get_order_repo)],
-    hours:        Annotated[int, Query(ge=1, le=24)] = 4,
+    hours:        Annotated[Optional[int], Query(ge=1, le=720)] = None, # ✅ Default None (bina hours filter ke query karega)
 ):
-    orders = repo.list_orders(restaurantId, tenant_id, hours=hours)
+    orders = repo.list_orders(restaurantId, tenantId, hours=hours)
     
-    # ✅ Process each order to ensure add-ons are included
+    # ✅ Process each order to ensure add-ons are included properly
     processed_orders = []
     for order in orders:
         processed_order = clean_decimals(order)
@@ -132,14 +171,13 @@ async def list_orders(
 @router.get("/{orderId}", summary="Get a single order by ID")
 async def get_order(
     orderId:   str,
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    tenantId: Annotated[str, Depends(get_tenant_id)],
     repo:      Annotated[OrderRepository, Depends(get_order_repo)],
 ):
-    order = repo.get_order(orderId, tenant_id)
+    order = repo.get_order(orderId, tenantId)
     if not order:
         raise ResourceNotFoundError(resource="Order", identifier=orderId)
     
-    # ✅ Ensure add-ons are included
     processed_order = clean_decimals(dict(order))
     if "lineItems" in processed_order:
         for item in processed_order["lineItems"]:
@@ -158,16 +196,16 @@ async def update_order(
     orderId: str,
     body:    UpdateOrderBody,
     user:    Annotated[UserContext,          Depends(require_kitchen_or_admin)],
-    tenant_id: Annotated[str,                Depends(get_tenant_id)],
+    tenantId: Annotated[str,                 Depends(get_tenant_id)],
     repo:    Annotated[OrderRepository,      Depends(get_order_repo)],
     sfn:     Annotated[StepFunctionsService, Depends(get_sfn_service)],
 ):
-    order = repo.get_order(orderId, tenant_id)
+    order = repo.get_order(orderId, tenantId)
     if not order:
         raise ResourceNotFoundError(resource="Order", identifier=orderId)
 
     update = OrderStatusUpdate(
-        tenantId=tenant_id,
+        tenantId=tenantId,
         kitchenAccepted=body.kitchenAccepted,
         foodReady=body.foodReady,
         delivered=body.delivered,
@@ -176,7 +214,7 @@ async def update_order(
     new_status = update.derived_status
 
     try:
-        repo.update_status(orderId, tenant_id, new_status)
+        repo.update_status(orderId, tenantId, new_status)
         log.info("order.status.updated", order_id=orderId, status=new_status)
     except Exception as exc:
         log.warning("order.status.update.failed", order_id=orderId, exc_message=str(exc))

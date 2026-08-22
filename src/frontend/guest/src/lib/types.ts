@@ -60,10 +60,11 @@ export interface CartItem {
     side?: string;
     sauce?: string;
     addOnIds?: string[];
-    addOns?: Array<{        // ✅ NEW
+    addOns?: Array<{
       addOnId: string;
       name: string;
       priceMinorUnits: number;
+      quantity?: number;
     }>;
 
   };

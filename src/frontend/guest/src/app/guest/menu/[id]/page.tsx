@@ -242,34 +242,62 @@ export default function ItemDetailPage() {
   const rid = getGuestScope().restaurantId;
   const arHref = `/guest/ar?rid=${encodeURIComponent(rid)}&iid=${encodeURIComponent(id ?? '')}&name=${encodeURIComponent(item?.name ?? '')}&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}&imageUrl=${encodeURIComponent((item as any)?.imageUrl ?? '')}${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
 
-  const handleAddToCart = (): void => {
-    if (!item) return;
-    const selectedSizeLabel = sizeOptions[safeSizeIndex]?.label || 'Medium';
+  // ── Add to cart ──
+const handleAddToCart = (): void => {
+  if (!item) return;
 
-    // ✅ Get selected add-on IDs
-    const selectedAddOns = addOns.filter(a => toppings.includes(a.name));
-    const selectedAddOnIds = selectedAddOns
-      .map(a => a.addOnId);
+  const selectedSizeLabel =
+    sizeOptions[safeSizeIndex]?.label || 'Medium';
 
-    addItem({
-      menuItemId: item.id,
-      name: item.name,
-      emoji: item.emoji ?? '🍽️',
-      imageUrl: (item as any)?.imageUrl || undefined,
-      price: item.price,
-      quantity: qty,
-      options: {
-        size: selectedSizeLabel,
-        sizeMultiplier: sizeOptions[safeSizeIndex]?.mult || 1,
-        toppings: toppings.join(', '),
-        toppingsTotal: toppingsTotal,
-        addOnIds: selectedAddOnIds,  
-        addOns: selectedAddOns,
-      },
-    });
-    setAdded(true);
-    setTimeout(() => { setAdded(false); router.push('/guest/cart'); }, 800);
-  };
+  // Get complete selected addon objects
+  const selectedAddOns = addOns.filter((addon) =>
+    toppings.includes(addon.name)
+  );
+
+  const selectedAddOnIds = selectedAddOns.map(
+    (addon) => addon.addOnId
+  );
+
+  addItem({
+    menuItemId: item.id,
+    name: item.name,
+    emoji: item.emoji ?? '🍽️',
+    imageUrl: (item as any)?.imageUrl || undefined,
+    price: item.price,
+    quantity: qty,
+
+    options: {
+      size: selectedSizeLabel,
+
+      sizeMultiplier:
+        sizeOptions[safeSizeIndex]?.mult || 1,
+
+      toppings: selectedAddOns
+        .map((addon) => addon.name)
+        .join(', '),
+
+      toppingsTotal,
+
+      // ✅ IMPORTANT
+      addOnIds: selectedAddOnIds,
+
+      // ✅ IMPORTANT
+      addOns: selectedAddOns.map((addon) => ({
+        addOnId: addon.addOnId,
+        name: addon.name,
+        priceMinorUnits: addon.priceMinorUnits,
+        quantity: 1,
+      })),
+    },
+  });
+
+  setAdded(true);
+
+  setTimeout(() => {
+    setAdded(false);
+    router.push('/guest/cart');
+  }, 800);
+};
 
   // ── Theme colors ──
   const D = isDark
@@ -457,10 +485,10 @@ export default function ItemDetailPage() {
         {/* ── Info card ── */}
         <div style={{ background: BRAND, borderRadius: 20, padding: '18px 20px', marginBottom: 24, marginTop: "20px" }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            {/* <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Star size={16} fill="#fff" color="#fff" />
               <span style={{ fontSize: 15, color: '#fff', fontFamily: "'Poppins', sans-serif" }}>{(item?.rating ?? 4.5).toFixed(1)} ({item?.reviewCount ?? 0} reviews)</span>
-            </div> */}
+            </div>
             <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 22, fontWeight: 700, color: '#fff' }}>Rs. {item?.price?.toLocaleString() ?? 0}</span>
           </div>
           <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.95)', margin: 0, lineHeight: 1.6, fontFamily: "'Poppins', sans-serif" }}>{item?.description || 'A carefully crafted dish made with the finest ingredients.'}</p>

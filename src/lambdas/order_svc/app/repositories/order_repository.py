@@ -132,31 +132,30 @@ class OrderRepository:
         self,
         restaurant_id: str,
         tenant_id:     str,
-        hours:         int = 4,
+        hours:         Optional[int] = None,
     ) -> list[dict]:
         """
-        List recent orders for a restaurant via GSI-1.
-
-        Filters by tenantId in memory (GSI doesn't include tenantId as key).
+        List recent orders for a restaurant via GSI-1 using camelCase parameters.
         """
-        from_time = (
-            datetime.now(timezone.utc) - timedelta(hours=hours)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        keyCondition = Key("restaurantId").eq(restaurant_id)
+
+        if hours is not None:
+            fromTime = (
+                datetime.now(timezone.utc) - timedelta(hours=hours)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            keyCondition = keyCondition & Key("placedAt").gte(fromTime)
 
         res = self._table.query(
             IndexName="GSI-1-restaurant-orders",
-            KeyConditionExpression=(
-                Key("restaurantId").eq(restaurant_id)
-                & Key("placedAt").gte(from_time)
-            ),
+            KeyConditionExpression=keyCondition,
+            ScanIndexForward=False,
         )
         
         orders = [
             o for o in res.get("Items", [])
-            if o.get("tenantId") == tenant_id
+            if str(o.get("tenantId", "")).strip().lower() == str(tenant_id).strip().lower()
         ]
         
-        # ✅ Ensure addOns fields exist in each order
         return [self._ensure_addons_fields(order) for order in orders]
 
     # ── Update ────────────────────────────────────────────────────────────────

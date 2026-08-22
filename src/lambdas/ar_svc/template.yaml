@@ -15,14 +15,15 @@ Parameters:
     Default: ap-south-1
   CognitoUserPoolId:
     Type: String
-    Default: ap-south-1_SCyQ50etN
+    Default: ap-south-1_RkmSFSjU4
   CognitoClientId:
     Type: String
-    Default: 7903hkujl9qeq67toemi5qrhes
+    Default: 5c5e7traqqso952olhnuoife01
     NoEcho: true
   CfDomain:
     Type: String
-    Default: d2rw2kah485lhg.cloudfront.net
+    Default: cb-ml-arqr-menu-assets-dev-990016797093.s3.ap-south-1.amazonaws.com    
+    # Default: d2rw2kah485lhg.cloudfront.net
   LogLevel:
     Type: String
     Default: INFO
@@ -30,7 +31,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime:       python3.13
+    Runtime:       python3.12
     Architectures: [arm64]
     MemorySize:    512
     Timeout:       30
@@ -62,7 +63,7 @@ Resources:
       Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
       ContentUri: ../layers/shared_layer
       CompatibleRuntimes:
-        - python3.13
+        - python3.12
       CompatibleArchitectures:
         - arm64
       RetentionPolicy: Delete

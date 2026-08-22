@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, Plus, Minus, ThumbsUp, Sparkles } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
@@ -88,10 +88,14 @@ export default function TrackingPage() {
   const [cancelError, setCancelError] = useState('');
   const [prepTime, setPrepTime] = useState('20-30 mins');
   
-  // ✅ Use refs to track mount and interval
+  // ✅ New states for order completion
+  const [showCompleteOverlay, setShowCompleteOverlay] = useState(false);
+  const [isOrderCompleted, setIsOrderCompleted] = useState(false);
+  
   const isMounted = useRef(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstLoad = useRef(true);
+  const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load menu images only once
   useEffect(() => {
@@ -119,9 +123,7 @@ export default function TrackingPage() {
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
   }, []);
 
-  // ✅ Main load function - defined as a regular function, not useCallback
   const loadOrders = async (silent = false) => {
-    // Prevent duplicate initial loads
     if (!silent && !isFirstLoad.current) {
       console.log('⏭️ Skipping duplicate load call');
       return;
@@ -148,7 +150,7 @@ export default function TrackingPage() {
       if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
-      const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) =>
+      const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) => 
         new Date(b.placedAt ?? 0).getTime() - new Date(a.placedAt ?? 0).getTime()
       );
 
@@ -183,27 +185,24 @@ export default function TrackingPage() {
     }
   };
 
-  // ✅ Load ONCE on mount, then start polling
   useEffect(() => {
-    // Initial load
     loadOrders();
-    
-    // Set up polling interval
     intervalRef.current = setInterval(() => {
-      loadOrders(true); // silent refresh
+      loadOrders(true);
     }, POLL_MS);
-    
-    // Cleanup on unmount
     return () => {
       isMounted.current = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = null;
+      }
     };
-  }, []); // ✅ Empty dependency array - runs only once!
+  }, []);
 
-  // ── Table matching ──
   const myOrders = orders.filter(o => {
     if (!o.tableId) return false;
     const orderTableId = o.tableId.toString().trim().toLowerCase();
@@ -236,6 +235,10 @@ export default function TrackingPage() {
 
   const currentStep = latest ? getStepIndex(latest.status) : 0;
   const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
+  
+  // ✅ Check if order is at DELIVERED/Enjoy step
+  const isAtDeliveredStep = latest ? getStepIndex(latest.status) === 3 : false;
+  const isOrderAlreadyCompleted = latest ? ['COMPLETED', 'DONE'].includes((latest.status ?? '').toUpperCase()) : false;
 
   const getRemainingTime = () => {
     if (isCancelled) return 'Please contact staff';
@@ -274,19 +277,57 @@ export default function TrackingPage() {
     }
   };
 
+  // ✅ Handle "Received" button click - show completion overlay
+  const handleOrderReceived = () => {
+    setShowCompleteOverlay(true);
+    
+    // Auto-redirect after 3 seconds with dynamic query params
+    redirectTimerRef.current = setTimeout(() => {
+      setShowCompleteOverlay(false);
+      setIsOrderCompleted(true);
+      
+      // ✅ Get restaurantId and tableId from session storage
+      const restaurantId = sessionStorage.getItem('lm_rid') || '';
+      const tableId = sessionStorage.getItem('lm_tid') || '';
+      
+      // Clear session storage
+      sessionStorage.removeItem('lm_rid');
+      sessionStorage.removeItem('lm_tid');
+      sessionStorage.removeItem('lm_table');
+      
+      // ✅ Redirect to /guest with dynamic query parameters
+      router.push(`/guest?rid=${restaurantId}&tid=${tableId}`);
+    }, 3000);
+  };
+
   const D = isDark ? {
     bg: '#111111', card: '#1C1C1C', card2: '#242424', border: 'rgba(255,255,255,0.08)',
     text: '#F5F0E8', muted: '#9CA3AF', sub: '#6B7280',
+    btnBg: '#22c55e', btnText: '#ffffff', btnHover: '#16a34a',
   } : {
     bg: '#FFFFFF', card: '#FFFFFF', card2: '#F5F5F5', border: '#F0EBE6',
     text: '#000000', muted: '#6B6B6B', sub: '#9CA3AF',
+    btnBg: '#22c55e', btnText: '#ffffff', btnHover: '#16a34a',
   };
 
   const progressPct = latest ? (currentStep / (STATUS_STEPS.length - 1)) * 100 : 0;
 
-  // ── Calculate totals ──
   const itemsTotal = latest?.lineItems?.reduce((sum, li) => sum + (li.unitPriceMinorUnits || 0) * li.quantity, 0) || 0;
   const addOnsGrandTotal = latest?.lineItems?.reduce((sum, li) => sum + (li.addOnsTotalMinorUnits || 0), 0) || 0;
+
+  const getItemTotalWithAddOns = (lineItem: LineItem) => {
+    const baseTotal = (lineItem.unitPriceMinorUnits || 0) * lineItem.quantity;
+    const addOnsTotal = lineItem.addOns?.reduce((sum, a) => sum + (a.priceMinorUnits || 0) * (a.quantity || 1), 0) || 0;
+    return baseTotal + addOnsTotal;
+  };
+
+  const getAddOnDisplay = (addon: any) => {
+    const qty = addon.quantity || 1;
+    if (qty > 1) {
+      return `${addon.name} ×${qty}`;
+    }
+    return addon.name;
+  };
 
   return (
     <div style={{
@@ -301,7 +342,100 @@ export default function TrackingPage() {
     }}>
       <GuestTopBar />
 
-      {/* ── Cancel Modal ── */}
+      {/* ✅ Order Complete Overlay */}
+      {showCompleteOverlay && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          zIndex: 300,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.5s ease'
+        }}>
+          <div style={{
+            background: D.card,
+            borderRadius: 32,
+            padding: '40px 32px',
+            maxWidth: 360,
+            width: '90%',
+            textAlign: 'center',
+            animation: 'scaleIn 0.5s ease'
+          }}>
+            {/* Animated checkmark */}
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: BRAND,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              animation: 'bounceIn 0.6s ease'
+            }}>
+              <CheckCircle size={40} color={D.btnText} />
+            </div>
+            
+            <h2 style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: D.text,
+              margin: '0 0 8px'
+            }}>
+              Order Complete! 🎉
+            </h2>
+            <p style={{
+              fontSize: 14,
+              color: D.muted,
+              margin: '0 0 4px'
+            }}>
+              Thank you for dining with us!
+            </p>
+            <p style={{
+              fontSize: 13,
+              color: D.sub,
+              margin: '0'
+            }}>
+              Redirecting to home...
+            </p>
+            
+            {/* Progress dots */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 8,
+              marginTop: 20
+            }}>
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: BRAND,
+                animation: 'pulse 1s ease infinite'
+              }} />
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: BRAND,
+                animation: 'pulse 1s ease 0.3s infinite'
+              }} />
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: BRAND,
+                animation: 'pulse 1s ease 0.6s infinite'
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Modal */}
       {showCancel && (
         <div style={{
           position: 'fixed',
@@ -392,7 +526,7 @@ export default function TrackingPage() {
         </div>
       )}
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ padding: '35px 20px 16px', background: D.bg }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button
@@ -447,9 +581,9 @@ export default function TrackingPage() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: `0 20px ${latest && !isCancelled ? 180 : 100}px` }}>
+      <div style={{ flex: 1, marginBottom:"50px", overflowY: 'auto', padding: `0 20px ${latest && !isCancelled && !isAtDeliveredStep ? 180 : 100}px` }}>
 
-        {/* ── Loading ── */}
+        {/* Loading */}
         {loading && orders.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 0', gap: 12 }}>
             <div style={{ width: 28, height: 28, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -457,7 +591,7 @@ export default function TrackingPage() {
           </div>
         )}
 
-        {/* ── Empty ── */}
+        {/* Empty */}
         {!loading && orders.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <span style={{ fontSize: 40, opacity: 0.2 }}>📋</span>
@@ -485,7 +619,7 @@ export default function TrackingPage() {
 
         {latest && !loading && (
           <>
-            {/* ── Hero status card ── */}
+            {/* Hero status card */}
             <div style={{
               background: D.card,
               border: `1.5px solid ${D.border}`,
@@ -530,7 +664,7 @@ export default function TrackingPage() {
               )}
             </div>
 
-            {/* ── Status steps ── */}
+            {/* Status steps */}
             {!isCancelled && (
               <div style={{
                 background: D.card,
@@ -604,7 +738,7 @@ export default function TrackingPage() {
               </div>
             )}
 
-            {/* ── Items ordered with Add-Ons ── */}
+            {/* Items ordered with Add-Ons */}
             <div style={{
               background: D.card,
               border: `1.5px solid ${D.border}`,
@@ -622,10 +756,8 @@ export default function TrackingPage() {
               }}>Items Ordered</p>
 
               {(latest.lineItems ?? []).map((li, i) => {
-                const basePrice = li.unitPriceMinorUnits || 0;
-                const addOnsTotal = li.addOnsTotalMinorUnits || 0;
-                const itemTotal = li.totalPriceMinorUnits || 0;
-                const hasAddOns = addOnsTotal > 0 && li.addOns && li.addOns.length > 0;
+                const itemTotalWithAddOns = getItemTotalWithAddOns(li);
+                const hasAddOns = (li.addOns || []).length > 0;
 
                 return (
                   <div key={i} style={{
@@ -634,7 +766,6 @@ export default function TrackingPage() {
                     padding: '10px 0',
                     borderBottom: i < (latest.lineItems?.length ?? 0) - 1 ? `1px solid ${D.border}` : 'none'
                   }}>
-                    {/* Item Row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{
@@ -666,80 +797,55 @@ export default function TrackingPage() {
                             fontWeight: 600,
                             color: D.text,
                             margin: 0
-                          }}>{li.name}</p>
-                          <p style={{
-                            fontSize: 11,
-                            color: D.muted,
-                            margin: 0,
-                          }}>× {li.quantity}</p>
+                          }}>
+                            {li.name}
+                            {li.quantity > 1 && (
+                              <span style={{
+                                fontSize: 12,
+                                color: D.muted,
+                                marginLeft: 6,
+                                fontWeight: 400,
+                              }}>
+                                × {li.quantity}
+                              </span>
+                            )}
+                          </p>
+                          {hasAddOns && (
+                            <div style={{ marginTop: 2 }}>
+                              {li.addOns?.map((addon, idx) => (
+                                <span
+                                  key={idx}
+                                  style={{
+                                    fontSize: 11,
+                                    color: D.muted,
+                                    display: 'block',
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  + {getAddOnDisplay(addon)}
+                                  {addon.quantity > 1 && (
+                                    <span style={{ fontSize: 10, color: D.sub, marginLeft: 4 }}>
+                                      (×{addon.quantity})
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <span style={{
                         fontSize: 14,
                         fontWeight: 700,
                         color: BRAND
-                      }}>{formatRs(itemTotal)}</span>
-                    </div>
-
-                    {/* ✅ Add-Ons Breakdown */}
-                    {hasAddOns && li.addOns && li.addOns.length > 0 && (
-                      <div style={{
-                        marginTop: 8,
-                        marginLeft: 60,
-                        paddingLeft: 12,
-                        borderLeft: `2px solid ${BRAND}40`,
                       }}>
-                        {li.addOns.map((addon, idx) => (
-                          <div key={idx} style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            padding: '2px 0',
-                          }}>
-                            <span style={{
-                              fontSize: 12,
-                              color: D.muted,
-                            }}>
-                              + {addon.name} × {addon.quantity}
-                            </span>
-                            <span style={{
-                              fontSize: 12,
-                              color: D.muted,
-                            }}>
-                              {formatRs(addon.priceMinorUnits * addon.quantity)}
-                            </span>
-                          </div>
-                        ))}
-
-                        {/* Add-Ons Total */}
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          padding: '4px 0 2px 0',
-                          borderTop: `1px dotted ${D.border}`,
-                          marginTop: 2,
-                        }}>
-                          <span style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: D.text,
-                          }}>
-                            Add-ons Total
-                          </span>
-                          <span style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: BRAND,
-                          }}>
-                            {formatRs(addOnsTotal)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                        {formatRs(itemTotalWithAddOns)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}
 
-              {/* ── Total Breakdown ── */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -748,37 +854,18 @@ export default function TrackingPage() {
                 marginTop: 4,
                 borderTop: `1.5px solid ${D.border}`
               }}>
-                {/* Items Subtotal */}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{
-                    fontSize: 13,
-                    color: D.muted,
-                  }}>Items Total</span>
-                  <span style={{
-                    fontSize: 13,
-                    color: D.muted,
-                  }}>
-                    {formatRs(itemsTotal)}
-                  </span>
+                  <span style={{ fontSize: 13, color: D.muted }}>Items Total</span>
+                  <span style={{ fontSize: 13, color: D.muted }}>{formatRs(itemsTotal)}</span>
                 </div>
 
-                {/* Add-Ons Total */}
                 {addOnsGrandTotal > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{
-                      fontSize: 13,
-                      color: D.muted,
-                    }}>Add-ons Total</span>
-                    <span style={{
-                      fontSize: 13,
-                      color: D.muted,
-                    }}>
-                      {formatRs(addOnsGrandTotal)}
-                    </span>
+                    <span style={{ fontSize: 13, color: D.muted }}>Add-ons Total</span>
+                    <span style={{ fontSize: 13, color: D.muted }}>{formatRs(addOnsGrandTotal)}</span>
                   </div>
                 )}
 
-                {/* Grand Total */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -786,35 +873,76 @@ export default function TrackingPage() {
                   marginTop: 4,
                   borderTop: `1.5px solid ${D.border}`
                 }}>
-                  <span style={{
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: D.text
-                  }}>Total</span>
-                  <span style={{
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: D.text
-                  }}>{formatRs(latest.totalAmountMinorUnits)}</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: D.text }}>Total</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: D.text }}>
+                    {formatRs((itemsTotal || 0) + (addOnsGrandTotal || 0))}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Sync info */}
             {lastSync && (
               <p style={{
                 textAlign: 'center',
                 fontSize: 11,
                 color: D.sub,
                 marginBottom: 16,
-              }}>Updated {lastSync} · Auto-refresh every 5s</p>
+              }}>Updated {lastSync} · Auto-refresh every 30s</p>
             )}
           </>
         )}
       </div>
 
-      {/* ── Cancel button ── */}
-      {latest && !isCancelled && (
+      {/* ✅ "Received" button - Theme ke according color */}
+      {latest && !isCancelled && isAtDeliveredStep && !isOrderCompleted && (
+        <div style={{
+          position: 'fixed',
+          bottom: 80,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100%',
+          maxWidth: 480,
+          padding: '0 20px',
+          boxSizing: 'border-box',
+          zIndex: 99
+        }}>
+          <button
+            onClick={handleOrderReceived}
+            style={{
+              width: '100%',
+              height: 56,
+              borderRadius: 28,
+              background: BRAND,
+              border: 'none',
+              color: D.btnText,
+              fontSize: 16,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              // boxShadow: isDark ? `0 4px 16px rgba(34, 197, 94, 0.3)` : `0 4px 16px rgba(34, 197, 94, 0.4)`,
+            }}
+            onMouseEnter={(e) => {
+              // e.currentTarget.style.background = D.btnHover;
+              e.currentTarget.style.transform = 'scale(1.02)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = BRAND;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <ThumbsUp size={20} />
+            I've Received My Order
+          </button>
+        </div>
+      )}
+
+      {/* Cancel button */}
+      {latest && !isCancelled && !isAtDeliveredStep && (
         <div style={{
           position: 'fixed',
           bottom: 72,
@@ -849,12 +977,31 @@ export default function TrackingPage() {
       )}
 
       <BottomNav />
+      
       <style>{`
         .animate-spin {
           animation: spin 0.8s linear infinite;
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes bounceIn {
+          0% { transform: scale(0); }
+          50% { transform: scale(1.1); }
+          70% { transform: scale(0.95); }
+          100% { transform: scale(1); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
         }
       `}</style>
     </div>

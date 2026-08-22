@@ -63,24 +63,26 @@ export async function PATCH(
 // ── GET /api/orders/[id] — public ─────────────────────────────────────────────
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { orderId: string } }
 ) {
-  const scope = getScope(req);
-  if (!scope) return NO_SCOPE;
+  const scope = getScope(req) // parse Jwt & headers helper
+  if (!scope) return NO_SCOPE
+
+  const { orderId } = params
 
   try {
-    const { id: orderId } = await params;
-    const qs  = req.nextUrl.searchParams.toString();
-    const url = `${BASE}/orders/${orderId}${qs ? `?${qs}` : ''}`;
-
-    const res  = await fetch(url, {
+    const res = await fetch(`${BASE}/orders/${orderId}`, {
       cache: 'no-store',
-      headers: { 'X-Tenant-Id': scope.tenantId, Authorization: scope.auth },
-    });
-    const text = await res.text();
-    if (!res.ok) return NextResponse.json({ error: text }, { status: res.status });
-    return NextResponse.json(JSON.parse(text));
+      headers: {
+        'X-Tenant-Id': scope.tenantId,
+        Authorization: scope.auth,
+      },
+    })
+    
+    const text = await res.text()
+    if (!res.ok) return NextResponse.json({ error: text }, { status: res.status })
+    return NextResponse.json(JSON.parse(text))
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message }, { status: 500 });
+    return NextResponse.json({ error: err?.message }, { status: 500 })
   }
 }
