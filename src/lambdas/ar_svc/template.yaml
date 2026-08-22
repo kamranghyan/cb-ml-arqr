@@ -9,7 +9,7 @@ Parameters:
     AllowedValues: [dev, staging, prod]
   AssetBucketName:
     Type: String
-    Default: menu-assets-dev-833090513377
+    Default: cb-ml-arqr-menu-assets-dev-990016797093
   CognitoRegion:
     Type: String
     Default: ap-south-1
@@ -22,7 +22,7 @@ Parameters:
     NoEcho: true
   CfDomain:
     Type: String
-    Default: cb-ml-arqr-menu-assets-dev-990016797093.s3.ap-south-1.amazonaws.com    
+    Default: cb-ml-arqr-menu-assets-dev-990016797093.s3.ap-south-1.amazonaws.com  
     # Default: d2rw2kah485lhg.cloudfront.net
   LogLevel:
     Type: String
@@ -31,7 +31,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime:       python3.12
+    Runtime:       python3.13
     Architectures: [arm64]
     MemorySize:    512
     Timeout:       30

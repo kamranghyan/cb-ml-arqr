@@ -34,7 +34,6 @@ app = FastAPI(
     description="MenuLay — AR asset metadata: presigned URLs, update, delete (+ CloudFront)",
     docs_url="/docs",
     redoc_url="/redoc",
-    root_path="/dev"
 )
 
 app.add_middleware(

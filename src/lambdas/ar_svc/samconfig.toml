@@ -14,10 +14,10 @@ resolve_s3        = true
 capabilities      = "CAPABILITY_IAM"
 parameter_overrides = [
   "Environment=dev",
-  "AssetBucketName=menu-assets-dev-833090513377",
+  "AssetBucketName=cb-ml-arqr-menu-assets-dev-990016797093",
   "CognitoRegion=ap-south-1",
-  "CognitoUserPoolId=ap-south-1_SCyQ50etN",
-  "CognitoClientId=7903hkujl9qeq67toemi5qrhes",
-  "CfDomain=d2rw2kah485lhg.cloudfront.net",
+  "CognitoUserPoolId=ap-south-1_RkmSFSjU4",
+  "CognitoClientId=5c5e7traqqso952olhnuoife01",
+  "CfDomain=cb-ml-arqr-menu-assets-dev-990016797093.s3.ap-south-1.amazonaws.com",
   "LogLevel=INFO",
 ]
