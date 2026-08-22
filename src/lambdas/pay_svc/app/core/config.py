@@ -1,21 +1,22 @@
-# app/core/config.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    ENVIRONMENT: str = "dev"
-    PAYMENT_TABLE: str
-    EVENT_BUS_NAME: str = "arqr-event-bus-dev"
-    
-    # Easypaisa Credentials
-    EASYPAISA_STORE_ID: str
-    EASYPAISA_HASH_KEY: str
-    EASYPAISA_ENV: str = "sandbox"
-    EASYPAISA_PAY_URL: str = "https://easypay.easypaisa.com.pk/easypay/Index.jsf"
-    EASYPAISA_POST_BACK_URL: str
+    EASYPAISA_STORE_ID: str = "12345"
+    EASYPAISA_BASE_URL: str = (
+        "https://easypaystg.easypaisa.com.pk/easypay-service/rest/v4"
+    )
+    EASYPAISA_ACCOUNT_NUM: str = "03001234567"
+    EASYPAISA_CREDENTIALS: str = "dummy_credentials"
+    USE_MOCK_PAYMENTS: bool = True  # Mock response enabled by default
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    # Infrastructure Configs
+    EVENT_BUS_NAME: str = "default"
+    PAYMENTS_TABLE_NAME: str = "payments-dev"
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
 
 settings = Settings()
