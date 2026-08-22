@@ -12,12 +12,15 @@ Globals:
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
-        PAYMENT_TABLE: !Ref PaymentTable
+        PAYMENTS_TABLE_NAME: !Ref PaymentTable
         EVENT_BUS_NAME: !Ref EventBusName
         EASYPAISA_STORE_ID: !Ref EasyPaisaStoreId
-        EASYPAISA_HASH_KEY: !Ref EasyPaisaHashKey
-        EASYPAISA_ENV: !Ref EasyPaisaEnv
+        EASYPAISA_CREDENTIALS: !Ref EasyPaisaCredentials
+        EASYPAISA_ACCOUNT_NUM: !Ref EasyPaisaAccountNum
+        EASYPAISA_BASE_URL: !Ref EasyPaisaBaseUrl
         EASYPAISA_POST_BACK_URL: !Ref EasyPaisaPostBackUrl
+        EASYPAISA_ENV: !Ref EasyPaisaEnv
+        USE_MOCK_PAYMENTS: "true"
 
 Parameters:
   Environment:
@@ -27,44 +30,42 @@ Parameters:
       - dev
       - staging
       - prod
-    Description: Deployment environment stage
 
   EventBusName:
     Type: String
     Default: arqr-event-bus-dev
-    Description: AWS EventBridge custom event bus name
-
-  EasyPaisaStoreId:
-    Type: String
-    NoEcho: true
-    Description: Store ID provided by Easypaisa Merchant Portal
-
-  EasyPaisaHashKey:
-    Type: String
-    NoEcho: true
-    Description: Secret Hash Key provided by Easypaisa Merchant Portal
 
   EasyPaisaEnv:
     Type: String
     Default: sandbox
-    AllowedValues:
-      - sandbox
-      - production
+
+  EasyPaisaStoreId:
+    Type: String
+    Default: "12345"
+
+  EasyPaisaCredentials:
+    Type: String
+    Default: "dummy_key"
+
+  EasyPaisaAccountNum:
+    Type: String
+    Default: "03001234567"
+
+  EasyPaisaBaseUrl:
+    Type: String
+    Default: "https://easypaystg.easypaisa.com.pk/easypay-service/rest/v4"
 
   EasyPaisaPostBackUrl:
     Type: String
-    Description: Public API Gateway / Base URL callback for Easypaisa postbacks
+    Default: "https://example.com/callback"
 
 Resources:
 
-  # ===================================================================
   # Shared Lambda Layer
-  # ===================================================================
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: !Sub "menulay-shared-${Environment}"
-      Description: MenuLay shared layer containing dependencies (FastAPI, Mangum, etc.)
       ContentUri: ../layers/shared_layer
       CompatibleRuntimes:
         - python3.13
@@ -72,9 +73,7 @@ Resources:
         - arm64
       RetentionPolicy: Delete
 
-  # ===================================================================
-  # DynamoDB Table: PaymentTable
-  # ===================================================================
+  # DynamoDB Table
   PaymentTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -87,22 +86,12 @@ Resources:
         - AttributeName: orderId
           KeyType: HASH
 
-  # ===================================================================
-  # EventBridge Custom Event Bus
-  # ===================================================================
-  AppEventBus:
-    Type: AWS::Events::EventBus
-    Properties:
-      Name: !Ref EventBusName
-
-  # ===================================================================
-  # SQS Dead Letter Queue & Queue Policy
-  # ===================================================================
+  # SQS DLQ
   PaymentEventsDLQ:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "payment-events-dlq-${Environment}"
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: 1209600
 
   PaymentEventsDLQPolicy:
     Type: AWS::SQS::QueuePolicy
@@ -121,18 +110,16 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !GetAtt PaymentSucceededRule.Arn
 
-  # ===================================================================
-  # EventBridge Rule: Route Payment Succeeded Events with DLQ
-  # ===================================================================
+  # EventBridge Rule
   PaymentSucceededRule:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "payment-succeeded-rule-${Environment}"
-      EventBusName: !Ref AppEventBus
+      EventBusName: !Ref EventBusName
       State: ENABLED
       EventPattern:
         source:
-          - custom.payment_service
+          - app.payment_svc
         detail-type:
           - payment.succeeded
       Targets:
@@ -144,7 +131,6 @@ Resources:
           DeadLetterConfig:
             Arn: !GetAtt PaymentEventsDLQ.Arn
 
-  # Resource Policy allowing EventBridge to invoke PaymentServiceFunction
   PaymentSucceededRulePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -153,9 +139,7 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt PaymentSucceededRule.Arn
 
-  # ===================================================================
-  # Lambda Function: Payment Service
-  # ===================================================================
+  # Lambda Function
   PaymentServiceFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -165,14 +149,11 @@ Resources:
       Layers:
         - !Ref SharedLayer
       Policies:
-        # 1. DynamoDB CRUD Permissions for PaymentTable
         - DynamoDBCrudPolicy:
             TableName: !Ref PaymentTable
-        # 2. EventBridge PutEvents Permissions
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref EventBusName
       Events:
-        # API Gateway Trigger for all endpoints
         PaymentApi:
           Type: Api
           Properties:
@@ -181,21 +162,4 @@ Resources:
 
 Outputs:
   PaymentApiUrl:
-    Description: Base API Gateway URL for Payment Service
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
-
-  PaymentTableName:
-    Description: DynamoDB Table Name for Payments
-    Value: !Ref PaymentTable
-
-  PaymentFunctionArn:
-    Description: Payment Lambda Function ARN
-    Value: !GetAtt PaymentServiceFunction.Arn
-
-  PaymentEventsDLQUrl:
-    Description: SQS DLQ URL for Failed Payment Events
-    Value: !Ref PaymentEventsDLQ
-
-  PaymentEventsDLQArn:
-    Description: SQS DLQ ARN for Failed Payment Events
-    Value: !GetAtt PaymentEventsDLQ.Arn
