@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChefHat, Loader2, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import { ChefHat, Loader2, RefreshCw, AlertCircle, Clock, Plus } from 'lucide-react';
 import BranchPicker from '@/components/BranchPicker';
 import {
   fetchMyBranches, fetchOrders, isLive, derivedStatus,
@@ -13,7 +13,7 @@ import { getTheme } from '@/lib/theme';
 // ── Brand Color ──
 const BRAND = '#ff5723';
 
-// ── Theme-based colors (matching checkout page) ──
+// ── Theme-based colors ──
 const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFFFFF',
   card: isDark ? '#1C1C1C' : '#FFFFFF',
@@ -49,9 +49,34 @@ const getAccents = (isDark: boolean) => ({
 
 const REFRESH_MS = 15000;
 
+// ✅ Helper: Calculate Items Total (without add-ons)
+const getItemsTotal = (order: BranchOrder): number => {
+  return (order.lineItems || []).reduce((sum, li) => {
+    return sum + (li.unitPriceMinorUnits || 0) * li.quantity;
+  }, 0);
+};
+
+// ✅ Helper: Calculate Add-Ons Total
+const getAddOnsTotal = (order: BranchOrder): number => {
+  return (order.lineItems || []).reduce((sum, li) => {
+    const addOns = (li as typeof li & {
+      addOns?: Array<{ priceMinorUnits?: number; quantity?: number }>;
+    }).addOns;
+    const addOnsTotal = (addOns || []).reduce((s, a) => {
+      return s + (a.priceMinorUnits || 0) * (a.quantity || 1);
+    }, 0);
+    return sum + addOnsTotal;
+  }, 0);
+};
+
+// ✅ Helper: Calculate Grand Total (Items + Add-Ons)
+const getGrandTotal = (order: BranchOrder): number => {
+  return getItemsTotal(order) + getAddOnsTotal(order);
+};
+
 export default function TenantOrders() {
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [branchId, setBranchId] = useState(''); // '' = all branches
+  const [branchId, setBranchId] = useState('');
   const [orders, setOrders] = useState<BranchOrder[]>([]);
   const [loadingB, setLoadB] = useState(true);
   const [loadingO, setLoadO] = useState(false);
@@ -348,7 +373,7 @@ export default function TenantOrders() {
                 /* Orders Grid */
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
                   gap: 14,
                 }}>
                   {live
@@ -360,7 +385,7 @@ export default function TenantOrders() {
                         showBranch={showBranch}
                         colors={colors}
                         accents={accents}
-                        isDark={isDark} // ✅ Pass isDark to OrderCard
+                        isDark={isDark}
                       />
                     ))}
                 </div>
@@ -380,16 +405,24 @@ function OrderCard({
   showBranch,
   colors,
   accents,
-  isDark, // ✅ Receive isDark prop
+  isDark,
 }: {
   order: BranchOrder;
   showBranch: boolean;
   colors: ReturnType<typeof getColors>;
   accents: ReturnType<typeof getAccents>;
-  isDark: boolean; // ✅ Add isDark type
+  isDark: boolean;
 }) {
   const status = derivedStatus(order);
   const statusColor = STATUS_COLOR[status] || '#9CA3AF';
+  
+  // ✅ Calculate totals
+  const itemsTotal = getItemsTotal(order);
+  const addOnsTotal = getAddOnsTotal(order);
+  const grandTotal = getGrandTotal(order);
+  
+  // ✅ Check if order has any add-ons
+  const hasAddOns = addOnsTotal > 0;
 
   return (
     <div style={{
@@ -444,7 +477,7 @@ function OrderCard({
           letterSpacing: 0.5,
           padding: '4px 9px',
           borderRadius: 6,
-          background: isDark ? `${statusColor}15` : `${statusColor}10`, // ✅ isDark used here
+          background: isDark ? `${statusColor}15` : `${statusColor}10`,
           color: statusColor,
           whiteSpace: 'nowrap',
           flexShrink: 0,
@@ -454,52 +487,58 @@ function OrderCard({
         </span>
       </div>
 
-      {/* Items */}
-      <div style={{
-        borderTop: `1px solid ${colors.border}`,
-        paddingTop: 10,
-        flex: 1,
-      }}>
-        {(order.lineItems ?? []).map((li, i) => (
-          <div key={i} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: 13,
-            marginBottom: 5,
-            gap: 8,
-            flexWrap: 'wrap',
-            fontFamily: "'Poppins', sans-serif",
-          }}>
-            <span style={{
-              color: colors.text,
-              wordBreak: 'break-word',
-            }}>
-              <strong style={{ color: BRAND }}>{li.quantity}×</strong> {li.name}
-            </span>
-            <span style={{
-              color: colors.muted,
-              whiteSpace: 'nowrap',
-            }}>
-              {money(li.totalPriceMinorUnits, order.currency)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Total */}
+      {/* ✅ Grand Total Breakdown */}
       <div style={{
         borderTop: `1px solid ${colors.border}`,
         marginTop: 8,
-        paddingTop: 8,
-        display: 'flex',
-        justifyContent: 'space-between',
-        fontSize: 14,
-        fontWeight: 700,
-        color: colors.text,
-        fontFamily: "'Poppins', sans-serif",
+        paddingTop: 10,
       }}>
-        <span>Total</span>
-        <span>{money(order.totalAmountMinorUnits, order.currency)}</span>
+        {/* Items Total */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: 13,
+          color: colors.muted,
+          fontFamily: "'Poppins', sans-serif",
+          paddingBottom: 4,
+        }}>
+          <span>Items Total</span>
+          <span>{money(itemsTotal, order.currency)}</span>
+        </div>
+        
+        {/* Add-Ons Total */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: 13,
+          color: BRAND,
+          fontWeight: 600,
+          fontFamily: "'Poppins', sans-serif",
+          paddingBottom: 4,
+        }}>
+          <span>Add-Ons Total</span>
+          <span>{money(addOnsTotal, order.currency)}</span>
+        </div>
+        
+        {/* Divider */}
+        <div style={{
+          height: 1.5,
+          background: colors.border,
+          margin: '6px 0',
+        }} />
+        
+        {/* Grand Total */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: 16,
+          fontWeight: 700,
+          color: colors.text,
+          fontFamily: "'Poppins', sans-serif",
+        }}>
+          <span>Grand Total</span>
+          <span style={{ color: BRAND, fontSize: 17 }}>{money(grandTotal, order.currency)}</span>
+        </div>
       </div>
     </div>
   );

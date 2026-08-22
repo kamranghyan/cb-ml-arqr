@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, Loader2, RefreshCw, AlertCircle, Search, X, Printer } from 'lucide-react';
+import { Receipt, Loader2, RefreshCw, AlertCircle, Search, X, Printer, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import BranchPicker from '@/components/BranchPicker';
 import {
   fetchMyBranches, fetchOrders, revenueOf, derivedStatus,
@@ -17,7 +17,7 @@ import { getTheme } from '@/lib/theme';
 // ── Brand Color ──
 const BRAND = '#ff5723';
 
-// ── Theme-based colors (matching checkout page) ──
+// ── Theme-based colors ──
 const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFFFFF',
   card: isDark ? '#1C1C1C' : '#FFFFFF',
@@ -41,6 +41,65 @@ const RANGES = [
 const FILTERS: (OrderStatus | 'all')[] =
   ['all', 'delivered', 'cancelled', 'ready', 'preparing', 'pending'];
 
+// ✅ Pagination constant
+const PAGE_SIZE = 10;
+
+// ✅ Helper: Calculate Items Total (without add-ons)
+const getItemsTotal = (order: BranchOrder): number => {
+  return (order.lineItems || []).reduce((sum, li) => {
+    return sum + (li.unitPriceMinorUnits || 0) * li.quantity;
+  }, 0);
+};
+
+type OrderAddOn = {
+  name: string;
+  priceMinorUnits?: number;
+  quantity?: number;
+};
+
+const getLineAddOns = (lineItem: NonNullable<BranchOrder['lineItems']>[number]): OrderAddOn[] => {
+  return (lineItem as typeof lineItem & { addOns?: OrderAddOn[] }).addOns || [];
+};
+
+// ✅ Helper: Calculate Add-Ons Total
+const getAddOnsTotal = (order: BranchOrder): number => {
+  return (order.lineItems || []).reduce((sum, li) => {
+    const addOnsTotal = getLineAddOns(li).reduce((s, a) => {
+      return s + (a.priceMinorUnits || 0) * (a.quantity || 1);
+    }, 0);
+    return sum + addOnsTotal;
+  }, 0);
+};
+
+// ✅ Helper: Calculate Grand Total (Items + Add-Ons)
+const getGrandTotal = (order: BranchOrder): number => {
+  return getItemsTotal(order) + getAddOnsTotal(order);
+};
+
+// ✅ Helper: Get item names with quantities
+const getItemNames = (order: BranchOrder): string => {
+  return (order.lineItems || [])
+    .map(li => `${li.quantity}× ${li.name}`)
+    .join(', ');
+};
+
+// ✅ Helper: Get add-on names with quantities and prices
+const getAddOnDetails = (order: BranchOrder): string => {
+  const addOns = (order.lineItems || []).flatMap(li => 
+    getLineAddOns(li).map(a => ({
+      name: a.name,
+      quantity: a.quantity || 1,
+      price: (a.priceMinorUnits || 0) * (a.quantity || 1)
+    }))
+  );
+  
+  if (addOns.length === 0) return '—';
+  
+  return addOns
+    .map(a => `${a.name} ×${a.quantity} (${money(a.price, 'PKR')})`)
+    .join(', ');
+};
+
 export default function TenantHistory() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState('');
@@ -55,6 +114,10 @@ export default function TenantHistory() {
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
   const [printingAll, setPrintingAll] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  
+  // ✅ Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  
   const printRef = useRef<HTMLDivElement>(null);
 
   // ── Theme listener ──
@@ -95,6 +158,7 @@ export default function TenantHistory() {
     setError('');
     try {
       setOrders(await fetchOrders(branches, branchId, hours));
+      setCurrentPage(1); // ✅ Reset to first page on new load
     } catch (e: any) {
       setError(e?.message ?? 'Could not load order history');
     } finally {
@@ -106,7 +170,7 @@ export default function TenantHistory() {
     load();
   }, [load]);
 
-  const shown = orders
+  const filteredOrders = orders
     .filter(o => filter === 'all' || derivedStatus(o) === filter)
     .filter(o => typeFilter === 'all' || orderTypeOf(o) === typeFilter)
     .filter(o => {
@@ -122,6 +186,17 @@ export default function TenantHistory() {
     })
     .sort((a, b) => (b.placedAt ?? '').localeCompare(a.placedAt ?? ''));
 
+  // ✅ Pagination logic
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const shown = filteredOrders.slice(startIndex, endIndex);
+
+  // ✅ Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, typeFilter, query, hours, branchId]);
+
   const currency = branches[0]?.currencyCode || 'PKR';
   const showBranch = branchId === '' && branches.length > 1;
 
@@ -130,11 +205,12 @@ export default function TenantHistory() {
     setFilter('all');
     setTypeFilter('all');
     setQuery('');
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = filter !== 'all' || typeFilter !== 'all' || query.trim() !== '';
 
-  // Get branch name safely - check all possible ID fields
+  // Get branch name safely
   const getBranchName = (id: string) => {
     if (!id || !branches || branches.length === 0) return '';
     
@@ -152,9 +228,19 @@ export default function TenantHistory() {
   };
 
   // Truncate text function
-  const truncate = (text: string, maxLength: number = 30) => {
+  const truncate = (text: string, maxLength: number = 25) => {
     if (!text) return '';
     return text.length > maxLength ? text.substring(0, maxLength) + '…' : text;
+  };
+
+  // ✅ Format date for double line display
+  const formatPlacedDate = (placedAt: string | undefined) => {
+    if (!placedAt) return { date: '—', time: '—' };
+    const date = new Date(placedAt);
+    return {
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    };
   };
 
   // Print single order function
@@ -162,6 +248,10 @@ export default function TenantHistory() {
     setPrintingOrderId(order.orderId);
     setTimeout(() => {
       const status = derivedStatus(order);
+      const itemsTotal = getItemsTotal(order);
+      const addOnsTotal = getAddOnsTotal(order);
+      const grandTotal = getGrandTotal(order);
+      
       const printWindow = window.open('', '_blank', 'width=700,height=600');
       if (printWindow) {
         printWindow.document.write(`
@@ -183,6 +273,8 @@ export default function TenantHistory() {
                 .header { text-align: center; margin-bottom: 20px; }
                 .header h1 { margin: 0; }
                 .header p { margin: 4px 0 0; color: #6B7280; font-size: 13px; }
+                .addon { font-size: 11px; color: #6B7280; padding-left: 20px; }
+                .price-breakdown { background: #F9FAFB; padding: 12px 16px; border-radius: 8px; margin-top: 8px; }
               </style>
             </head>
             <body>
@@ -203,18 +295,29 @@ export default function TenantHistory() {
               
               <div class="items">
                 <div style="font-weight:700;margin-bottom:8px;">Items</div>
-                ${(order.lineItems ?? []).map(li => `
-                  <div class="item">
-                    <span>${li.quantity}× ${li.name}</span>
-                    <span>${money(li.totalPriceMinorUnits, order.currency)}</span>
-                  </div>
-                `).join('')}
+                ${(order.lineItems ?? []).map(li => {
+                  const addOns = getLineAddOns(li);
+                  return `
+                    <div class="item">
+                      <span>${li.quantity}× ${li.name}</span>
+                      <span>${money((li.unitPriceMinorUnits || 0) * li.quantity, order.currency)}</span>
+                    </div>
+                    ${addOns.map(a => `
+                      <div class="addon">+ ${a.name} ×${a.quantity || 1} → ${money((a.priceMinorUnits || 0) * (a.quantity || 1), order.currency)}</div>
+                    `).join('')}
+                  `;
+                }).join('')}
               </div>
               
               <div class="divider"></div>
               
-              <div class="total">
-                <div class="row"><span>Total</span><span>${money(order.totalAmountMinorUnits, order.currency)}</span></div>
+              <div class="price-breakdown">
+                <div class="row"><span>Items Total</span><span>${money(itemsTotal, order.currency)}</span></div>
+                <div class="row"><span style="color:#ff5723;">Add-Ons Total</span><span style="color:#ff5723;">${money(addOnsTotal, order.currency)}</span></div>
+                <div class="divider"></div>
+                <div class="total">
+                  <div class="row"><span>Grand Total</span><span>${money(grandTotal, order.currency)}</span></div>
+                </div>
               </div>
               
               <div class="divider"></div>
@@ -240,7 +343,7 @@ export default function TenantHistory() {
 
   // Print all orders function
   const handlePrintAll = () => {
-    if (shown.length === 0) return;
+    if (filteredOrders.length === 0) return;
     setPrintingAll(true);
     setTimeout(() => {
       const printWindow = window.open('', '_blank', 'width=1100,height=800');
@@ -248,6 +351,10 @@ export default function TenantHistory() {
         const branchName = getBranchName(branchId);
         const filterLabel = filter !== 'all' ? ` · Status: ${STATUS_LABEL[filter]}` : '';
         const branchText = branchName ? ` · Branch: ${branchName}` : '';
+        
+        const totalItemsRevenue = filteredOrders.reduce((sum, o) => sum + getItemsTotal(o), 0);
+        const totalAddOnsRevenue = filteredOrders.reduce((sum, o) => sum + getAddOnsTotal(o), 0);
+        const totalGrandRevenue = filteredOrders.reduce((sum, o) => sum + getGrandTotal(o), 0);
         
         printWindow.document.write(`
           <!DOCTYPE html>
@@ -266,6 +373,7 @@ export default function TenantHistory() {
                 .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
                 .total-row { border-top: 2px solid #E5E7EB; background: #F9FAFB; font-weight: 700; }
                 .footer { margin-top: 20px; text-align: center; color: #6B7280; font-size: 12px; border-top: 1px solid #E5E7EB; padding-top: 16px; }
+                .revenue-breakdown { background: #F9FAFB; padding: 12px 16px; border-radius: 8px; margin-top: 12px; }
               </style>
             </head>
             <body>
@@ -280,8 +388,21 @@ export default function TenantHistory() {
                   </p>
                 </div>
                 <div style="text-align:right;">
-                  <p style="font-size:16px;font-weight:700;margin:0;">Total Orders: ${shown.length}</p>
-                  <p style="font-size:16px;font-weight:700;margin:4px 0 0;">Revenue: ${money(revenueOf(shown), currency)}</p>
+                  <p style="font-size:16px;font-weight:700;margin:0;">Total Orders: ${filteredOrders.length}</p>
+                  <div class="revenue-breakdown" style="margin-top:8px;text-align:left;">
+                    <div style="display:flex;justify-content:space-between;font-size:13px;">
+                      <span>Items Revenue</span>
+                      <span>${money(totalItemsRevenue, currency)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:13px;color:#ff5723;">
+                      <span>Add-Ons Revenue</span>
+                      <span>${money(totalAddOnsRevenue, currency)}</span>
+                    </div>
+                    <div style="border-top:1px solid #E5E7EB;margin:6px 0;padding-top:6px;display:flex;justify-content:space-between;font-size:15px;font-weight:700;">
+                      <span>Total Revenue</span>
+                      <span>${money(totalGrandRevenue, currency)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -292,25 +413,42 @@ export default function TenantHistory() {
                     <th>Placed</th>
                     ${showBranch ? '<th>Branch</th>' : ''}
                     <th>Type</th>
-                    <th>Destination</th>
                     <th>Items</th>
+                    <th>Add-Ons</th>
                     <th style="text-align:right;">Total</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${shown.map(o => {
+                  ${filteredOrders.map(o => {
                     const s = derivedStatus(o);
+                    const itemsTotal = getItemsTotal(o);
+                    const addOnsTotal = getAddOnsTotal(o);
+                    const grandTotal = getGrandTotal(o);
                     const n = (o.lineItems ?? []).reduce((x, li) => x + li.quantity, 0);
+                    const itemNames = getItemNames(o);
+                    const addOnDetails = getAddOnDetails(o);
+                    const placed = formatPlacedDate(o.placedAt);
                     return `
                       <tr>
                         <td style="font-family:monospace;font-size:12px;">#${o.orderId.slice(0, 8).toUpperCase()}</td>
-                        <td>${o.placedAt ? new Date(o.placedAt).toLocaleString() : '—'}</td>
+                        <td style="font-size:11px;line-height:1.4;">
+                          <div>${placed.date}</div>
+                          <div style="color:#6B7280;font-size:10px;">${placed.time}</div>
+                        </td>
                         ${showBranch ? `<td>${o.branchName || '—'}</td>` : ''}
                         <td><span style="padding:2px 8px;border-radius:4px;font-weight:600;font-size:11px;background:${ORDER_TYPE_COLOR[orderTypeOf(o)]}15;color:${ORDER_TYPE_COLOR[orderTypeOf(o)]};">${ORDER_TYPE_LABEL[orderTypeOf(o)]}</span></td>
-                        <td>${destinationOf(o)}</td>
-                        <td>${n} item${n === 1 ? '' : 's'}</td>
-                        <td style="text-align:right;font-weight:600;">${money(o.totalAmountMinorUnits, o.currency)}</td>
+                        <td style="max-width:150px;font-size:12px;">
+                          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${itemNames}">
+                            ${truncate(itemNames, 20)}
+                          </div>
+                        </td>
+                        <td style="max-width:150px;font-size:11px;color:#ff5723;">
+                          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${addOnDetails}">
+                            ${truncate(addOnDetails, 20)}
+                          </div>
+                        </td>
+                        <td style="text-align:right;font-weight:700;">${money(grandTotal, o.currency)}</td>
                         <td><span class="status-badge" style="background:${STATUS_COLOR[s]}15;color:${STATUS_COLOR[s]};">${STATUS_LABEL[s]}</span></td>
                       </tr>
                     `;
@@ -318,8 +456,9 @@ export default function TenantHistory() {
                 </tbody>
                 <tfoot>
                   <tr class="total-row">
-                    <td colspan="${showBranch ? 5 : 4}">Total Orders: ${shown.length}</td>
-                    <td style="text-align:right;">${money(revenueOf(shown), currency)}</td>
+                    <td colspan="${showBranch ? 4 : 3}">Total Orders: ${filteredOrders.length}</td>
+                    <td style="color:#ff5723;font-weight:700;">${money(filteredOrders.reduce((sum, o) => sum + getAddOnsTotal(o), 0), currency)}</td>
+                    <td style="text-align:right;font-weight:800;">${money(filteredOrders.reduce((sum, o) => sum + getGrandTotal(o), 0), currency)}</td>
                     <td colspan="2"></td>
                   </tr>
                 </tfoot>
@@ -337,6 +476,24 @@ export default function TenantHistory() {
       }
       setPrintingAll(false);
     }, 300);
+  };
+
+  // ✅ Pagination handlers
+  const goToPage = (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
   };
 
   return (
@@ -369,7 +526,6 @@ export default function TenantHistory() {
           opacity: 0.5;
           cursor: not-allowed;
         }
-        /* ── Truncate styles ── */
         .truncate-cell {
           max-width: 150px;
           overflow: hidden;
@@ -430,7 +586,6 @@ export default function TenantHistory() {
             gap: 10,
             flexWrap: 'wrap',
           }}>
-
             <button
               onClick={load}
               style={{
@@ -491,7 +646,6 @@ export default function TenantHistory() {
             gap: 10,
             marginBottom: 16,
           }}>
-            {/* Time Range & Clear Filters */}
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
@@ -759,24 +913,30 @@ export default function TenantHistory() {
               }}>
                 <Stat
                   label="Orders"
-                  value={String(shown.length)}
+                  value={String(filteredOrders.length)}
                   colors={colors}
                 />
                 <Stat
-                  label="Revenue"
-                  value={money(revenueOf(shown), currency)}
+                  label="Items Revenue"
+                  value={money(filteredOrders.reduce((sum, o) => sum + getItemsTotal(o), 0), currency)}
+                  colors={colors}
+                />
+                <Stat
+                  label="Add-Ons Revenue"
+                  value={money(filteredOrders.reduce((sum, o) => sum + getAddOnsTotal(o), 0), currency)}
+                  accent={BRAND}
+                  colors={colors}
+                />
+                <Stat
+                  label="Total Revenue"
+                  value={money(filteredOrders.reduce((sum, o) => sum + getGrandTotal(o), 0), currency)}
                   accent={colors.text}
-                  colors={colors}
-                />
-                <Stat
-                  label="Cancelled"
-                  value={String(shown.filter(o => derivedStatus(o) === 'cancelled').length)}
                   colors={colors}
                 />
               </div>
 
               {/* ── Empty State ── */}
-              {shown.length === 0 ? (
+              {filteredOrders.length === 0 ? (
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -806,304 +966,566 @@ export default function TenantHistory() {
                   </p>
                 </div>
               ) : (
-                /* ── Orders Table ── */
-                <div style={{
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 12,
-                  overflow: 'hidden',
-                  background: colors.card,
-                }}>
+                <>
+                  {/* ── Orders Table ── */}
                   <div style={{
-                    overflowX: 'auto',
-                    WebkitOverflowScrolling: 'touch',
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    background: colors.card,
                   }}>
-                    <table style={{
-                      width: '100%',
-                      borderCollapse: 'collapse',
-                      minWidth: 700,
+                    <div style={{
+                      overflowX: 'auto',
+                      WebkitOverflowScrolling: 'touch',
                     }}>
-                      <thead style={{ background: colors.card2 }}>
-                        <tr>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Placed</th>
-                          {showBranch && <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Restaurant</th>}
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Type</th>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Going to</th>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Items</th>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Total</th>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Status</th>
-                          <th style={{
-                            padding: '10px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: 1,
-                            textTransform: 'uppercase',
-                            color: colors.subtle,
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>Print</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {shown.map(o => {
-                          const s = derivedStatus(o);
-                          const n = (o.lineItems ?? []).reduce((x, li) => x + li.quantity, 0);
-                          const isPrinting = printingOrderId === o.orderId;
-                          return (
-                            <tr key={o.orderId} style={{
-                              borderTop: `1px solid ${colors.border}`,
-                            }}>
-                              {/* ── Placed ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                color: colors.text,
-                                whiteSpace: 'nowrap',
-                                fontFamily: "'Poppins', sans-serif",
+                      <table style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        minWidth: 750,
+                      }}>
+                        <thead style={{ background: colors.card2 }}>
+                          <tr>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Placed</th>
+                            {showBranch && <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Restaurant</th>}
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Type</th>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Items</th>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Add-Ons</th>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'right',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Total</th>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Status</th>
+                            <th style={{
+                              padding: '10px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                              textTransform: 'uppercase',
+                              color: colors.subtle,
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>Print</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shown.map(o => {
+                            const s = derivedStatus(o);
+                            const n = (o.lineItems ?? []).reduce((x, li) => x + li.quantity, 0);
+                            const isPrinting = printingOrderId === o.orderId;
+                            const itemsTotal = getItemsTotal(o);
+                            const addOnsTotal = getAddOnsTotal(o);
+                            const grandTotal = getGrandTotal(o);
+                            const itemNames = getItemNames(o);
+                            const addOnDetails = getAddOnDetails(o);
+                            const placed = formatPlacedDate(o.placedAt);
+                            
+                            return (
+                              <tr key={o.orderId} style={{
+                                borderTop: `1px solid ${colors.border}`,
                               }}>
-                                {o.placedAt ? new Date(o.placedAt).toLocaleString() : '—'}
-                              </td>
-
-                              {/* ── Restaurant ── */}
-                              {showBranch && (
+                                {/* ✅ Placed - Double Line */}
                                 <td style={{
                                   padding: '11px 12px',
-                                  fontSize: 14,
-                                  color: colors.muted,
+                                  fontSize: 12,
+                                  color: colors.text,
                                   whiteSpace: 'nowrap',
                                   fontFamily: "'Poppins', sans-serif",
-                                  maxWidth: '120px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
+                                  lineHeight: 1.4,
                                 }}>
-                                  {truncate(o.branchName, 15)}
+                                  <div>{placed.date}</div>
+                                  <div style={{ color: colors.subtle, fontSize: 10 }}>{placed.time}</div>
                                 </td>
-                              )}
 
-                              {/* ── Type ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                color: colors.text,
-                                whiteSpace: 'nowrap',
-                                fontFamily: "'Poppins', sans-serif",
-                              }}>
-                                <span style={{
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.4,
-                                  padding: '3px 8px',
-                                  borderRadius: 6,
-                                  background: isDark ? `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15` : `${ORDER_TYPE_COLOR[orderTypeOf(o)]}10`,
-                                  color: ORDER_TYPE_COLOR[orderTypeOf(o)],
-                                  whiteSpace: 'nowrap',
-                                  fontFamily: "'Poppins', sans-serif",
-                                }}>
-                                  {ORDER_TYPE_LABEL[orderTypeOf(o)]}
-                                </span>
-                              </td>
-
-                              {/* ── Going to ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                color: colors.muted,
-                                whiteSpace: 'nowrap',
-                                fontFamily: "'Poppins', sans-serif",
-                                maxWidth: '120px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}>
-                                {truncate(destinationOf(o), 15)}
-                              </td>
-
-                              {/* ── Items ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                color: colors.muted,
-                                maxWidth: '180px',
-                                fontFamily: "'Poppins', sans-serif",
-                              }}>
-                                <div style={{ 
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}>
-                                  {n} item{n === 1 ? '' : 's'}
-                                  <span style={{
-                                    color: colors.subtle,
-                                    fontSize: 12,
-                                    display: 'block',
-                                    fontFamily: "'Poppins', sans-serif",
+                                {showBranch && (
+                                  <td style={{
+                                    padding: '11px 12px',
+                                    fontSize: 14,
+                                    color: colors.muted,
                                     whiteSpace: 'nowrap',
+                                    fontFamily: "'Poppins', sans-serif",
+                                    maxWidth: '120px',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                   }}>
-                                    {truncate((o.lineItems ?? []).slice(0, 2).map(li => li.name).join(', '), 25)}
-                                    {(o.lineItems ?? []).length > 2 ? '…' : ''}
-                                  </span>
-                                </div>
-                              </td>
+                                    {truncate(o.branchName, 15)}
+                                  </td>
+                                )}
 
-                              {/* ── Total ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                fontWeight: 700,
-                                color: colors.text,
-                                whiteSpace: 'nowrap',
-                                fontFamily: "'Poppins', sans-serif",
-                              }}>
-                                {money(o.totalAmountMinorUnits, o.currency)}
-                              </td>
-
-                              {/* ── Status ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                fontSize: 14,
-                                color: colors.text,
-                                whiteSpace: 'nowrap',
-                                fontFamily: "'Poppins', sans-serif",
-                              }}>
-                                <span style={{
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.5,
-                                  padding: '3px 8px',
-                                  borderRadius: 6,
-                                  background: isDark ? `${STATUS_COLOR[s]}15` : `${STATUS_COLOR[s]}10`,
-                                  color: STATUS_COLOR[s],
+                                <td style={{
+                                  padding: '11px 12px',
+                                  fontSize: 14,
+                                  color: colors.text,
                                   whiteSpace: 'nowrap',
                                   fontFamily: "'Poppins', sans-serif",
                                 }}>
-                                  {STATUS_LABEL[s]}
-                                </span>
-                              </td>
-
-                              {/* ── Print ── */}
-                              <td style={{
-                                padding: '11px 12px',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                              }}>
-                                <button
-                                  onClick={() => handlePrintOrder(o)}
-                                  disabled={isPrinting}
-                                  className="print-btn"
-                                  title="Print this order"
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: isPrinting ? 'not-allowed' : 'pointer',
-                                    padding: '6px 10px',
+                                  <span style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.4,
+                                    padding: '3px 8px',
                                     borderRadius: 6,
-                                    transition: 'all 0.2s',
-                                    color: isPrinting ? colors.subtle : colors.muted,
-                                    opacity: isPrinting ? 0.5 : 1,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (!isPrinting) {
-                                      e.currentTarget.style.background = colors.card2;
-                                      e.currentTarget.style.color = BRAND;
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (!isPrinting) {
-                                      e.currentTarget.style.background = 'transparent';
-                                      e.currentTarget.style.color = colors.muted;
-                                    }
-                                  }}
-                                >
-                                  {isPrinting ? (
-                                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                    background: isDark ? `${ORDER_TYPE_COLOR[orderTypeOf(o)]}15` : `${ORDER_TYPE_COLOR[orderTypeOf(o)]}10`,
+                                    color: ORDER_TYPE_COLOR[orderTypeOf(o)],
+                                    whiteSpace: 'nowrap',
+                                    fontFamily: "'Poppins', sans-serif",
+                                  }}>
+                                    {ORDER_TYPE_LABEL[orderTypeOf(o)]}
+                                  </span>
+                                </td>
+
+                                {/* ✅ Items - With names */}
+                                <td style={{
+                                  padding: '11px 12px',
+                                  fontSize: 12,
+                                  color: colors.text,
+                                  maxWidth: '150px',
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  <div style={{ 
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }} title={itemNames}>
+                                    {truncate(itemNames, 25)}
+                                  </div>
+                                  <div style={{
+                                    color: colors.subtle,
+                                    fontSize: 10,
+                                    fontFamily: "'Poppins', sans-serif",
+                                  }}>
+                                    {n} item{n === 1 ? '' : 's'} · {money(itemsTotal, o.currency)}
+                                  </div>
+                                </td>
+
+                                {/* ✅ Add-Ons - With names and prices */}
+                                <td style={{
+                                  padding: '11px 12px',
+                                  fontSize: 11,
+                                  color: colors.text,
+                                  maxWidth: '150px',
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  {addOnsTotal > 0 ? (
+                                    <div style={{ 
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }} title={addOnDetails}>
+                                      {truncate(addOnDetails, 25)}
+                                    </div>
                                   ) : (
-                                    <Printer size={16} />
+                                    <span style={{ color: colors.subtle }}>—</span>
                                   )}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                  {addOnsTotal > 0 && (
+                                    <div style={{
+                                      color: colors.subtle,
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      fontFamily: "'Poppins', sans-serif",
+                                    }}>
+                                      {money(addOnsTotal, o.currency)}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* ✅ Grand Total */}
+                                <td style={{
+                                  padding: '11px 12px',
+                                  fontSize: 14,
+                                  fontWeight: 700,
+                                  color: colors.text,
+                                  textAlign: 'right',
+                                  whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  {money(grandTotal, o.currency)}
+                                </td>
+
+                                <td style={{
+                                  padding: '11px 12px',
+                                  fontSize: 14,
+                                  color: colors.text,
+                                  whiteSpace: 'nowrap',
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  <span style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.5,
+                                    padding: '3px 8px',
+                                    borderRadius: 6,
+                                    background: isDark ? `${STATUS_COLOR[s]}15` : `${STATUS_COLOR[s]}10`,
+                                    color: STATUS_COLOR[s],
+                                    whiteSpace: 'nowrap',
+                                    fontFamily: "'Poppins', sans-serif",
+                                  }}>
+                                    {STATUS_LABEL[s]}
+                                  </span>
+                                </td>
+
+                                <td style={{
+                                  padding: '11px 12px',
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  <button
+                                    onClick={() => handlePrintOrder(o)}
+                                    disabled={isPrinting}
+                                    className="print-btn"
+                                    title="Print this order"
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: isPrinting ? 'not-allowed' : 'pointer',
+                                      padding: '6px 10px',
+                                      borderRadius: 6,
+                                      transition: 'all 0.2s',
+                                      color: isPrinting ? colors.subtle : colors.muted,
+                                      opacity: isPrinting ? 0.5 : 1,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isPrinting) {
+                                        e.currentTarget.style.background = colors.card2;
+                                        e.currentTarget.style.color = BRAND;
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isPrinting) {
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.color = colors.muted;
+                                      }
+                                    }}
+                                  >
+                                    {isPrinting ? (
+                                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                    ) : (
+                                      <Printer size={16} />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {/* ✅ Footer with Totals */}
+                        <tfoot style={{ 
+                          background: colors.card2,
+                          borderTop: `2px solid ${colors.border}`,
+                        }}>
+                          <tr>
+                            <td colSpan={showBranch ? 3 : 2} style={{
+                              padding: '12px 16px',
+                              fontWeight: 700,
+                              color: colors.text,
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              Total Orders: {filteredOrders.length}
+                            </td>
+                            <td style={{
+                              padding: '12px 16px',
+                              fontWeight: 700,
+                              color: colors.muted,
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              {money(filteredOrders.reduce((sum, o) => sum + getItemsTotal(o), 0), currency)}
+                            </td>
+                            <td style={{
+                              padding: '12px 16px',
+                              fontWeight: 700,
+                              color: BRAND,
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              {money(filteredOrders.reduce((sum, o) => sum + getAddOnsTotal(o), 0), currency)}
+                            </td>
+                            <td style={{
+                              padding: '12px 16px',
+                              fontWeight: 800,
+                              color: colors.text,
+                              textAlign: 'right',
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              {money(filteredOrders.reduce((sum, o) => sum + getGrandTotal(o), 0), currency)}
+                            </td>
+                            <td colSpan={2}></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
-                </div>
+
+                  {/* ✅ Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 4px',
+                      marginTop: 12,
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}>
+                      <div style={{
+                        fontSize: 13,
+                        color: colors.subtle,
+                        fontFamily: "'Poppins', sans-serif",
+                      }}>
+                        Showing {startIndex + 1}–{Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length} orders
+                      </div>
+                      
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}>
+                        <button
+                          onClick={goToPreviousPage}
+                          disabled={currentPage === 1}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 8,
+                            border: `1.5px solid ${currentPage === 1 ? colors.border : colors.border}`,
+                            background: currentPage === 1 ? colors.card2 : colors.card,
+                            color: currentPage === 1 ? colors.subtle : colors.text,
+                            cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                            opacity: currentPage === 1 ? 0.5 : 1,
+                            transition: 'all 0.2s ease',
+                            outline: 'none',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}
+                          onFocus={(e) => {
+                            if (currentPage !== 1) {
+                              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                              e.currentTarget.style.borderColor = BRAND;
+                            }
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.borderColor = colors.border;
+                          }}
+                          onMouseEnter={(e) => {
+                            if (currentPage !== 1) {
+                              e.currentTarget.style.background = colors.hoverBg;
+                              e.currentTarget.style.borderColor = BRAND;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (currentPage !== 1) {
+                              e.currentTarget.style.background = colors.card;
+                              e.currentTarget.style.borderColor = colors.border;
+                            }
+                          }}
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+
+                        {/* Page Numbers */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}>
+                          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 7) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 4) {
+                              pageNum = i + 1;
+                              if (i === 6) pageNum = totalPages;
+                            } else if (currentPage >= totalPages - 3) {
+                              pageNum = totalPages - 6 + i;
+                            } else {
+                              pageNum = currentPage - 3 + i;
+                            }
+                            
+                            const isActive = pageNum === currentPage;
+                            const isEllipsis = i === 3 && totalPages > 7 && currentPage > 4 && currentPage < totalPages - 3;
+                            
+                            if (isEllipsis) {
+                              return (
+                                <span key={`ellipsis-${i}`} style={{
+                                  padding: '0 4px',
+                                  color: colors.subtle,
+                                  fontSize: 13,
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  …
+                                </span>
+                              );
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => goToPage(pageNum)}
+                                style={{
+                                  minWidth: 36,
+                                  height: 36,
+                                  padding: '0 8px',
+                                  borderRadius: 8,
+                                  border: `1.5px solid ${isActive ? BRAND : colors.border}`,
+                                  background: isActive ? BRAND : colors.card,
+                                  color: isActive ? '#fff' : colors.text,
+                                  fontWeight: isActive ? 700 : 500,
+                                  fontSize: 13,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  fontFamily: "'Poppins', sans-serif",
+                                  outline: 'none',
+                                }}
+                                onFocus={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                                    e.currentTarget.style.borderColor = BRAND;
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  e.currentTarget.style.boxShadow = 'none';
+                                  e.currentTarget.style.borderColor = isActive ? BRAND : colors.border;
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = colors.hoverBg;
+                                    e.currentTarget.style.borderColor = BRAND;
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = colors.card;
+                                    e.currentTarget.style.borderColor = colors.border;
+                                  }
+                                }}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          onClick={goToNextPage}
+                          disabled={currentPage === totalPages}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 8,
+                            border: `1.5px solid ${currentPage === totalPages ? colors.border : colors.border}`,
+                            background: currentPage === totalPages ? colors.card2 : colors.card,
+                            color: currentPage === totalPages ? colors.subtle : colors.text,
+                            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                            opacity: currentPage === totalPages ? 0.5 : 1,
+                            transition: 'all 0.2s ease',
+                            outline: 'none',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}
+                          onFocus={(e) => {
+                            if (currentPage !== totalPages) {
+                              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                              e.currentTarget.style.borderColor = BRAND;
+                            }
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.borderColor = colors.border;
+                          }}
+                          onMouseEnter={(e) => {
+                            if (currentPage !== totalPages) {
+                              e.currentTarget.style.background = colors.hoverBg;
+                              e.currentTarget.style.borderColor = BRAND;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (currentPage !== totalPages) {
+                              e.currentTarget.style.background = colors.card;
+                              e.currentTarget.style.borderColor = colors.border;
+                            }
+                          }}
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

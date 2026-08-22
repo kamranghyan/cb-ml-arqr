@@ -15,6 +15,7 @@ import {
   Calendar,
   CreditCard,
   ChevronRight,
+  ChevronLeft,
   Clock,
   Zap,
   Crown,
@@ -23,6 +24,7 @@ import {
 import { getTheme } from '@/lib/theme';
 
 const BRAND = '#ff5723';
+const PAGE_SIZE = 10; // ✅ 10 invoices per page
 
 // ── Types ──
 interface Invoice {
@@ -130,6 +132,118 @@ const DEMO_INVOICES: Invoice[] = [
     paid_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     tenant_id: 'tenant_1',
   },
+  {
+    id: 'inv_5',
+    invoice_number: 'INV-2024-005',
+    order_id: 'ORD-005',
+    plan_id: 'monthly',
+    plan_name: 'Monthly',
+    amount: 9.99,
+    currency: 'USD',
+    status: 'PAID',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_6',
+    invoice_number: 'INV-2024-006',
+    order_id: 'ORD-006',
+    plan_id: 'quarterly',
+    plan_name: 'Quarterly',
+    amount: 24.99,
+    currency: 'USD',
+    status: 'REFUNDED',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 119 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_7',
+    invoice_number: 'INV-2024-007',
+    order_id: 'ORD-007',
+    plan_id: 'annual',
+    plan_name: 'Annual',
+    amount: 89.99,
+    currency: 'USD',
+    status: 'FAILED',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: null,
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_8',
+    invoice_number: 'INV-2024-008',
+    order_id: 'ORD-008',
+    plan_id: 'weekly',
+    plan_name: 'Weekly',
+    amount: 2.99,
+    currency: 'USD',
+    status: 'PAID',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_9',
+    invoice_number: 'INV-2024-009',
+    order_id: 'ORD-009',
+    plan_id: 'monthly',
+    plan_name: 'Monthly',
+    amount: 9.99,
+    currency: 'USD',
+    status: 'PAID',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 44 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_10',
+    invoice_number: 'INV-2024-010',
+    order_id: 'ORD-010',
+    plan_id: 'quarterly',
+    plan_name: 'Quarterly',
+    amount: 24.99,
+    currency: 'USD',
+    status: 'PENDING',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: null,
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_11',
+    invoice_number: 'INV-2024-011',
+    order_id: 'ORD-011',
+    plan_id: 'annual',
+    plan_name: 'Annual',
+    amount: 89.99,
+    currency: 'USD',
+    status: 'PAID',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 149 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
+  {
+    id: 'inv_12',
+    invoice_number: 'INV-2024-012',
+    order_id: 'ORD-012',
+    plan_id: 'weekly',
+    plan_name: 'Weekly',
+    amount: 2.99,
+    currency: 'USD',
+    status: 'PAID',
+    payment_method: 'EasyPaisa',
+    created_at: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
+    paid_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+    tenant_id: 'tenant_1',
+  },
 ];
 
 export default function InvoicesPage() {
@@ -140,6 +254,9 @@ export default function InvoicesPage() {
   const [isDark, setIsDark] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  
+  // ✅ Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   // ── Theme listener ──
   useEffect(() => {
@@ -166,13 +283,43 @@ export default function InvoicesPage() {
   const colors = getColors(isDark);
   const accents = getAccents(isDark);
 
-  // ── Refresh (Static - No API) ──
+  // ── Pagination logic ──
+  const totalPages = Math.ceil(invoices.length / PAGE_SIZE);
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const paginatedInvoices = invoices.slice(startIndex, endIndex);
+
+  // ── Reset page when invoices change ──
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [invoices.length]);
+
+  // ── Refresh ──
   const refreshInvoices = () => {
     setLoading(true);
     setTimeout(() => {
       setInvoices(DEMO_INVOICES);
+      setCurrentPage(1);
       setLoading(false);
     }, 500);
+  };
+
+  // ── Pagination handlers ──
+  const goToPage = (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
   };
 
   // ── Format date ──
@@ -274,7 +421,7 @@ export default function InvoicesPage() {
               margin: '4px 0 0',
             }}
           >
-            View all your payment invoices and receipts (Demo)
+            View all your payment invoices and receipts
           </p>
         </div>
         <button
@@ -465,114 +612,256 @@ export default function InvoicesPage() {
               </p>
             </div>
           ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-              }}
-            >
-              {invoices.map((invoice) => {
-                const statusBadge = getStatusBadge(invoice.status);
-                return (
-                  <div
-                    key={invoice.id}
-                    className="fade-in"
-                    style={{
-                      background: colors.card,
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: 12,
-                      padding: '16px 20px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 12,
-                      transition: 'all 0.2s ease',
-                      cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = BRAND;
-                      e.currentTarget.style.boxShadow = `0 4px 12px ${
-                        isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.06)'
-                      }`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = colors.border;
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    onClick={() => {
-                      setSelectedInvoice(invoice);
-                      setShowDetail(true);
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          background: `${BRAND}15`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: BRAND,
-                        }}
-                      >
-                        {getPlanIcon(invoice.plan_id)}
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                {paginatedInvoices.map((invoice) => {
+                  const statusBadge = getStatusBadge(invoice.status);
+                  return (
+                    <div
+                      key={invoice.id}
+                      className="fade-in"
+                      style={{
+                        background: colors.card,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 12,
+                        padding: '16px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 12,
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = BRAND;
+                        e.currentTarget.style.boxShadow = `0 4px 12px ${
+                          isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.06)'
+                        }`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = colors.border;
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                      onClick={() => {
+                        setSelectedInvoice(invoice);
+                        setShowDetail(true);
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: '50%',
+                            background: `${BRAND}15`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: BRAND,
+                          }}
+                        >
+                          {getPlanIcon(invoice.plan_id)}
+                        </div>
+                        <div>
+                          <p
+                            style={{
+                              fontSize: 15,
+                              fontWeight: 700,
+                              color: colors.text,
+                              margin: 0,
+                            }}
+                          >
+                            {invoice.invoice_number}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: colors.muted,
+                              margin: 0,
+                            }}
+                          >
+                            {invoice.plan_name} Plan ·{' '}
+                            {formatDate(invoice.created_at)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <span
                           style={{
                             fontSize: 15,
                             fontWeight: 700,
                             color: colors.text,
-                            margin: 0,
                           }}
                         >
-                          {invoice.invoice_number}
-                        </p>
-                        <p
+                          {formatPrice(invoice.amount, invoice.currency)}
+                        </span>
+                        <span
                           style={{
-                            fontSize: 12,
-                            color: colors.muted,
-                            margin: 0,
+                            padding: '2px 12px',
+                            borderRadius: 20,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: statusBadge.color,
+                            background: statusBadge.bg,
                           }}
                         >
-                          {invoice.plan_name} Plan ·{' '}
-                          {formatDate(invoice.created_at)}
-                        </p>
+                          {statusBadge.label}
+                        </span>
+                        <ChevronRight size={18} color={colors.muted} />
                       </div>
                     </div>
+                  );
+                })}
+              </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <span
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: colors.text,
-                        }}
-                      >
-                        {formatPrice(invoice.amount, invoice.currency)}
-                      </span>
-                      <span
-                        style={{
-                          padding: '2px 12px',
-                          borderRadius: 20,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: statusBadge.color,
-                          background: statusBadge.bg,
-                        }}
-                      >
-                        {statusBadge.label}
-                      </span>
-                      <ChevronRight size={18} color={colors.muted} />
-                    </div>
+              {/* ✅ Pagination Controls */}
+              {totalPages > 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 4px',
+                    marginTop: 16,
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    borderTop: `1px solid ${colors.border}`,
+                    paddingTop: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: colors.subtle,
+                      fontFamily: "'Poppins', sans-serif",
+                    }}
+                  >
+                    Showing {startIndex + 1}–{Math.min(endIndex, invoices.length)} of {invoices.length} invoices
                   </div>
-                );
-              })}
-            </div>
+                  
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <button
+                      onClick={goToPreviousPage}
+                      disabled={currentPage === 1}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        border: `1.5px solid ${currentPage === 1 ? colors.border : colors.border}`,
+                        background: currentPage === 1 ? colors.card2 : colors.card,
+                        color: currentPage === 1 ? colors.subtle : colors.text,
+                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                        opacity: currentPage === 1 ? 0.5 : 1,
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                      }}
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 7) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 4) {
+                          pageNum = i + 1;
+                          if (i === 6) pageNum = totalPages;
+                        } else if (currentPage >= totalPages - 3) {
+                          pageNum = totalPages - 6 + i;
+                        } else {
+                          pageNum = currentPage - 3 + i;
+                        }
+                        
+                        const isActive = pageNum === currentPage;
+                        const isEllipsis = i === 3 && totalPages > 7 && currentPage > 4 && currentPage < totalPages - 3;
+                        
+                        if (isEllipsis) {
+                          return (
+                            <span key={`ellipsis-${i}`} style={{
+                              padding: '0 4px',
+                              color: colors.subtle,
+                              fontSize: 13,
+                            }}>
+                              …
+                            </span>
+                          );
+                        }
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => goToPage(pageNum)}
+                            style={{
+                              minWidth: 36,
+                              height: 36,
+                              padding: '0 8px',
+                              borderRadius: 8,
+                              border: `1.5px solid ${isActive ? BRAND : colors.border}`,
+                              background: isActive ? BRAND : colors.card,
+                              color: isActive ? '#fff' : colors.text,
+                              fontWeight: isActive ? 700 : 500,
+                              fontSize: 13,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              outline: 'none',
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        border: `1.5px solid ${currentPage === totalPages ? colors.border : colors.border}`,
+                        background: currentPage === totalPages ? colors.card2 : colors.card,
+                        color: currentPage === totalPages ? colors.subtle : colors.text,
+                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                        opacity: currentPage === totalPages ? 0.5 : 1,
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                      }}
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -831,8 +1120,7 @@ export default function InvoicesPage() {
                 <Download size={16} />
                 Download PDF
               </button>
-              <button
-                style={{
+              <button                style={{
                   flex: 1,
                   padding: '10px',
                   borderRadius: 10,
