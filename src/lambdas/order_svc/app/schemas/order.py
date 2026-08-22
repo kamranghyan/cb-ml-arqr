@@ -28,10 +28,8 @@ class LineItemBody(BaseModel):
     quantity: int = Field(..., gt=0)
     unitPriceMinorUnits: int = Field(..., gt=0)
     totalPriceMinorUnits: int = Field(..., gt=0)
-    
-    # ✅ NEW: Add-ons fields
-    addOns: List[AddOnBody] = Field(default_factory=list)
-    addOnsTotalMinorUnits: int = Field(default=0, ge=0)
+    addOns: List[AddOnBody] = []  
+    addOnsTotalMinorUnits: int = 0
 
     @field_validator("totalPriceMinorUnits")
     @classmethod

@@ -14,6 +14,27 @@ import { getValidIdToken } from './cognito'
 // ── Types ─────────────────────────────────────────────────────────────
 
 export type PlanTier = 'starter' | 'professional' | 'enterprise'
+// lib/auth-api.ts - Add these types at the top
+
+export interface Plan {
+  plan_id: string;
+  plan_name: string;
+  duration_days: number;
+  price: number;
+  currency: string;
+  description: string | null;
+  is_active: boolean;
+}
+
+export interface Subscription {
+  tenant_id: string;
+  plan_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  days_remaining: number | null;
+}
 
 export interface ApiTenant {
   tenantId:        string

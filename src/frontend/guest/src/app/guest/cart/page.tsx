@@ -560,7 +560,7 @@ export default function CartPage() {
                   color: D.text
                 }}>RS.{calculateSubtotal().toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              {/* <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{
                   fontFamily: "'Poppins', sans-serif",
                   fontSize: 17,
@@ -573,7 +573,7 @@ export default function CartPage() {
                   fontWeight: 700,
                   color: D.text
                 }}>RS.{taxAmt.toLocaleString()}</span>
-              </div>
+              </div> */}
               {promoApplied && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{

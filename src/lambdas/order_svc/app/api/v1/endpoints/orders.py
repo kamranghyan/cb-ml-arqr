@@ -57,10 +57,10 @@ _settings = get_settings()
 @router.post("", status_code=201, summary="Create a new order")
 async def create_order(
     body: CreateOrderBody,
-    tenant_id: Annotated[str,               Depends(get_tenant_id)],
-    repo: Annotated[OrderRepository,        Depends(get_order_repo)],
-    sfn:  Annotated[StepFunctionsService,   Depends(get_sfn_service)],
-    user: Annotated[UserContext | None,     Depends(optional_user)] = None,
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    repo: Annotated[OrderRepository, Depends(get_order_repo)],
+    sfn: Annotated[StepFunctionsService, Depends(get_sfn_service)],
+    user: Annotated[UserContext | None, Depends(optional_user)] = None,
 ):
     order_id = str(uuid.uuid4())
     if user is not None and getattr(user, "tenant_id", None):
@@ -100,48 +100,6 @@ async def create_order(
         contactPhone=body.contactPhone,
         deliveryFeeMinorUnits=body.deliveryFeeMinorUnits,
     )
-
-    # Menu validation (skippable in dev/test)
-    if not _settings.skip_menu_validation:
-        try:
-            validate_menu_items(
-                get_dynamodb_client(), _settings.item_table,
-                tenant_id, request.restaurantId, request.lineItems,
-            )
-        except MenuValidationError as exc:
-            raise BadRequestError(exc.message) from exc
-
-    # Write to DynamoDB
-    now = datetime.now(timezone.utc)
-    record = OrderRecord.build(request, order_id, execution_arn="PENDING", now=now)
-
-    try:
-        repo.write_order(record)
-    except DuplicateOrderError:
-        raise BadRequestError("Order already exists.")
-
-    if body.tableId:
-        CartService().clear_cart(tenant_id, body.tableId)
-
-    try:
-        execution_arn = sfn.start_new_order(order_id, request)
-    except Exception as exc:
-        repo.rollback_order(record)
-        log.error("sfn.start.failed", order_id=order_id, exc_message=str(exc))
-        raise BadRequestError(f"Step Functions unavailable: {exc}") from exc
-
-    log.info(
-        "order.placed",
-        order_id=order_id, tenant_id=tenant_id, restaurant_id=body.restaurantId,
-        order_type=body.orderType,
-    )
-
-    return {
-        "orderId": order_id,
-        "status": "RECEIVED",
-        "stepFunctionsExecutionArn": execution_arn,
-    }
-
 
 # ── GET /orders ───────────────────────────────────────────────────────────────
 

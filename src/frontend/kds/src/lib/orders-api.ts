@@ -1,4 +1,4 @@
-/**
+  /**
    * Orders API — KDS integration
    * All routes public — no auth required
    */
@@ -6,7 +6,9 @@
   import type { KdsOrder, KdsStatus } from './types';
 
   const PROXY = {
+    list:  () => '/api/orders',
     patch: (id: string) => `/api/orders/${id}`,
+    post:  () => '/api/orders',
   };
 
   export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -44,6 +46,11 @@
       delivered:       boolean;
       cancelled:       boolean;
     };
+  }
+
+  interface ApiOrdersResponse {
+    orders: ApiOrder[];
+    count:  number;
   }
 
   // ── tenantId included in payload ───────────────────────────────────────────────
@@ -135,7 +142,7 @@
    * The orders proxy derives tenant + restaurant from this token, so every call
    * must carry it — the screen shows only the branch the user belongs to.
    */
-  export async function authHeaders(): Promise<Record<string, string>> {
+  async function authHeaders(): Promise<Record<string, string>> {
     try {
       const { getValidIdToken } = await import('@/lib/cognito');
       const token = await getValidIdToken();
@@ -143,6 +150,25 @@
     } catch {
       return {};
     }
+  }
+
+  export async function fetchOrders(): Promise<(KdsOrder & { _apiId: string })[]> {
+    const res = await fetch(PROXY.list(), {
+      cache: 'no-store',
+      headers: await authHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 403) {
+        throw new Error(
+          'This kitchen account is not linked to a restaurant. ' +
+          'Ask your manager to re-create it for a specific branch.'
+        );
+      }
+      throw new Error(`Orders API ${res.status}: ${text}`);
+    }
+    const data: ApiOrdersResponse = await res.json();
+    return (data.orders ?? []).map(normaliseOrder);
   }
 
   // ── PATCH — public, tenantId auto-included ────────────────────────────────────

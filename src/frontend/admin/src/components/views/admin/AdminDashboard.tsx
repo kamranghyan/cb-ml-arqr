@@ -1,18 +1,19 @@
+// app/admin/page.tsx
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Building2, Store, TrendingUp, Loader2, AlertCircle,
-  RefreshCw, ChevronRight, Pause,
+  RefreshCw, ChevronRight, Pause, Plus, CreditCard,
 } from 'lucide-react';
 import { fetchTenants, type ApiTenant, type PlanTier } from '@/lib/auth-api';
 import { getTheme } from '@/lib/theme';
 
-// ── Brand Color ──
 const BRAND = '#ff5723';
 
-// ── Theme-based colors (matching checkout page) ──
+// ── Theme-based colors ──
 const getColors = (isDark: boolean) => ({
   bg: isDark ? '#111111' : '#FFFFFF',
   card: isDark ? '#1C1C1C' : '#FFFFFF',
@@ -27,22 +28,21 @@ const getColors = (isDark: boolean) => ({
   focusRing: isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)',
 });
 
-// ── Accent colors based on theme ──
 const getAccents = (isDark: boolean) => ({
-  green: { 
-    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
-    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
-    text: isDark ? '#4ade80' : '#16a34a' 
+  green: {
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
+    text: isDark ? '#4ade80' : '#16a34a'
   },
-  orange: { 
-    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
-    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
-    text: isDark ? '#fb923c' : '#d97706' 
+  orange: {
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A',
+    text: isDark ? '#fb923c' : '#d97706'
   },
-  danger: { 
-    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
-    text: isDark ? '#ff8a5c' : BRAND 
+  danger: {
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0',
+    text: isDark ? '#ff8a5c' : BRAND
   },
 });
 
@@ -54,23 +54,36 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [isDark, setIsDark] = useState(false);
 
+  // ── Plan Creation State ──
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planData, setPlanData] = useState({
+    plan_id: 'monthly',
+    plan_name: 'Monthly Plan',
+    duration_days: 30,
+    price: 9.99,
+    currency: 'USD',
+    description: 'Perfect for small businesses',
+  });
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [planSuccess, setPlanSuccess] = useState('');
+
   // ── Theme listener ──
   useEffect(() => {
     const updateTheme = () => {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -96,6 +109,45 @@ export default function AdminDashboard() {
     load();
   }, [load]);
 
+  // ── Create Plan ──
+  const createPlan = async () => {
+    setCreatingPlan(true);
+    setPlanError('');
+    setPlanSuccess('');
+
+    try {
+      const res = await fetch('/api/v1/plans/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-Id': '1c71a684-c20f-411b-9cd6-45ab2f24413b',
+        },
+        body: JSON.stringify(planData),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || data?.detail || 'Failed to create plan');
+      }
+
+      setPlanSuccess(`Plan "${planData.plan_name}" created successfully!`);
+      setShowPlanModal(false);
+      // Reset form
+      setPlanData({
+        plan_id: 'monthly',
+        plan_name: 'Monthly Plan',
+        duration_days: 30,
+        price: 9.99,
+        currency: 'USD',
+        description: 'Perfect for small businesses',
+      });
+    } catch (e: any) {
+      setPlanError(e?.message || 'Failed to create plan');
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
+
   const active = tenants.filter(t => t.isActive);
   const suspended = tenants.filter(t => !t.isActive);
   const restaurants = tenants.reduce((s, t) => s + (t.restaurantCount ?? 0), 0);
@@ -105,7 +157,6 @@ export default function AdminDashboard() {
     count: tenants.filter(t => t.planTier === p).length,
   }));
 
-  // Tenants sitting on their plan ceiling — natural upgrade conversations.
   const atLimit = tenants.filter(
     t => t.maxRestaurants !== -1 && t.restaurantCount >= t.maxRestaurants
   );
@@ -122,6 +173,13 @@ export default function AdminDashboard() {
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+          animation: fadeIn 0.3s ease-out;
         }
       `}</style>
 
@@ -159,45 +217,57 @@ export default function AdminDashboard() {
               Customer companies on MenuLay and how much of their plan they use.
             </p>
           </div>
-          <button
-            onClick={load}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 16px',
-              border: `1.5px solid ${colors.border}`,
-              borderRadius: 10,
-              background: colors.card2,
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: 'pointer',
-              color: colors.text,
-              whiteSpace: 'nowrap',
-              fontFamily: "'Poppins', sans-serif",
-              transition: 'all 0.2s ease',
-              outline: 'none',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-              e.currentTarget.style.borderColor = colors.border;
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = colors.hoverBg;
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = colors.card2;
-              e.currentTarget.style.borderColor = colors.border;
-            }}
-          >
-            <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
-            Refresh
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* ✅ Create Plan Button */}
+            <button
+              onClick={() => setShowPlanModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: 10,
+                background: BRAND,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                color: '#fff',
+                whiteSpace: 'nowrap',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#e64a1a'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = BRAND; }}
+            >
+              <Plus size={16} />
+              Create Plan
+            </button>
+            <button
+              onClick={load}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                border: `1.5px solid ${colors.border}`,
+                borderRadius: 10,
+                background: colors.card2,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                color: colors.text,
+                whiteSpace: 'nowrap',
+                fontFamily: "'Poppins', sans-serif",
+                transition: 'all 0.2s ease',
+                outline: 'none',
+              }}
+            >
+              <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -423,18 +493,361 @@ export default function AdminDashboard() {
                   fontFamily: "'Poppins', sans-serif",
                   transition: 'all 0.2s ease',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.8';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
               >
                 Manage tenants <ChevronRight size={14} />
               </Link>
             </Card>
           </div>
         </>
+      )}
+
+      {/* ── Create Plan Modal ── */}
+      {showPlanModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          backdropFilter: 'blur(4px)',
+        }}
+        onClick={() => setShowPlanModal(false)}
+        >
+          <div style={{
+            background: colors.card,
+            borderRadius: 16,
+            maxWidth: 500,
+            width: '100%',
+            padding: 28,
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 16,
+            }}>
+              <h2 style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: colors.text,
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <CreditCard size={20} color={BRAND} />
+                Create New Plan
+              </h2>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 20,
+                  color: colors.muted,
+                  cursor: 'pointer',
+                  padding: 4,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Plan ID */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Plan ID
+              </label>
+              <select
+                value={planData.plan_id}
+                onChange={(e) => setPlanData({ ...planData, plan_id: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="semi_annual">Semi-Annual</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+
+            {/* Plan Name */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Plan Name
+              </label>
+              <input
+                type="text"
+                value={planData.plan_name}
+                onChange={(e) => setPlanData({ ...planData, plan_name: e.target.value })}
+                placeholder="e.g., Monthly Plan"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              />
+            </div>
+
+            {/* Duration Days */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Duration (days)
+              </label>
+              <input
+                type="number"
+                value={planData.duration_days}
+                onChange={(e) => setPlanData({ ...planData, duration_days: parseInt(e.target.value) || 0 })}
+                placeholder="e.g., 30"
+                min={1}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              />
+            </div>
+
+            {/* Price */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Price
+              </label>
+              <input
+                type="number"
+                value={planData.price}
+                onChange={(e) => setPlanData({ ...planData, price: parseFloat(e.target.value) || 0 })}
+                placeholder="e.g., 9.99"
+                min={0}
+                step={0.01}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              />
+            </div>
+
+            {/* Currency */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Currency
+              </label>
+              <select
+                value={planData.currency}
+                onChange={(e) => setPlanData({ ...planData, currency: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              >
+                <option value="USD">USD</option>
+                <option value="PKR">PKR</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+
+            {/* Description */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.text,
+                marginBottom: 4,
+              }}>
+                Description
+              </label>
+              <textarea
+                value={planData.description}
+                onChange={(e) => setPlanData({ ...planData, description: e.target.value })}
+                placeholder="Describe the plan..."
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: colors.card2,
+                  color: colors.text,
+                  fontSize: 14,
+                  outline: 'none',
+                  resize: 'vertical',
+                  fontFamily: "'Poppins', sans-serif",
+                }}
+              />
+            </div>
+
+            {/* Error / Success */}
+            {planError && (
+              <div style={{
+                padding: '10px 12px',
+                background: accents.danger.bg,
+                border: `1px solid ${accents.danger.border}`,
+                borderRadius: 8,
+                color: accents.danger.text,
+                fontSize: 13,
+                marginBottom: 12,
+              }}>
+                <AlertCircle size={16} style={{ display: 'inline', marginRight: 6 }} />
+                {planError}
+              </div>
+            )}
+
+            {planSuccess && (
+              <div style={{
+                padding: '10px 12px',
+                background: accents.green.bg,
+                border: `1px solid ${accents.green.border}`,
+                borderRadius: 8,
+                color: accents.green.text,
+                fontSize: 13,
+                marginBottom: 12,
+              }}>
+                ✅ {planSuccess}
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: 10,
+              marginTop: 4,
+            }}>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: 8,
+                  border: `1.5px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.text,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  fontFamily: "'Poppins', sans-serif",
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = colors.hoverBg; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createPlan}
+                disabled={creatingPlan}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: creatingPlan ? colors.muted : BRAND,
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: creatingPlan ? 'not-allowed' : 'pointer',
+                  opacity: creatingPlan ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  fontFamily: "'Poppins', sans-serif",
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!creatingPlan) e.currentTarget.style.background = '#e64a1a';
+                }}
+                onMouseLeave={(e) => {
+                  if (!creatingPlan) e.currentTarget.style.background = BRAND;
+                }}
+              >
+                {creatingPlan ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    Creating…
+                  </>
+                ) : (
+                  'Create Plan'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

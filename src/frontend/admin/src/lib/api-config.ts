@@ -15,12 +15,10 @@ export const TENANT_ID =
   process.env.NEXT_PUBLIC_TENANT_ID ?? ''
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  'https://oh9dbidjq1.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_API_BASE 
 
 export const AR_BASE =
-  process.env.NEXT_PUBLIC_AR_API_BASE ??
-  'https://xn1byphl3m.execute-api.ap-south-1.amazonaws.com/dev'
+  process.env.NEXT_PUBLIC_AR_API_BASE 
 
 
 if (typeof window !== 'undefined') {

@@ -91,14 +91,17 @@ async def require_kitchen_or_admin(
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def get_tenant_id(
-    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-Id")] = None,
-    tenantId: Annotated[str | None, Query()] = None,
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
+    tenantId: str | None = Query(default=None),
 ) -> str:
     tid = x_tenant_id or tenantId
-    if not tid:
-        raise BadRequestError("X-Tenant-Id header or tenantId query parameter is required.")
-    return tid
 
+    if not tid:
+        raise BadRequestError(
+            "X-Tenant-Id header or tenantId query parameter is required."
+        )
+
+    return tid
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Repository / service factories

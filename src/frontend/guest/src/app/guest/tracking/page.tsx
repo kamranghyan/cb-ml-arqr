@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, Plus, Minus } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -71,7 +71,7 @@ function formatRs(minor?: number) {
   return 'Rs ' + (minor / 100).toLocaleString('en-PK');
 }
 
-const POLL_MS = 5000;
+const POLL_MS = 30000;
 
 export default function TrackingPage() {
   const router = useRouter();
@@ -87,7 +87,13 @@ export default function TrackingPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [prepTime, setPrepTime] = useState('20-30 mins');
+  
+  // ✅ Use refs to track mount and interval
+  const isMounted = useRef(true);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isFirstLoad = useRef(true);
 
+  // Load menu images only once
   useEffect(() => {
     const loadMenuImages = async () => {
       try {
@@ -102,21 +108,43 @@ export default function TrackingPage() {
     loadMenuImages();
   }, []);
 
+  // Session check only once
   useEffect(() => {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
-    if (!hasSession) { window.location.href = '/guest'; return; }
+    if (!hasSession) { 
+      window.location.href = '/guest'; 
+      return; 
+    }
     setSessionTid(sessionStorage.getItem('lm_tid') ?? '');
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
   }, []);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // ✅ Main load function - defined as a regular function, not useCallback
+  const loadOrders = async (silent = false) => {
+    // Prevent duplicate initial loads
+    if (!silent && !isFirstLoad.current) {
+      console.log('⏭️ Skipping duplicate load call');
+      return;
+    }
+    
+    if (!silent) {
+      setLoading(true);
+      isFirstLoad.current = false;
+    }
+    
     try {
       const { restaurantId } = getGuestScope();
       const url = new URL('/api/orders', window.location.origin);
       url.searchParams.set('rid', restaurantId);
+      console.log("📡 Fetching orders from:", url.toString());
 
-      const res = await fetch(url.toString(), { cache: 'no-store' });
+      const res = await fetch(url.toString(), { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
       if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
@@ -144,15 +172,36 @@ export default function TrackingPage() {
           return { ...o, status: (!isFinal && er > fr) ? ex.status : o.status };
         });
       });
+      
       setLastSync(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
       setError('');
     } catch (e: any) {
       console.error('❌ API ERROR:', e);
       setError(e?.message ?? 'Failed');
-    } finally { setLoading(false); }
-  }, []);
+    } finally { 
+      setLoading(false); 
+    }
+  };
 
-  useEffect(() => { load(); const id = setInterval(() => load(true), POLL_MS); return () => clearInterval(id); }, [load]);
+  // ✅ Load ONCE on mount, then start polling
+  useEffect(() => {
+    // Initial load
+    loadOrders();
+    
+    // Set up polling interval
+    intervalRef.current = setInterval(() => {
+      loadOrders(true); // silent refresh
+    }, POLL_MS);
+    
+    // Cleanup on unmount
+    return () => {
+      isMounted.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []); // ✅ Empty dependency array - runs only once!
 
   // ── Table matching ──
   const myOrders = orders.filter(o => {
@@ -378,7 +427,7 @@ export default function TrackingPage() {
             }}>Order #{latest.orderId.slice(0, 8).toUpperCase()}</p>}
           </div>
           <button
-            onClick={() => load()}
+            onClick={() => loadOrders()}
             style={{
               width: 40,
               height: 40,
@@ -660,7 +709,7 @@ export default function TrackingPage() {
                             </span>
                           </div>
                         ))}
-                        
+
                         {/* Add-Ons Total */}
                         <div style={{
                           display: 'flex',

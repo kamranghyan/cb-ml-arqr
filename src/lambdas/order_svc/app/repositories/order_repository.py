@@ -14,7 +14,7 @@ Encapsulates:
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -51,6 +51,18 @@ class OrderRepository:
     def _table(self):
         return self._resource.Table(self._table_name)
 
+    # ── Helper to ensure addOns fields exist ────────────────────────────────
+
+    def _ensure_addons_fields(self, order: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure addOns fields exist in the order"""
+        if "lineItems" in order:
+            for item in order["lineItems"]:
+                if "addOns" not in item:
+                    item["addOns"] = []
+                if "addOnsTotalMinorUnits" not in item:
+                    item["addOnsTotalMinorUnits"] = 0
+        return order
+
     # ── Write ─────────────────────────────────────────────────────────────────
 
     def write_order(self, record: OrderRecord) -> None:
@@ -63,6 +75,15 @@ class OrderRepository:
         ClientError         — any other DynamoDB error
         """
         item = to_dynamo_types(record.to_dynamo_item())
+        
+        # ✅ Ensure addOns fields are properly formatted
+        if "lineItems" in item:
+            for line_item in item["lineItems"]:
+                if "addOns" not in line_item:
+                    line_item["addOns"] = []
+                if "addOnsTotalMinorUnits" not in line_item:
+                    line_item["addOnsTotalMinorUnits"] = 0
+        
         try:
             self._table.put_item(
                 Item=item,
@@ -101,7 +122,11 @@ class OrderRepository:
             Limit=1,
         )
         items = res.get("Items", [])
-        return items[0] if items else None
+        if not items:
+            return None
+        
+        # ✅ Ensure addOns fields exist in the returned order
+        return self._ensure_addons_fields(items[0])
 
     def list_orders(
         self,
@@ -125,10 +150,14 @@ class OrderRepository:
                 & Key("placedAt").gte(from_time)
             ),
         )
-        return [
+        
+        orders = [
             o for o in res.get("Items", [])
             if o.get("tenantId") == tenant_id
         ]
+        
+        # ✅ Ensure addOns fields exist in each order
+        return [self._ensure_addons_fields(order) for order in orders]
 
     # ── Update ────────────────────────────────────────────────────────────────
 
@@ -163,5 +192,40 @@ class OrderRepository:
                 error_code=exc.response["Error"]["Code"],
             )
             raise
-            
-            
+
+    # ── Update order with addOns (if needed) ────────────────────────────────
+
+    def update_order_with_addons(self, order_id: str, tenant_id: str, line_items: List[Dict]) -> None:
+        """
+        Update order with new line items including addOns.
+        """
+        order = self.get_order(order_id, tenant_id)
+        if not order:
+            raise ResourceNotFoundError(resource="Order", identifier=order_id)
+
+        updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # ✅ Ensure each line item has addOns fields
+        for item in line_items:
+            if "addOns" not in item:
+                item["addOns"] = []
+            if "addOnsTotalMinorUnits" not in item:
+                item["addOnsTotalMinorUnits"] = 0
+
+        try:
+            self._table.update_item(
+                Key={"PK": order["PK"], "SK": order["SK"]},
+                UpdateExpression="SET lineItems = :li, updatedAt = :u",
+                ExpressionAttributeValues={
+                    ":li": line_items,
+                    ":u": updated_at
+                },
+            )
+            _log.info("order.addons.updated", order_id=order_id)
+        except ClientError as exc:
+            _log.error(
+                "order.addons.update.failed",
+                order_id=order_id,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise

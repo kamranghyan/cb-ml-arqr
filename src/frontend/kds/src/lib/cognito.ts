@@ -168,6 +168,15 @@ export async function getValidIdToken(): Promise<string | null> {
   return tokens?.idToken ?? null
 }
 
+export async function getValidToken(): Promise<string | null> {
+  let tokens = loadTokens()
+  if (!tokens) return null
+  if (Date.now() > tokens.expiresAt - 5 * 60 * 1000) {
+    tokens = await refreshTokens()
+  }
+  return tokens?.accessToken ?? null
+}
+
 // ── Forgot password ──────────────────────────────────────────────────────────
 export async function forgotPassword(email: string): Promise<void> {
   await authProxy('forgotPassword', { email })

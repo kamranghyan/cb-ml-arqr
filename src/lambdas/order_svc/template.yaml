@@ -22,10 +22,10 @@ Parameters:
     Default: ap-south-1
   CognitoUserPoolId:
     Type: String
-    Default: ap-south-1_SCyQ50etN
+    Default: ap-south-1_RkmSFSjU4
   CognitoClientId:
     Type: String
-    Default: 7903hkujl9qeq67toemi5qrhes
+    Default: 5c5e7traqqso952olhnuoife01
     NoEcho: true
   StepArn:
     Type: String

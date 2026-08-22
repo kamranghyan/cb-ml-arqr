@@ -13,6 +13,8 @@
 import {
   LayoutDashboard, BarChart2, ChefHat, Receipt, Settings,
   Building2, Users, Store, UserCog,
+  CreditCard,
+  FileText,
 } from 'lucide-react'
 
 import type { NavSection } from '@/types/auth'
@@ -46,15 +48,17 @@ export const NAV: NavSection[] = [
     items: [
       { href: '/restaurants', label: 'Restaurants', icon: Store, permission: 'restaurants:read' },
       { href: '/staff', label: 'Staff', icon: UserCog, permission: 'staff:read' },
+      { href: '/subscription', label: 'Subscription', icon: CreditCard, permission: 'settings:read' },
+      { href: '/invoices', label: 'Invoices', icon: FileText, permission: 'settings:read' },
     ],
   },
-  {
-    section: 'Subscription',
-    items: [
-      { href: '/Plans', label: 'My Plans', icon: Settings, permission: 'settings:read' },
-      { href: '/Invoices', label: 'Invoices', icon: Settings, permission: 'settings:read' },
-    ],
-  },
+  // {
+  //   section: 'Subscription',
+  //   items: [
+  //     { href: '/Plans', label: 'My Plans', icon: Settings, permission: 'settings:read' },
+  //     { href: '/Invoices', label: 'Invoices', icon: Settings, permission: 'settings:read' },
+  //   ],
+  // },
   {
     section: 'System',
     items: [
