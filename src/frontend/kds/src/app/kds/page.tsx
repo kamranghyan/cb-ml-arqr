@@ -1035,6 +1035,7 @@ export default function KitchenDisplayPage() {
                       margin: '1px 0 0',
                       fontFamily: "'Poppins', sans-serif",
                     }}>{order.placedAt}</p>
+                    //
                   </div>
                 </div>
                 <div style={{ height: 3, background: D.border }}>
