@@ -5,6 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+//
 /** Format price in PKR */
 export function formatPrice(amount: number): string {
   return 'Rs ' + amount.toLocaleString('en-PK');

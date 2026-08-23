@@ -166,7 +166,6 @@ async def create_addon(
         raise BadRequestError(str(exc.errors)) from exc
 
 
-
 @router.put(
     "/restaurants/{restaurantId}/items/{itemId}/addons/{addOnId}",
     summary="Update a menu item add-on",
