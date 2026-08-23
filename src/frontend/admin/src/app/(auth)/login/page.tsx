@@ -1,5 +1,5 @@
 // src/app/login/page.tsx — the single door into the console.
-
+//
 // Platform admins and company owners use the same form; the role in their
 // token decides which section they land in.
 
