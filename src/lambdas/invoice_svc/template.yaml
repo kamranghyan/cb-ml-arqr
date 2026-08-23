@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for Invoice Service (invoice_svc)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.13
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        INVOICES_TABLE_NAME: !Ref InvoicesTable
+        INVOICES_BUCKET_NAME: !Ref InvoicesBucket
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  EventBusName:
+    Type: String
+    Default: arqr-event-bus-dev
+
+Resources:
+
+  InvoicesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "arqr-invoices-${Environment}-${AWS::AccountId}"
+
+  InvoicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "InvoicesTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: invoiceId
+          AttributeType: S
+        - AttributeName: orderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: invoiceId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: OrderIdIndex
+          KeySchema:
+            - AttributeName: orderId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  InvoiceServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "invoice-svc-${Environment}"
+      CodeUri: .
+      Handler: app.main.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref InvoicesTable
+        - S3CrudPolicy:
+            BucketName: !Ref InvoicesBucket
+      Events:
+        PaymentSucceededEvent:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBusName
+            Pattern:
+              source:
+                - app.payment_svc
+              detail-type:
+                - payment.succeeded
+        GetInvoiceApi:
+          Type: Api
+          Properties:
+            Path: /invoices/{orderId}
+            Method: GET
+
+Outputs:
+  InvoiceApiUrl:
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
