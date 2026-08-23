@@ -52,8 +52,8 @@ def validate_menu_items(
     for item in line_items:
         unique_ids.add(item.itemId)
         # Agar LineItem model me addons ki list hai:
-        if hasattr(item, "addons") and item.addons:
-            for addon in item.addons:
+        if hasattr(item, "addons") and item.addOns:
+            for addon in item.addOns:
                 # Assuming addon object has addonId / itemId
                 addon_id = getattr(addon, "itemId", getattr(addon, "addonId", None))
                 if addon_id:
@@ -96,8 +96,8 @@ def validate_menu_items(
             )
 
         # 3. Add-ons ki validation loop
-        if hasattr(item, "addons") and item.addons:
-            for addon in item.addons:
+        if hasattr(item, "addons") and item.addOns:
+            for addon in item.addOns:
                 addon_id = getattr(addon, "itemId", getattr(addon, "addonId", None))
                 addon_item = fetched.get(addon_id)
                 if not addon_item:

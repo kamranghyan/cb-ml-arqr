@@ -198,26 +198,43 @@ export default function CheckoutPage() {
       // app/guest/checkout/page.tsx - placeOrder
 
       const lineItems = items.map((item) => {
-        const basePrice = item.price;
+        const basePrice = Number(item.price) || 0;
+
         const addOns = item.options?.addOns || [];
-        const addOnsTotal = addOns.reduce((sum, a) => sum + (a.priceMinorUnits / 100), 0);
+
+        // Add-on quantity ko dynamic rakho
+        const addOnsTotal = addOns.reduce((sum, a) => {
+          const addonQuantity = Number(a.quantity) || 1;
+
+          return sum + (
+            (Number(a.priceMinorUnits) || 0) * addonQuantity
+          );
+        }, 0);
 
         return {
           itemId: item.menuItemId,
           name: item.name,
           quantity: item.quantity,
-          unitPriceMinorUnits: Math.round(basePrice * 100),  // ✅ 129900
 
-          // ✅ FIX: Sirf base price × quantity
-          totalPriceMinorUnits: Math.round(basePrice * item.quantity * 100),  // ✅ 129900
+          unitPriceMinorUnits: Math.round(basePrice * 100),
 
-          addOns: addOns.map(a => ({
+          // Base item total
+          totalPriceMinorUnits: Math.round(
+            basePrice * item.quantity * 100
+          ),
+
+          addOns: addOns.map((a) => ({
             addOnId: a.addOnId,
             name: a.name,
-            quantity: 1,
-            priceMinorUnits: a.priceMinorUnits  // ✅ 15000
+
+            // ✅ DYNAMIC
+            quantity: Number(a.quantity) || 1,
+
+            priceMinorUnits: Number(a.priceMinorUnits) || 0,
           })),
-          addOnsTotalMinorUnits: Math.round(addOnsTotal * 100)  // ✅ 15000
+
+          // ✅ Add-on price × add-on quantity
+          addOnsTotalMinorUnits: addOnsTotal,
         };
       });
 

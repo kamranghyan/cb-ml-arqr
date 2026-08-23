@@ -689,7 +689,7 @@ export function normaliseItem(item: any): ApiMenuItem {
       item.status ??
       (item.isActive ? 'active' : 'inactive'),
 
-    addons: item.addons ?? item.addOns ?? [],
+    addons: item.addOns ?? item.addOns ?? [],
 
     slides: Array.isArray(item.slides)
       ? item.slides.map((slide: any, index: number) => ({

@@ -92,10 +92,27 @@ export default function CartPage() {
   const calculateBaseSubtotal = () => items.reduce((sum, item) => sum + getBaseItemTotal(item), 0);
   const calculateAddOnsSubtotal = () => items.reduce((sum, item) => sum + getAddOnsTotalForItem(item), 0);
 
-  // ✅ Handle add-on quantity change
-  const handleAddOnQuantityChange = (itemId: string, addOnId: string, newQuantity: number) => {
+  const handleAddOnQuantityChange = (
+    itemId: string,
+    addOnId: string,
+    newQuantity: number
+  ) => {
     if (newQuantity < 1) return;
+
     updateAddOnQuantity(itemId, addOnId, newQuantity);
+
+    console.log('ADDON QUANTITY UPDATED:', {
+      itemId,
+      addOnId,
+      newQuantity,
+    });
+
+    setTimeout(() => {
+      console.log(
+        'CURRENT CART:',
+        useCartStore.getState().items
+      );
+    }, 0);
   };
 
   const discount = promoApplied ? Math.round(calculateSubtotal() * 0.1) : 0;
@@ -221,105 +238,130 @@ export default function CartPage() {
               const variantLine = optionsDisplay.join(' · ');
               const addOns = item.options?.addOns || [];
 
+              // ✅ Check if there are any valid add-ons (with price > 0)
+              const hasValidAddOns = addOns.length > 0 && addOns.some((a: CartAddOn) => (a.priceMinorUnits / 100) > 0);
+
               return (
                 <div key={item.id} style={{ display: 'flex', gap: 16 }}>
+                  {/* ── Item Image ── */}
                   <div style={{ width: 100, height: 100, borderRadius: 16, background: D.card2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, overflow: 'hidden' }}>
                     {item.imageUrl ? (
                       <Image src={item.imageUrl} alt={item.name} width={100} height={100} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (item.emoji)}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className=''>
-                      <div style={{ display: 'flex', flexDirection: "column" , alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                        <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 19, fontWeight: 600, color: BRAND, margin: '0 0 4px' }}>{item.name}</p>
-                        {editMode && (
-                          <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.muted, flexShrink: 0, padding: 2, transition: 'all 0.2s ease', outline: 'none', borderRadius: 6 }} onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`} onBlur={(e) => e.currentTarget.style.boxShadow = 'none'} onMouseEnter={(e) => e.currentTarget.style.color = BRAND} onMouseLeave={(e) => e.currentTarget.style.color = D.muted}><Trash2 size={17} /></button>
-                        )}
-                        {variantLine && <p style={{ fontSize: 15, color: D.text, margin: '0 0 8px', fontFamily: "'Poppins', sans-serif" }}>{variantLine}</p>}
 
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', width: 'fit-content' }}>
-                        <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND, transition: 'all 0.2s ease', outline: 'none' }} onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`} onBlur={(e) => e.currentTarget.style.boxShadow = 'none'} onMouseEnter={(e) => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6'} onMouseLeave={(e) => e.currentTarget.style.background = D.card}>
-                          <Minus size={15} />
+                  {/* ── Item Details ── */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexDirection: "column", alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 19, fontWeight: 600, color: BRAND, margin: '0 0 4px' }}>
+                        {item.name}
+                      </p>
+                      {editMode && (
+                        <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.muted, flexShrink: 0, padding: 2, transition: 'all 0.2s ease', outline: 'none', borderRadius: 6 }}>
+                          <Trash2 size={17} />
                         </button>
-                        <span style={{ width: 38, height: 40, background: D.card, border: `1.5px solid ${D.border}`, borderBottom: 'none', borderTop: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text, fontFamily: "'Poppins', sans-serif" }}>{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND, transition: 'all 0.2s ease', outline: 'none' }} onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,87,35,0.2)' : 'rgba(255,87,35,0.15)'}`} onBlur={(e) => e.currentTarget.style.boxShadow = 'none'} onMouseEnter={(e) => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6'} onMouseLeave={(e) => e.currentTarget.style.background = D.card}>
-                          <Plus size={15} />
-                        </button>
-                      </div>
+                      )}
+                      {variantLine && (
+                        <p style={{ fontSize: 15, color: D.text, margin: '0 0 8px', fontFamily: "'Poppins', sans-serif" }}>
+                          {variantLine}
+                        </p>
+                      )}
                     </div>
-                    {/* ✅ Add-Ons Section with Quantity Controls and Price */}
-                    {addOns.length > 0 && (
-                      <div style={{ marginBottom: 10 }}>
-                        <p style={{ fontSize: 12, color: D.muted, margin: '0 0 6px', fontFamily: "'Poppins', sans-serif", fontWeight: 600 }}>Add-ons:</p>
-                        {addOns.map((addon: CartAddOn) => {
-                          const addonPrice = (addon.priceMinorUnits / 100) * (addon.quantity || 1);
-                          return (
-                            <div key={addon.addOnId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${D.border}40` }}>
-                              <span style={{ fontSize: 13, color: D.text, fontFamily: "'Poppins', sans-serif" }}>
-                                + {addon.name}
-                                <span style={{ fontSize: 11, color: D.muted, marginLeft: 6 }}>
-                                  (Rs. {(addon.priceMinorUnits / 100).toLocaleString()} × {addon.quantity || 1} = Rs. {addonPrice.toFixed(0)})
+
+                    {/* ── Quantity Controls ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', width: 'fit-content' }}>
+                      <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND, transition: 'all 0.2s ease', outline: 'none' }}>
+                        <Minus size={15} />
+                      </button>
+                      <span style={{ width: 38, height: 40, background: D.card, border: `1.5px solid ${D.border}`, borderBottom: 'none', borderTop: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: D.text, fontFamily: "'Poppins', sans-serif" }}>
+                        {item.quantity}
+                      </span>
+                      <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: 38, height: 40, background: D.card, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: BRAND, transition: 'all 0.2s ease', outline: 'none' }}>
+                        <Plus size={15} />
+                      </button>
+                    </div>
+
+                    {/* ✅ Add-Ons Section - ONLY SHOW IF ADD-ONS WITH PRICE > 0 EXIST */}
+                    {hasValidAddOns && (
+                      <div style={{ marginBottom: 10, marginTop: 8 }}>
+                        <p style={{ fontSize: 12, color: D.muted, margin: '0 0 6px', fontFamily: "'Poppins', sans-serif", fontWeight: 600 }}>
+                          Add-ons:
+                        </p>
+                        {addOns
+                          .filter((addon: CartAddOn) => (addon.priceMinorUnits / 100) > 0) // ✅ Filter out price = 0
+                          .map((addon: CartAddOn) => {
+                            const addonPricePerUnit = addon.priceMinorUnits / 100;
+                            const addonTotalPrice = addonPricePerUnit * (addon.quantity || 1);
+
+                            return (
+                              <div key={addon.addOnId} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '4px 0',
+                                borderBottom: `1px solid ${D.border}40`
+                              }}>
+                                <span style={{ fontSize: 13, color: D.text, fontFamily: "'Poppins', sans-serif" }}>
+                                  + {addon.name}
+                                  <span style={{ fontSize: 11, color: D.muted, marginLeft: 6 }}>
+                                    (Rs. {addonPricePerUnit.toLocaleString()} × {addon.quantity || 1} = Rs. {addonTotalPrice.toFixed(0)})
+                                  </span>
                                 </span>
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <button
-                                  onClick={() => handleAddOnQuantityChange(item.id, addon.addOnId, (addon.quantity || 1) - 1)}
-                                  style={{
-                                    width: 24,
-                                    height: 24,
-                                    borderRadius: 6,
-                                    background: D.card2,
-                                    border: `1px solid ${D.border}`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: (addon.quantity || 1) <= 1 ? 'not-allowed' : 'pointer',
-                                    opacity: (addon.quantity || 1) <= 1 ? 0.4 : 1,
-                                    color: BRAND,
-                                    transition: 'all 0.2s ease',
-                                    outline: 'none',
-                                  }}
-                                  disabled={(addon.quantity || 1) <= 1}
-                                >
-                                  <Minus size={12} />
-                                </button>
-                                <span style={{
-                                  minWidth: 24,
-                                  textAlign: 'center',
-                                  fontSize: 14,
-                                  fontWeight: 700,
-                                  color: D.text,
-                                  fontFamily: "'Poppins', sans-serif",
-                                }}>{addon.quantity || 1}</span>
-                                <button
-                                  onClick={() => handleAddOnQuantityChange(item.id, addon.addOnId, (addon.quantity || 1) + 1)}
-                                  style={{
-                                    width: 24,
-                                    height: 24,
-                                    borderRadius: 6,
-                                    background: D.card2,
-                                    border: `1px solid ${D.border}`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    color: BRAND,
-                                    transition: 'all 0.2s ease',
-                                    outline: 'none',
-                                  }}
-                                >
-                                  <Plus size={12} />
-                                </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <button
+                                    onClick={() => handleAddOnQuantityChange(item.id, addon.addOnId, (addon.quantity || 1) - 1)}
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: 6,
+                                      background: D.card2,
+                                      border: `1px solid ${D.border}`,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: (addon.quantity || 1) <= 1 ? 'not-allowed' : 'pointer',
+                                      opacity: (addon.quantity || 1) <= 1 ? 0.4 : 1,
+                                      color: BRAND,
+                                      transition: 'all 0.2s ease',
+                                      outline: 'none',
+                                    }}
+                                    disabled={(addon.quantity || 1) <= 1}
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <span style={{
+                                    minWidth: 24,
+                                    textAlign: 'center',
+                                    fontSize: 14,
+                                    fontWeight: 700,
+                                    color: D.text,
+                                    fontFamily: "'Poppins', sans-serif",
+                                  }}>{addon.quantity || 1}</span>
+                                  <button
+                                    onClick={() => handleAddOnQuantityChange(item.id, addon.addOnId, (addon.quantity || 1) + 1)}
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: 6,
+                                      background: D.card2,
+                                      border: `1px solid ${D.border}`,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      color: BRAND,
+                                      transition: 'all 0.2s ease',
+                                      outline: 'none',
+                                    }}
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     )}
-
-
-
                   </div>
                 </div>
               );
@@ -365,15 +407,16 @@ export default function CartPage() {
                 </span>
               </div>
 
-              {/* Add-Ons Total */}
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, color: D.text }}>
-                  Add-ons Total
-                </span>
-                <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, color: D.text }}>
-                  Rs. {calculateAddOnsSubtotal().toLocaleString()}
-                </span>
-              </div>
+              {calculateAddOnsSubtotal() > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, color: D.text }}>
+                    Add-ons Total
+                  </span>
+                  <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, color: D.text }}>
+                    Rs. {calculateAddOnsSubtotal().toLocaleString()}
+                  </span>
+                </div>
+              )}
 
               {/* Divider */}
               <div style={{ height: 1.5, background: D.border }} />

@@ -115,13 +115,28 @@ export function normaliseOrder(raw: ApiOrder): KdsOrder & { _apiId: string } {
   // Fallback for lineItems key naming variants
   const rawItems = raw.lineItems || (raw as any).items || (raw as any).line_items || [];
 
-  const items = rawItems.map((li: any) => ({
-    emoji: guessEmoji(li.name || 'Item'),
-    name: li.name || 'Unknown Item',
-    mods: '',
-    qty: li.quantity ?? li.qty ?? 1,
-    done: false,
-  }));
+  // ✅ FIX: Extract items with add-ons
+  const items = rawItems.map((li: any) => {
+    // ✅ Get add-ons from line item
+    const addOns = li.addOns || li.addons || [];
+    
+    console.log(`📝 Item: ${li.name}, AddOns:`, addOns); // Debug log
+
+    return {
+      emoji: guessEmoji(li.name || 'Item'),
+      name: li.name || 'Unknown Item',
+      mods: '',
+      qty: li.quantity ?? li.qty ?? 1,
+      done: false,
+      // ✅ Add add-ons to the item
+      addOns: addOns.map((addon: any) => ({
+        id: addon.addOnId || addon.id || `addon_${Date.now()}`,
+        name: addon.name || addon.addOnName || 'Add-on',
+        qty: addon.quantity || addon.qty || 1,
+        price: addon.priceMinorUnits ? addon.priceMinorUnits / 100 : (addon.price || 0),
+      })),
+    };
+  });
 
   const shortId = (raw.orderId || 'UNKNOWN').slice(0, 6).toUpperCase();
 
@@ -138,6 +153,7 @@ export function normaliseOrder(raw: ApiOrder): KdsOrder & { _apiId: string } {
     _apiId: raw.orderId,
   } as any;
 }
+
 
 export async function fetchOrders(): Promise<(KdsOrder & { _apiId: string })[]> {
   const headers = await authHeaders();

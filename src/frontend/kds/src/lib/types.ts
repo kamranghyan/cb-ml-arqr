@@ -7,7 +7,7 @@ export interface Allergen {
   emoji: string;
   status: AllergenStatus;
 }
-//
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -80,16 +80,38 @@ export interface Order {
 }
 
 // ─── KDS ─────────────────────────────────────────────────────────────────────
-
-export type KdsStatus = 'new' | 'preparing' | 'ready' | 'delivered';
-
 export interface KdsOrderItem {
-  emoji: string;
+  id?: string;
   name: string;
-  mods: string;
   qty: number;
+  emoji?: string;
+  imageUrl?: string;
   done: boolean;
+  mods?: string;
+  addOns?: KdsAddOn[];  // ✅ Add this
 }
+
+// ✅ Add this interface
+export interface KdsAddOn {
+  id: string;
+  name: string;
+  qty: number;
+  price?: number;
+}
+
+export interface KdsOrder {
+  id: string;
+  _apiId?: string;
+  table: string;
+  zone: string;
+  status: KdsStatus;
+  items: KdsOrderItem[];
+  note: string;
+  placedAt: string;
+  elapsedSeconds: number;
+  maxSeconds: number;
+}
+export type KdsStatus = 'new' | 'preparing' | 'ready' | 'delivered';
 
 export interface KdsOrder {
   id: string;
