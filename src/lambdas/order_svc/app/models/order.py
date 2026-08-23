@@ -113,17 +113,16 @@ class OrderRecord(BaseModel):
         line_items_dict = []
 
         for item in request.lineItems:
-         item_dict = {
-           "itemId": item.itemId,
-           "name": item.name,
-           "quantity": item.quantity,
-           "unitPriceMinorUnits": item.unitPriceMinorUnits,
-           "totalPriceMinorUnits": item.totalPriceMinorUnits,
-           "addOns": [addon.model_dump() for addon in item.addOns] if item.addOns else [],
-           "addOnsTotalMinorUnits": item.addOnsTotalMinorUnits or 0,
-         }
-
-        line_items_dict.append(item_dict)
+           item_dict = {
+             "itemId": item.itemId,
+             "name": item.name,
+             "quantity": item.quantity,
+             "unitPriceMinorUnits": item.unitPriceMinorUnits,
+             "totalPriceMinorUnits": item.totalPriceMinorUnits,
+             "addOns": [addon.model_dump() for addon in item.addOns] if item.addOns else [],
+             "addOnsTotalMinorUnits": item.addOnsTotalMinorUnits or 0,
+          }
+           line_items_dict.append(item_dict)
         
         return cls(
             PK=f"TENANT#{request.tenantId}#ORDER#{order_id}",

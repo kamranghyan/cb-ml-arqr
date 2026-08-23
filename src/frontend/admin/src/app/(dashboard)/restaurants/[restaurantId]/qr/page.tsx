@@ -971,7 +971,7 @@ export default function BranchQrPage() {
                 marginBottom: 14,
               }}>
                 {[
-                  { label: 'Table ID', val: preview.tableId },
+                  { label: 'Table Number', val: preview.tableNumber },
                   { label: 'Zone', val: preview.zone },
                   { label: 'Restaurant ID', val: `${preview.restaurantId.slice(0, 8)}…` },
                   { label: 'Created', val: new Date(preview.createdAt).toLocaleDateString() },

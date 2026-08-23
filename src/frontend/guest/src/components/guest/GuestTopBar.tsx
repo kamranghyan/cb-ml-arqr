@@ -425,7 +425,7 @@ export default function GuestTopBar() {
 
             {/* Notification List */}
             {notifications.length === 0 ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: '40px 20px', textAlign: 'center' }}>
                 <Bell size={40} color={colors.muted} style={{ opacity: 0.3 }} />
                 <p style={{
                   fontSize: 14,
@@ -464,7 +464,7 @@ export default function GuestTopBar() {
                         )}
                       </div>
 
-                      <div className="max-h-64 overflow-y-auto">
+                      <div className=" max-h-64 overflow-y-auto">
                         {loading ? (
                           <p className="p-4 text-center text-sm text-gray-400">Loading...</p>
                         ) : notifications.length === 0 ? (

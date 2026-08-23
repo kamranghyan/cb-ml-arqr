@@ -1048,91 +1048,192 @@ export default function KitchenDisplayPage() {
                   }} />
                 </div>
 
-                {/* ✅ Items with Images */}
+
+                {/* ── Items with Add-ons ── */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px', flex: 1 }}>
-                  {order.items.map((dish, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {/* ✅ Item Image instead of emoji */}
-                      <div style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                        background: D.card2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        {(dish as KdsOrderItemWithImage).imageUrl ? (
-                          <Image
-                            src={(dish as KdsOrderItemWithImage).imageUrl!}
-                            alt={dish.name}
-                            width={40}
-                            height={40}
-                            unoptimized
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <span style={{ fontSize: 20 }}>{dish.emoji || '🍽️'}</span>
+                  {order.items.map((dish, i) => {
+                    const totalQty = dish.qty || 1;
+                    const addons = (dish as KdsOrderItemWithImage & { addOns?: any[] }).addOns ?? [];
+                    const hasAddons = addons.length > 0;
+
+                    return (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {/* ── Main Item Row ── */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {/* Item Image */}
+                          <div style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            background: D.card2,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            {(dish as KdsOrderItemWithImage).imageUrl ? (
+                              <Image
+                                src={(dish as KdsOrderItemWithImage).imageUrl!}
+                                alt={dish.name}
+                                width={40}
+                                height={40}
+                                unoptimized
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: 20 }}>{dish.emoji || '🍽️'}</span>
+                            )}
+                          </div>
+
+                          {/* ── Item Name & Quantity ── */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <p style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                margin: 0,
+                                color: dish.done ? D.subtle : D.text,
+                                textDecoration: dish.done ? 'line-through' : 'none',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>{dish.name}</p>
+
+                              {/* ✅ Quantity Badge */}
+                              {totalQty > 1 && (
+                                <span style={{
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  background: BRAND,
+                                  color: '#fff',
+                                  padding: '1px 8px',
+                                  borderRadius: 12,
+                                  fontFamily: "'Poppins', sans-serif",
+                                  flexShrink: 0,
+                                }}>
+                                  ×{totalQty}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* ✅ Add-ons Display (inline) */}
+                            {hasAddons && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 2 }}>
+                                {addons.map((addon: any, idx: number) => {
+                                  const addonQty = addon.qty || 1;
+                                  return (
+                                    <span key={idx} style={{
+                                      fontSize: 8,
+                                      color: D.muted,
+                                      background: D.card2,
+                                      padding: '1px 8px',
+                                      borderRadius: 10,
+                                      border: `1px solid ${D.border}`,
+                                      fontFamily: "'Poppins', sans-serif",
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 2,
+                                    }}>
+                                      + {addon.name || addon}
+                                      {addonQty > 1 && (
+                                        <span style={{
+                                          fontWeight: 700,
+                                          color: BRAND,
+                                          background: `${BRAND}15`,
+                                          padding: '0 4px',
+                                          borderRadius: 3,
+                                          fontSize: 7,
+                                        }}>
+                                          ×{addonQty}
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ── Done Toggle ── */}
+                          <button
+                            onClick={() => toggleDish(order.id, i)}
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 5,
+                              border: `1.5px solid ${dish.done ? BRAND : D.border}`,
+                              background: dish.done ? BRAND : D.card,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                              transition: 'all 0.2s',
+                              outline: 'none',
+                            }}
+                            onFocus={(e) => {
+                              e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                            }}
+                            onBlur={(e) => {
+                              e.currentTarget.style.boxShadow = 'none';
+                            }}
+                          >
+                            {dish.done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 800 }}>✓</span>}
+                          </button>
+                        </div>
+
+                        {/* ✅ Add-ons with Quantity (Indented - Full Details) */}
+                        {hasAddons && (
+                          <div style={{
+                            marginLeft: 50,
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 4,
+                            paddingLeft: 4,
+                            borderLeft: `2px solid ${D.border}`,
+                          }}>
+                            {addons.map((addon: any, idx: number) => {
+                              const addonQty = addon.qty || 1;
+                              return (
+                                <div key={idx} style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  background: D.card2,
+                                  padding: '2px 8px 2px 6px',
+                                  borderRadius: 10,
+                                  border: `1px solid ${D.border}`,
+                                  fontFamily: "'Poppins', sans-serif",
+                                }}>
+                                  <span style={{ fontSize: 8, color: D.subtle }}>+</span>
+                                  <span style={{ fontSize: 9, fontWeight: 500, color: D.text }}>
+                                    {addon.name || addon}
+                                  </span>
+                                  {addonQty > 1 && (
+                                    <span style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      color: BRAND,
+                                      background: `${BRAND}15`,
+                                      padding: '0 4px',
+                                      borderRadius: 4,
+                                    }}>
+                                      ×{addonQty}
+                                    </span>
+                                  )}
+                                  {addon.price && (
+                                    <span style={{ fontSize: 8, color: D.subtle }}>
+                                      Rs. {addon.price.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          margin: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: dish.done ? D.subtle : D.text,
-                          textDecoration: dish.done ? 'line-through' : 'none',
-                          fontFamily: "'Poppins', sans-serif",
-                        }}>{dish.name}</p>
-                        {dish.mods && <p style={{
-                          fontSize: 9,
-                          color: D.subtle,
-                          margin: 0,
-                          fontFamily: "'Poppins', sans-serif",
-                        }}>{dish.mods}</p>}
-                      </div>
-                      <span style={{
-                        fontSize: 11,
-                        color: D.muted,
-                        fontWeight: 600,
-                        flexShrink: 0,
-                        fontFamily: "'Poppins', sans-serif",
-                      }}>×{dish.qty}</span>
-                      <button
-                        onClick={() => toggleDish(order.id, i)}
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 5,
-                          border: `1.5px solid ${dish.done ? BRAND : D.border}`,
-                          background: dish.done ? BRAND : D.card,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          flexShrink: 0,
-                          transition: 'all 0.2s',
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        {dish.done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 800 }}>✓</span>}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-
                 {order.note && (
                   <div style={{
                     margin: '0 10px 6px',
