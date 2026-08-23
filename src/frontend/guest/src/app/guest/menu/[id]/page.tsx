@@ -8,7 +8,7 @@ import Image from 'next/image';
 import {
   fetchMenuItem,
   normaliseItem,
-  fetchAddOns,
+  fetchMenuItemAddons,
   type ApiMenuItem,
 } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
@@ -174,7 +174,7 @@ export default function ItemDetailPage() {
 
     const rid = getGuestScope().restaurantId;
 
-    Promise.all([fetchMenuItem(id, rid), fetchAddOns(id, rid)])
+    Promise.all([fetchMenuItem(id, rid), fetchMenuItemAddons(id, rid)])
       .then(([rawItem, rawAddons]) => {
         const normalisedItem = normaliseItem(rawItem);
         setItem(normalisedItem);

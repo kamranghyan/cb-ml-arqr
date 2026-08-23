@@ -73,21 +73,21 @@ async function forward(req: NextRequest, path: string[]) {
     if (ct.includes('multipart')) {
       // ✅ FIX: Use formData() instead of arrayBuffer()
       const formData = await req.formData();
-      
+
       // ✅ Create a new FormData to forward
       const forwardFormData = new FormData();
-      
+
       // Copy all fields
       for (const [key, value] of formData.entries()) {
         forwardFormData.append(key, value);
       }
-      
+
       // ✅ Don't set Content-Type header - let fetch set it with boundary
       // Remove Content-Type from headers so fetch adds it with correct boundary
       delete headers['Content-Type'];
-      
+
       init.body = forwardFormData;
-      
+
       console.log('📤 Forwarding FormData with fields:');
       for (const [key, value] of formData.entries()) {
         if (value instanceof File) {
@@ -132,10 +132,7 @@ export async function POST(
 ) {
   return forward(req, (await ctx.params).path);
 }
-export async function PUT(
-  req: NextRequest,
-  ctx: { params: Promise<{ path: string[] }> }
-) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await ctx.params).path);
 }
 export async function PATCH(

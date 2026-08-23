@@ -367,6 +367,50 @@ async function menuFetch<T = any>(
   return res.json() as Promise<T>;
 }
 
+// ── Update AddOn ──────────────────────────────────────────────────────────────
+export async function updateAddon(
+  restaurantId: string,
+  itemId: string,
+  addOnId: string,
+  payload: {
+    name: string;
+    description?: string;
+    priceMinorUnits: number;
+    isActive?: boolean;
+    sortOrder?: number;
+  }
+): Promise<ApiAddon> {
+  const token = await getValidIdToken();
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Tenant-Id': TENANT_ID,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
+    {
+      method: 'PATCH',  // ✅ PUT se PATCH karein
+      headers,
+      body: JSON.stringify({
+        ...payload,
+        isActive: payload.isActive ?? true,
+        sortOrder: payload.sortOrder ?? 0,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Addon update failed (${res.status}): ${errorText}`);
+  }
+
+  return res.json();
+}
 // ── Fetch all menu items ───────────────────────────────────────────────────────
 export async function fetchMenuItems(
   restaurantId?: string
@@ -412,6 +456,36 @@ export async function fetchMenuItem(
     })
   } catch {
     return normaliseItem(item)
+  }
+}
+
+// ── Delete AddOn ──────────────────────────────────────────────────────────────
+export async function deleteAddon(
+  restaurantId: string,
+  itemId: string,
+  addOnId: string
+): Promise<void> {
+  const token = await getValidIdToken();
+
+  const headers: Record<string, string> = {
+    'X-Tenant-Id': TENANT_ID,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(
+    `/api/menu/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
+    {
+      method: 'DELETE',
+      headers,
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Addon delete failed (${res.status}): ${errorText}`);
   }
 }
 

@@ -133,24 +133,33 @@ export interface TenantsResponse {
 }
 
 // ── Auth-aware fetch — injects token for protected routes ─────────────────────
-async function menuFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = await getValidIdToken()
+
+async function menuFetch<T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = await getValidIdToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
-  }
+  };
 
-  if (token) headers['Authorization'] = token
+  if (token) headers['Authorization'] = token;
 
-  const res = await fetch(url, { ...options, headers })
+  // ✅ Add cache: 'no-store' to ALL requests
+  const res = await fetch(url, {
+    ...options,
+    headers,
+    cache: 'no-store',  // ✅ Yeh add karein
+  });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`API ${res.status}: ${text || res.statusText}`)
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
   }
 
-  return res.json() as Promise<T>
+  return res.json() as Promise<T>;
 }
 
 // ── Fetch all menu items ───────────────────────────────────────────────────────
@@ -167,6 +176,46 @@ export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem
   return items.map(normaliseItem)
 }
 
+// lib/menu-api.ts
+
+export async function fetchMenuItemAddons(
+  itemId: string,
+  restaurantId?: string
+): Promise<ApiAddOn[]> {
+  const rid = restaurantId?.trim() || RESTAURANT_ID;
+
+  // ✅ Direct fetch with cache control
+  const token = await getValidIdToken();
+  
+  const headers: Record<string, string> = {
+    'x-tenant-id': rid,
+  };
+  
+  if (token) {
+    headers['Authorization'] = token;
+  }
+
+  const res = await fetch(
+    `/api/menu/restaurants/${rid}/items/${itemId}/addons`,
+    {
+      headers,
+      cache: 'no-store',  // ✅ Force fresh data
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Addons fetch failed (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  return data?.items ?? [];
+}
 // ── Fetch single item + AR model ──────────────────────────────────────────────
 export async function fetchMenuItem(itemId: string, restaurantId?: string): Promise<ApiMenuItem> {
   const rid = restaurantId?.trim() || RESTAURANT_ID

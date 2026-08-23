@@ -20,6 +20,7 @@ import {
   type ApiAddon,
   deleteMenuItem,
   createAddon,
+  updateAddon,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
@@ -226,6 +227,10 @@ export default function BranchMenuPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState<string | null>(null);
   const [glbFile, setGlbFile] = useState<File | null>(null);
+  const [editingAddon, setEditingAddon] = useState<ApiAddon | null>(null);
+  const [addonEditName, setAddonEditName] = useState('');
+  const [addonEditPrice, setAddonEditPrice] = useState('');
+  const [addonEditDescription, setAddonEditDescription] = useState('');
   const [glbName, setGlbName] = useState<string | null>(null);
   const [glbStatus, setGlbStatus] = useState<GlbStatus>('idle');
   const [glbError, setGlbError] = useState('');
@@ -266,6 +271,56 @@ export default function BranchMenuPage() {
       window.removeEventListener('themeChange', handleThemeToggle);
     };
   }, []);
+  const updateAddonHandler = async () => {
+    if (!editingAddon) return;
+
+    const name = addonEditName.trim();
+    if (!name) {
+      setSaveErr('Please enter an add-on name.');
+      return;
+    }
+
+    const price = Number(addonEditPrice);
+    if (!addonEditPrice || Number.isNaN(price) || price < 0) {
+      setSaveErr('Please enter a valid add-on price.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveErr('');
+    setSaveMsg('');
+
+    try {
+      const updated = await updateAddon(
+        restaurantId,
+        modal.item!.id,
+        editingAddon.addOnId,
+        {
+          name: name,
+          description: addonEditDescription.trim(),
+          priceMinorUnits: Math.round(price * 100),
+          isActive: true,
+          sortOrder: 0,
+        }
+      );
+
+      // Update local state
+      setAddons(prev => prev.map(a =>
+        a.addOnId === editingAddon.addOnId ? updated : a
+      ));
+
+      setEditingAddon(null);
+      setAddonEditName('');
+      setAddonEditPrice('');
+      setAddonEditDescription('');
+      setSaveMsg('Add-on updated! ✓');
+
+    } catch (err: any) {
+      setSaveErr(err?.message || 'Failed to update add-on.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const colors = getColors(isDark);
 
@@ -374,6 +429,8 @@ export default function BranchMenuPage() {
     };
 
     setAddons(prev => [...prev, newAddon]);
+    setNewAddons(prev => [...prev, newAddon]);
+
 
     setAddonInput('');
     setAddonPrice('');
@@ -408,11 +465,16 @@ export default function BranchMenuPage() {
           item.id,
           restaurantId
         );
-        setAddons(existingAddons ?? []);
+        setExistingAddons(existingAddons ?? []);  // ✅ Track existing
+        setAddons(existingAddons ?? []);          // Display all
       } catch (err) {
         console.error('Failed to load addons:', err);
+        setExistingAddons([]);
         setAddons([]);
       }
+    } else {
+      setExistingAddons([]);
+      setAddons([]);
     }
 
     let selectedCategory = '';
@@ -497,6 +559,9 @@ export default function BranchMenuPage() {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': ct }, body: file });
     if (!res.ok) throw new Error(`S3 upload failed (${res.status})`);
   };
+  // Add this state
+  const [newAddons, setNewAddons] = useState<ApiAddon[]>([]);
+  const [existingAddons, setExistingAddons] = useState<ApiAddon[]>([]);
 
   const saveItem = async () => {
     if (!form.name.trim() || !form.price) { setSaveErr('Name and price are required.'); return; }
@@ -616,33 +681,18 @@ export default function BranchMenuPage() {
       // ── CREATE ADDONS AFTER ITEM IS CREATED/UPDATED ──
       if (addons.length > 0 && createdItemId) {
         setSaveMsg('Creating add-ons...');
-        let addonSuccessCount = 0;
-        let addonErrorCount = 0;
-
         for (const addon of addons) {
-          try {
-            await createAddon(
-              restaurantId,
-              createdItemId,
-              {
-                name: addon.name,
-                description: addon.description || '',
-                priceMinorUnits: addon.priceMinorUnits,
-                isActive: addon.isActive,
-                sortOrder: addon.sortOrder ?? 0,
-              }
-            );
-            addonSuccessCount++;
-          } catch (error) {
-            addonErrorCount++;
-            console.error('Failed to create addon:', addon.name, error);
-          }
-        }
-
-        if (addonErrorCount > 0) {
-          setSaveMsg(`${addonSuccessCount} add-ons created, ${addonErrorCount} failed`);
-        } else {
-          setSaveMsg(`${addonSuccessCount} add-ons created! ✓`);
+          await createAddon(  // ⚠️ HAR BAAR NAYA ADD-ON BAN RAHA HAI!
+            restaurantId,
+            createdItemId,
+            {
+              name: addon.name,
+              description: addon.description || '',
+              priceMinorUnits: addon.priceMinorUnits,
+              isActive: addon.isActive,
+              sortOrder: addon.sortOrder ?? 0,
+            }
+          );
         }
       }
 
@@ -1440,7 +1490,7 @@ export default function BranchMenuPage() {
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                     onMouseEnter={(e) => {
-                      
+
                       e.currentTarget.style.borderColor = BRAND;
                     }}
                     onMouseLeave={(e) => {
@@ -1928,7 +1978,7 @@ export default function BranchMenuPage() {
                         for (let i = 0; i < filesToAdd; i++) {
                           const file = files[i];
                           const previewUrl = URL.createObjectURL(file);
-                          
+
                           newSlides.push({ file, preview: previewUrl });
                           newItemImages.push(file);
                           newPreviews.push(previewUrl);
@@ -2033,55 +2083,176 @@ export default function BranchMenuPage() {
                         border: `1px solid ${colors.imageBorder}`,
                       }}
                     >
-                      <div>
-                        <div style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: "#ffff",
-                          fontFamily: "'Poppins', sans-serif",
-                        }}>
-                          {addon.name}
-                        </div>
-                        {addon.description && (
-                          <div style={{
-                            fontSize: 10,
-                            color: colors.subtle,
-                            marginTop: 2,
-                            fontFamily: "'Poppins', sans-serif",
-                          }}>
-                            {addon.description}
+                      {editingAddon?.addOnId === addon.addOnId ? (
+                        // ── Edit Mode ──
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input
+                              value={addonEditName}
+                              onChange={e => setAddonEditName(e.target.value)}
+                              placeholder="Name"
+                              style={{
+                                ...inputStyle(),
+                                flex: 1,
+                                height: 32,
+                                padding: '0 8px',
+                                fontSize: 12,
+                              }}
+                              onFocus={handleFocus}
+                              onBlur={handleBlur}
+                            />
+                            <input
+                              type="number"
+                              value={addonEditPrice}
+                              onChange={e => setAddonEditPrice(e.target.value)}
+                              placeholder="Price"
+                              style={{
+                                ...inputStyle(),
+                                width: 80,
+                                height: 32,
+                                padding: '0 8px',
+                                fontSize: 12,
+                              }}
+                              onFocus={handleFocus}
+                              onBlur={handleBlur}
+                            />
                           </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: BRAND,
-                          fontFamily: "'Poppins', sans-serif",
-                        }}>
-                          Rs. {(addon.priceMinorUnits / 100).toFixed(0)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAddons(prev =>
-                              prev.filter(a => a.addOnId !== addon.addOnId)
-                            )
-                          }
-                          style={{
-                            border: 'none',
-                            background: 'transparent',
-                            color: colors.danger,
-                            cursor: 'pointer',
-                            padding: 2,
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                          }}
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input
+                              value={addonEditDescription}
+                              onChange={e => setAddonEditDescription(e.target.value)}
+                              placeholder="Description"
+                              style={{
+                                ...inputStyle(),
+                                flex: 1,
+                                height: 32,
+                                padding: '0 8px',
+                                fontSize: 12,
+                              }}
+                              onFocus={handleFocus}
+                              onBlur={handleBlur}
+                            />
+                            <button
+                              type="button"
+                              onClick={updateAddonHandler}
+                              disabled={saving}
+                              style={{
+                                height: 32,
+                                padding: '0 14px',
+                                borderRadius: 8,
+                                background: BRAND,
+                                border: 'none',
+                                color: '#fff',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                opacity: saving ? 0.6 : 1,
+                                fontFamily: "'Poppins', sans-serif",
+                              }}
+                            >
+                              {saving ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingAddon(null);
+                                setAddonEditName('');
+                                setAddonEditPrice('');
+                                setAddonEditDescription('');
+                              }}
+                              style={{
+                                height: 32,
+                                padding: '0 10px',
+                                borderRadius: 8,
+                                background: 'transparent',
+                                border: `1px solid ${colors.border}`,
+                                color: colors.muted,
+                                fontSize: 11,
+                                cursor: 'pointer',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // ── View Mode ──
+                        <>
+                          <div style={{ flex: 1 }}>
+                            <div style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#ffff",
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              {addon.name}
+                            </div>
+                            {addon.description && (
+                              <div style={{
+                                fontSize: 10,
+                                color: colors.subtle,
+                                marginTop: 2,
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                {addon.description}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: BRAND,
+                              fontFamily: "'Poppins', sans-serif",
+                            }}>
+                              Rs. {(addon.priceMinorUnits / 100).toFixed(0)}
+                            </span>
+
+                            {/* Edit Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingAddon(addon);
+                                setAddonEditName(addon.name);
+                                setAddonEditPrice(String(addon.priceMinorUnits / 100));
+                                setAddonEditDescription(addon.description || '');
+                              }}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#ffff',
+                                cursor: 'pointer',
+                                padding: 2,
+                                transition: 'all 0.2s ease',
+                                outline: 'none',
+                                opacity: 0.7,
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                              onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => setAddons(prev => prev.filter(a => a.addOnId !== addon.addOnId))}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.danger,
+                                cursor: 'pointer',
+                                padding: 2,
+                                transition: 'all 0.2s ease',
+                                outline: 'none',
+                              }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2463,7 +2634,7 @@ export default function BranchMenuPage() {
                 }}
                 onMouseEnter={(e) => {
                   if (!saving && glbStatus !== 'uploading' && (cats.length > 0 || modal.item)) {
-                   
+
                   }
                 }}
                 onMouseLeave={(e) => {

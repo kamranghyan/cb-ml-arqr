@@ -9,27 +9,39 @@
  * Clicking the hamburger icon opens a navigation dropdown.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-  Bell, 
-  Home, 
-  BookOpen, 
-  Heart, 
-  ShoppingCart, 
-  FileText, 
+import {
+  Bell,
+  Home,
+  BookOpen,
+  Heart,
+  ShoppingCart,
+  FileText,
   User,
   X,
   Clock,
   CheckCircle,
   AlertCircle,
   Package,
-  XCircle
+  XCircle,
+  Info
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useCartStore } from '@/lib/store';
 import { getGuestScope, withScope } from '@/lib/guest-scope';
 import Image from 'next/image';
+
+
+interface NotificationItem {
+  id: string | number;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  type?: 'info' | 'success' | 'alert';
+}
+
 
 const BRAND = '#ff5723';
 
@@ -59,57 +71,7 @@ const NAV_TABS = [
   { key: 'profile', label: 'Profile', icon: User, href: '/guest/profile' },
 ];
 
-// Static notification data
-const NOTIFICATIONS = [
-  {
-    id: 1,
-    title: 'Order #ORD-4521 Confirmed',
-    message: 'Your order has been confirmed and is being prepared.',
-    time: '2 min ago',
-    type: 'success',
-    read: false,
-  },
-  {
-    id: 2,
-    title: 'Special Offer: 20% Off',
-    message: 'Use code SPECIAL20 on your next order over Rs. 500.',
-    time: '15 min ago',
-    type: 'promo',
-    read: false,
-  },
-  {
-    id: 3,
-    title: 'Order #ORD-4520 Delivered',
-    message: 'Your order has been delivered successfully. Enjoy your meal!',
-    time: '1 hour ago',
-    type: 'success',
-    read: true,
-  },
-  {
-    id: 4,
-    title: 'New Item Added: Pasta',
-    message: 'Try our new Italian Pasta with special sauce.',
-    time: '2 hours ago',
-    type: 'info',
-    read: true,
-  },
-  {
-    id: 5,
-    title: 'Table Ready',
-    message: 'Your table is ready for dining in. Please proceed to the host.',
-    time: '3 hours ago',
-    type: 'info',
-    read: true,
-  },
-  {
-    id: 6,
-    title: 'Order #ORD-4519 Cancelled',
-    message: 'Your order was cancelled due to unavailability of items.',
-    time: '5 hours ago',
-    type: 'error',
-    read: true,
-  },
-];
+
 
 // Get notification icon based on type
 const getNotificationIcon = (type: string) => {
@@ -155,7 +117,7 @@ const getPageName = (pathname: string): string => {
     '/guest/profile': 'Profile',
     '/guest/ar': 'AR View',
   };
-  
+
   if (routes[pathname]) return routes[pathname];
   for (const [route, name] of Object.entries(routes)) {
     if (pathname.startsWith(route) && route !== '/guest') {
@@ -174,8 +136,8 @@ export default function GuestTopBar() {
   const { itemCount } = useCartStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
-  const [notifications, setNotifications] = useState(NOTIFICATIONS);
-  
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const pageName = getPageName(pathname);
   const cartCount = itemCount();
 
@@ -183,7 +145,7 @@ export default function GuestTopBar() {
     setIsMenuOpen(!isMenuOpen);
     setIsBellOpen(false);
   };
-  
+
   const toggleBell = () => {
     setIsBellOpen(!isBellOpen);
     setIsMenuOpen(false);
@@ -191,17 +153,57 @@ export default function GuestTopBar() {
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     }
   };
-  
+
   const closeAll = () => {
     setIsMenuOpen(false);
     setIsBellOpen(false);
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        // Apni actual API endpoint yahan replace karein
+        const response = await fetch('/api/guest/notifications');
+        const data = await response.json();
 
+        if (response.ok) {
+          setNotifications(data.notifications || data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch notifications:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const handleToggleBell = async () => {
+    const nextState = !isBellOpen;
+    setIsBellOpen(nextState);
+
+    // Jab dropdown open ho aur unread items hon
+    if (nextState && unreadCount > 0) {
+      try {
+        // Backend ko read status update bhejna
+        await fetch('/api/guest/notifications/mark-read', {
+          method: 'POST',
+        });
+
+        // UI state update
+        setNotifications((prev) =>
+          prev.map((item) => ({ ...item, read: true }))
+        );
+      } catch (error) {
+        console.error('Failed to mark notifications as read:', error);
+      }
+    }
+  };
   const handleNavigation = (href: string) => {
-    const finalHref = (href === '/guest' || href === '/guest/menu') 
-      ? withScope(href, scope) 
+    const finalHref = (href === '/guest' || href === '/guest/menu')
+      ? withScope(href, scope)
       : href;
     router.push(finalHref);
     closeAll();
@@ -228,6 +230,9 @@ export default function GuestTopBar() {
   const handleButtonMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.background = 'transparent';
   };
+
+
+
 
   return (
     <>
@@ -346,7 +351,7 @@ export default function GuestTopBar() {
               zIndex: 99,
             }}
           />
-          
+
           <div
             style={{
               position: 'fixed',
@@ -422,9 +427,9 @@ export default function GuestTopBar() {
             {notifications.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
                 <Bell size={40} color={colors.muted} style={{ opacity: 0.3 }} />
-                <p style={{ 
-                  fontSize: 14, 
-                  color: colors.muted, 
+                <p style={{
+                  fontSize: 14,
+                  color: colors.muted,
                   marginTop: 12,
                   fontFamily: "'Poppins', sans-serif",
                 }}>
@@ -432,113 +437,62 @@ export default function GuestTopBar() {
                 </p>
               </div>
             ) : (
-              <div style={{ padding: '8px 0' }}>
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      padding: '12px 20px',
-                      background: !notif.read ? colors.hoverBg : 'transparent',
-                      borderBottom: `1px solid ${colors.border}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onClick={() => {
-                      setNotifications(prev => 
-                        prev.map(n => n.id === notif.id ? { ...n, read: true } : n)
-                      );
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = colors.hoverBg;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = !notif.read ? colors.hoverBg : 'transparent';
-                    }}
+              <div className="relative flex items-center justify-between bg-white px-4 py-3 shadow-sm">
+                <h1 className="text-lg font-bold">Dashboard</h1>
+
+                {/* Bell Icon Trigger */}
+                <div className="relative">
+                  <button
+                    onClick={handleToggleBell}
+                    className="relative p-2 text-gray-600 hover:text-gray-900 focus:outline-none"
                   >
-                    {/* Icon */}
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: getNotificationBg(notif.type, isDark),
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {getNotificationIcon(notif.type)}
-                    </div>
-                    
-                    {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <p
-                          style={{
-                            fontSize: 14,
-                            fontWeight: notif.read ? 500 : 700,
-                            color: colors.text,
-                            margin: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            fontFamily: "'Poppins', sans-serif",
-                          }}
-                        >
-                          {notif.title}
-                        </p>
-                        {!notif.read && (
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: '50%',
-                              background: BRAND,
-                              flexShrink: 0,
-                            }}
-                          />
+                    <Bell className="h-6 w-6" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dropdown Box */}
+                  {isBellOpen && (
+                    <div className="absolute right-0 mt-2 w-80 rounded-lg border border-gray-100 bg-white shadow-lg z-50">
+                      <div className="flex items-center justify-between border-b px-4 py-2 font-semibold text-gray-700">
+                        <span>Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="text-xs text-blue-600">{unreadCount} new</span>
                         )}
                       </div>
-                      <p
-                        style={{
-                          fontSize: 13,
-                          color: colors.muted,
-                          margin: '4px 0 0',
-                          lineHeight: 1.4,
-                          overflow: 'hidden',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical' as const,
-                          fontFamily: "'Poppins', sans-serif",
-                        }}
-                      >
-                        {notif.message}
-                      </p>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginTop: 6,
-                        }}
-                      >
-                        <Clock size={12} color={colors.muted} />
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: colors.muted,
-                            fontFamily: "'Poppins', sans-serif",
-                          }}
-                        >
-                          {notif.time}
-                        </span>
+
+                      <div className="max-h-64 overflow-y-auto">
+                        {loading ? (
+                          <p className="p-4 text-center text-sm text-gray-400">Loading...</p>
+                        ) : notifications.length === 0 ? (
+                          <p className="p-4 text-center text-sm text-gray-400">No notifications</p>
+                        ) : (
+                          notifications.map((item) => (
+                            <div
+                              key={item.id}
+                              className={`flex items-start gap-3 border-b p-3 text-sm transition-colors hover:bg-gray-50 ${!item.read ? 'bg-blue-50/50' : ''
+                                }`}
+                            >
+                              <div className="mt-0.5">
+                                {item.type === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                {item.type === 'alert' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                {(!item.type || item.type === 'info') && <Info className="h-4 w-4 text-blue-500" />}
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-800">{item.title}</p>
+                                <p className="text-xs text-gray-500">{item.message}</p>
+                                <span className="mt-1 block text-[10px] text-gray-400">{item.time}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -560,7 +514,7 @@ export default function GuestTopBar() {
               zIndex: 99,
             }}
           />
-          
+
           <div
             style={{
               position: 'fixed',
