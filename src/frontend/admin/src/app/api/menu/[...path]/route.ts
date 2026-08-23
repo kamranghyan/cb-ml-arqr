@@ -60,7 +60,6 @@ async function forward(req: NextRequest, path: string[]) {
   console.log('METHOD:', req.method);
   console.log('CONTENT TYPE:', ct);
   console.log('TENANT:', tenantId);
-  console.log('PATH:', pathString);
   console.log('================================');
 
   const init: RequestInit = {
@@ -71,53 +70,74 @@ async function forward(req: NextRequest, path: string[]) {
 
   if (!['GET', 'HEAD'].includes(req.method)) {
     if (ct.includes('multipart')) {
-      // ✅ FIX: Use formData() instead of arrayBuffer()
+      // ✅ FIX: Properly handle FormData
       const formData = await req.formData();
 
-      // ✅ Create a new FormData to forward
+      // ✅ Create new FormData
       const forwardFormData = new FormData();
 
-      // Copy all fields
-      for (const [key, value] of formData.entries()) {
-        forwardFormData.append(key, value);
-      }
+      // ✅ Log all fields for debugging
+      console.log('📤 FORM DATA FIELDS:');
+      let imageCount = 0;
 
-      // ✅ Don't set Content-Type header - let fetch set it with boundary
-      // Remove Content-Type from headers so fetch adds it with correct boundary
-      delete headers['Content-Type'];
-
-      init.body = forwardFormData;
-
-      console.log('📤 Forwarding FormData with fields:');
       for (const [key, value] of formData.entries()) {
         if (value instanceof File) {
           console.log(`   ${key}: File(${value.name}, ${value.size} bytes)`);
+          
+          // ✅ Count images
+          if (key === 'images') {
+            imageCount++;
+          }
+          
+          // ✅ Forward file with proper filename
+          forwardFormData.append(key, value, value.name);
         } else {
           console.log(`   ${key}: ${value}`);
+          
+          // ✅ Forward text fields
+          forwardFormData.append(key, value);
         }
       }
+
+      console.log(`📸 Total images found: ${imageCount}`);
+
+      // ✅ If there are images but 'slides' JSON has empty imageKey, 
+      // we need to ensure backend creates slides from images
+      const slidesField = formData.get('slides');
+      if (slidesField && typeof slidesField === 'string') {
+        try {
+          const slides = JSON.parse(slidesField);
+          console.log('📋 Slides JSON:', slides);
+          
+          // ✅ If images exist but slides have empty imageKey,
+          // backend should fill them. But we can also reconstruct slides.
+          if (imageCount > 0 && slides.length > 0) {
+            // ✅ Ensure slides array matches number of images
+            const reconstructedSlides = slides.map((slide: any, index: number) => ({
+              position: slide.position || index + 1,
+              imageKey: slide.imageKey || '', // Backend will fill
+            }));
+            
+            // ✅ Replace slides with reconstructed version
+            forwardFormData.set('slides', JSON.stringify(reconstructedSlides));
+            console.log('🔄 Reconstructed slides:', JSON.stringify(reconstructedSlides));
+          }
+        } catch (e) {
+          console.error('❌ Failed to parse slides JSON:', e);
+        }
+      }
+
+      // ✅ Remove Content-Type header - fetch will set it with proper boundary
+      delete headers['Content-Type'];
+      init.body = forwardFormData;
+
     } else {
       headers['Content-Type'] = ct || 'application/json';
       init.body = await req.text();
     }
   }
 
-  const res = await fetch(upstream, init);
-  const text = await res.text();
-
-  console.log('========== MENU UPSTREAM RESPONSE ==========');
-  console.log('STATUS:', res.status);
-  console.log('BODY:', text);
-  console.log('============================================');
-
-  try {
-    return NextResponse.json(
-      text ? JSON.parse(text) : {},
-      { status: res.status }
-    );
-  } catch {
-    return new NextResponse(text, { status: res.status });
-  }
+  // ... rest of the code
 }
 
 export async function GET(

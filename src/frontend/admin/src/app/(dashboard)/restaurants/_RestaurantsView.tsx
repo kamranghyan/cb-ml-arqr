@@ -324,6 +324,9 @@ export default function RestaurantsView() {
       {/* ── Error State ── */}
       {!loading && error && (
         <div style={{
+          display:'flex',
+          flexDirection:"column",
+          alignItems:"center",
           padding: '40px',
           textAlign: 'center',
           color: BRAND,

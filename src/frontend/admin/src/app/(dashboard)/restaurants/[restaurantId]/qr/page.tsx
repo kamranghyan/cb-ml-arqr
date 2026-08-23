@@ -115,17 +115,17 @@ export default function BranchQrPage() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -378,7 +378,7 @@ export default function BranchQrPage() {
               e.currentTarget.style.background = colors.imageBg;
             }}
           >
-            {dlAll ? <Loader2 size={14} className="animate-spin "  /> : <Printer size={14} />}
+            {dlAll ? <Loader2 size={14} className="animate-spin " /> : <Printer size={14} />}
             {dlAll ? 'Generating…' : 'Print All'}
           </button>
           <button
@@ -971,9 +971,10 @@ export default function BranchQrPage() {
                 marginBottom: 14,
               }}>
                 {[
+                  { label: 'Table ID', val: preview.tableId },
                   { label: 'Table Number', val: preview.tableNumber },
                   { label: 'Zone', val: preview.zone },
-                  { label: 'Restaurant ID', val: `${preview.restaurantId.slice(0, 8)}…` },
+                  { label: 'Restaurant ID', val: `${preview.restaurantId.slice(0, 20)}…` },
                   { label: 'Created', val: new Date(preview.createdAt).toLocaleDateString() },
                 ].map(m => (
                   <div key={m.label} style={{
