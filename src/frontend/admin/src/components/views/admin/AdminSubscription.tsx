@@ -24,70 +24,21 @@ import {
 import { getTheme } from '@/lib/theme';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
-import { fetchTenants, type ApiTenant } from '@/lib/auth-api';
+import {
+    fetchPlans,
+    createPlan,
+    updatePlan,
+    deletePlan,
+    fetchSubscriptionStatus,
+    type Plan,
+    type Subscription,
+} from '@/lib/subscription-api';
+import {
+    fetchTenants,
+    type ApiTenant,
+} from '@/lib/auth-api';
 
 const BRAND = '#ff5723';
-
-// ── Types ──
-interface Plan {
-    plan_id: string;
-    plan_name: string;
-    duration_days: number;
-    price: number;
-    currency: string;
-    description: string | null;
-    is_active: boolean;
-}
-
-interface Subscription {
-    tenant_id: string;
-    plan_id: string;
-    status: string;
-    start_date: string;
-    end_date: string;
-    is_active: boolean;
-    days_remaining: number | null;
-}
-
-// ── Static Demo Data (Fallback) ──
-const DEMO_PLANS: Plan[] = [
-    {
-        plan_id: 'weekly',
-        plan_name: 'Weekly Plan',
-        duration_days: 7,
-        price: 2.99,
-        currency: 'USD',
-        description: 'Try our service for a week',
-        is_active: true,
-    },
-    {
-        plan_id: 'monthly',
-        plan_name: 'Monthly Plan',
-        duration_days: 30,
-        price: 9.99,
-        currency: 'USD',
-        description: 'Perfect for small businesses',
-        is_active: true,
-    },
-    {
-        plan_id: 'quarterly',
-        plan_name: 'Quarterly Plan',
-        duration_days: 90,
-        price: 24.99,
-        currency: 'USD',
-        description: 'Best value for growing businesses',
-        is_active: true,
-    },
-    {
-        plan_id: 'annual',
-        plan_name: 'Annual Plan',
-        duration_days: 365,
-        price: 79.99,
-        currency: 'USD',
-        description: 'Maximum savings! Full year access',
-        is_active: true,
-    },
-];
 
 // ── Theme Colors ──
 const getColors = (isDark: boolean) => ({
@@ -126,14 +77,13 @@ export default function AdminSubscription() {
     const { role, loading: authLoading } = useCurrentUser();
 
     // ── State ──
-    const [plans, setPlans] = useState<Plan[]>(DEMO_PLANS);
+    const [plans, setPlans] = useState<Plan[]>([]);
     const [tenants, setTenants] = useState<ApiTenant[]>([]);
     const [subscriptions, setSubscriptions] = useState<Map<string, Subscription>>(new Map());
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isDark, setIsDark] = useState(false);
-    const [isApiLoaded, setIsApiLoaded] = useState(false);
     const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
 
     // ── Modal State ──
@@ -186,60 +136,45 @@ export default function AdminSubscription() {
         }
     }, [role, authLoading, router]);
 
-    // ── Load Plans ──
     const loadPlans = useCallback(async () => {
-        setLoading(true);
         setError('');
-        try {
-            const res = await fetch('/api/v1/plans');
-            if (!res.ok) {
-                throw new Error('Failed to fetch plans');
-            }
-            const data = await res.json();
 
-            if (Array.isArray(data) && data.length > 0) {
-                setPlans(data);
-                setIsApiLoaded(true);
-            } else {
-                setPlans(DEMO_PLANS);
-                setIsApiLoaded(false);
-            }
+        try {
+            const data = await fetchPlans();
+            setPlans(data);
         } catch (e: any) {
             setError(e?.message || 'Failed to load plans');
-            setPlans(DEMO_PLANS);
-            setIsApiLoaded(false);
-        } finally {
-            setLoading(false);
         }
     }, []);
 
-    // ── Load Tenants and their Subscriptions ──
     const loadTenantsWithSubscriptions = useCallback(async () => {
         setLoadingSubscriptions(true);
+
         try {
-            // 1. Fetch all tenants
             const tenantsData = await fetchTenants();
             setTenants(tenantsData);
 
-            // 2. Fetch subscription status for each tenant
             const subMap = new Map<string, Subscription>();
-            
+
             await Promise.all(
                 tenantsData.map(async (tenant) => {
                     try {
-                        const res = await fetch(`/api/v1/subscriptions/status/${tenant.tenantId}`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data) {
-                                subMap.set(tenant.tenantId, data);
-                            }
+                        const data = await fetchSubscriptionStatus(
+                            tenant.tenantId
+                        );
+
+                        if (data) {
+                            subMap.set(tenant.tenantId, data);
                         }
                     } catch (err) {
-                        // Silent fail - some tenants may not have subscriptions
+                        console.error(
+                            `Failed subscription for tenant ${tenant.tenantId}`,
+                            err
+                        );
                     }
                 })
             );
-            
+
             setSubscriptions(subMap);
         } catch (e: any) {
             setError(e?.message || 'Failed to load tenants');
@@ -248,14 +183,14 @@ export default function AdminSubscription() {
         }
     }, []);
 
-    // ── Load All Data ──
     const loadAllData = useCallback(async () => {
         setLoading(true);
         setError('');
+
         try {
             await Promise.all([
                 loadPlans(),
-                loadTenantsWithSubscriptions()
+                loadTenantsWithSubscriptions(),
             ]);
         } catch (e: any) {
             setError(e?.message || 'Failed to load data');
@@ -263,6 +198,7 @@ export default function AdminSubscription() {
             setLoading(false);
         }
     }, [loadPlans, loadTenantsWithSubscriptions]);
+
 
     useEffect(() => {
         if (role === 'admin') {
@@ -278,32 +214,20 @@ export default function AdminSubscription() {
         setSuccess('');
 
         try {
-            const res = await fetch('/api/v1/plans/admin', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
+            await createPlan({
+                plan_id: formData.plan_id,
+                plan_name: formData.plan_name,
+                duration_days: formData.duration_days,
+                price: formData.price,
+                currency: formData.currency,
+                description: formData.description,
             });
-
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data?.error || data?.detail || 'Failed to create plan');
-            }
 
             setSuccess(`Plan "${formData.plan_name}" created successfully!`);
             setShowModal(false);
             setEditingPlan(null);
-            setFormData({
-                plan_id: 'monthly',
-                plan_name: 'Monthly Plan',
-                duration_days: 30,
-                price: 9.99,
-                currency: 'USD',
-                description: 'Perfect for businesses',
-            });
+
             await loadPlans();
-            setTimeout(() => setSuccess(''), 3000);
         } catch (e: any) {
             setError(e?.message || 'Failed to create plan');
         } finally {
@@ -314,27 +238,26 @@ export default function AdminSubscription() {
     // ── Update Plan ──
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!editingPlan) return;
+
         setSubmitting(true);
         setError('');
         setSuccess('');
 
         try {
-            const res = await fetch(`/api/v1/plans/admin/${editingPlan?.plan_id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
+            await updatePlan(editingPlan.plan_id, {
+                plan_id: formData.plan_id,
+                plan_name: formData.plan_name,
+                duration_days: formData.duration_days,
+                price: formData.price,
+                currency: formData.currency,
+                description: formData.description,
             });
-
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data?.error || data?.detail || 'Failed to update plan');
-            }
 
             setSuccess(`Plan "${formData.plan_name}" updated successfully!`);
             setShowModal(false);
             setEditingPlan(null);
+
             setFormData({
                 plan_id: 'monthly',
                 plan_name: 'Monthly Plan',
@@ -343,7 +266,9 @@ export default function AdminSubscription() {
                 currency: 'USD',
                 description: 'Perfect for businesses',
             });
+
             await loadPlans();
+
             setTimeout(() => setSuccess(''), 3000);
         } catch (e: any) {
             setError(e?.message || 'Failed to update plan');
@@ -362,21 +287,18 @@ export default function AdminSubscription() {
         if (!planToDelete) return;
 
         setDeleting(true);
+        setError('');
+        setSuccess('');
+
         try {
-            const res = await fetch(`/api/v1/plans/admin/${planToDelete.plan_id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
+            await deletePlan(planToDelete.plan_id);
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data?.error || 'Failed to delete plan');
-            }
+            setSuccess(
+                `Plan "${planToDelete.plan_name}" deleted successfully!`
+            );
 
-            setSuccess(`Plan "${planToDelete.plan_name}" deleted successfully!`);
             await loadPlans();
+
             setTimeout(() => setSuccess(''), 3000);
         } catch (e: any) {
             setError(e?.message || 'Failed to delete plan');
@@ -479,9 +401,7 @@ export default function AdminSubscription() {
     if (role !== 'admin') {
         return null;
     }
-
-    // ── Display plans ──
-    const displayPlans = isApiLoaded ? plans : DEMO_PLANS;
+    const displayPlans = plans;
 
     // ── Stats ──
     const activeSubscriptions = Array.from(subscriptions.values()).filter(s => s.status === 'ACTIVE').length;
@@ -545,8 +465,7 @@ export default function AdminSubscription() {
                             margin: '4px 0 0',
                         }}
                     >
-                        {isApiLoaded ? 'Manage subscription plans and view tenant subscriptions' : 'Showing demo data (API not connected)'}
-                    </p>
+                        Manage subscription plans and view tenant subscriptions                    </p>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button

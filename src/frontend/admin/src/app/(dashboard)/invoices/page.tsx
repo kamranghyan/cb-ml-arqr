@@ -1,8 +1,6 @@
-// app/tenant/invoices/page.tsx
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FileText,
@@ -22,25 +20,13 @@ import {
   Star,
 } from 'lucide-react';
 import { getTheme } from '@/lib/theme';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { fetchMyTenant } from '@/lib/auth-api';
+import { fetchInvoices, downloadInvoice } from '@/lib/invoice-api';
+import type { Invoice } from '@/types/invoice';
 
 const BRAND = '#ff5723';
-const PAGE_SIZE = 10; // ✅ 10 invoices per page
-
-// ── Types ──
-interface Invoice {
-  id: string;
-  invoice_number: string;
-  order_id: string;
-  plan_id: string;
-  plan_name: string;
-  amount: number;
-  currency: string;
-  status: 'PAID' | 'PENDING' | 'FAILED' | 'REFUNDED';
-  payment_method: string;
-  created_at: string;
-  paid_at: string | null;
-  tenant_id: string;
-}
+const PAGE_SIZE = 10;
 
 // ── Theme Colors ──
 const getColors = (isDark: boolean) => ({
@@ -52,8 +38,6 @@ const getColors = (isDark: boolean) => ({
   muted: isDark ? '#9CA3AF' : '#6B6B6B',
   subtle: isDark ? '#6B7280' : '#6B6B6B',
   brand: BRAND,
-  brandBg: isDark ? 'rgba(255,87,35,0.12)' : 'rgba(255,87,35,0.12)',
-  hoverBg: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
 });
 
 const getAccents = (isDark: boolean) => ({
@@ -74,191 +58,30 @@ const getAccents = (isDark: boolean) => ({
   },
 });
 
-// ── Static Demo Data ──
-const DEMO_INVOICES: Invoice[] = [
-  {
-    id: 'inv_1',
-    invoice_number: 'INV-2024-001',
-    order_id: 'ORD-001',
-    plan_id: 'monthly',
-    plan_name: 'Monthly',
-    amount: 9.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_2',
-    invoice_number: 'INV-2024-002',
-    order_id: 'ORD-002',
-    plan_id: 'quarterly',
-    plan_name: 'Quarterly',
-    amount: 24.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 59 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_3',
-    invoice_number: 'INV-2024-003',
-    order_id: 'ORD-003',
-    plan_id: 'annual',
-    plan_name: 'Annual',
-    amount: 89.99,
-    currency: 'USD',
-    status: 'PENDING',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: null,
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_4',
-    invoice_number: 'INV-2024-004',
-    order_id: 'ORD-004',
-    plan_id: 'weekly',
-    plan_name: 'Weekly',
-    amount: 2.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_5',
-    invoice_number: 'INV-2024-005',
-    order_id: 'ORD-005',
-    plan_id: 'monthly',
-    plan_name: 'Monthly',
-    amount: 9.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_6',
-    invoice_number: 'INV-2024-006',
-    order_id: 'ORD-006',
-    plan_id: 'quarterly',
-    plan_name: 'Quarterly',
-    amount: 24.99,
-    currency: 'USD',
-    status: 'REFUNDED',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 119 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_7',
-    invoice_number: 'INV-2024-007',
-    order_id: 'ORD-007',
-    plan_id: 'annual',
-    plan_name: 'Annual',
-    amount: 89.99,
-    currency: 'USD',
-    status: 'FAILED',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: null,
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_8',
-    invoice_number: 'INV-2024-008',
-    order_id: 'ORD-008',
-    plan_id: 'weekly',
-    plan_name: 'Weekly',
-    amount: 2.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_9',
-    invoice_number: 'INV-2024-009',
-    order_id: 'ORD-009',
-    plan_id: 'monthly',
-    plan_name: 'Monthly',
-    amount: 9.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 44 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_10',
-    invoice_number: 'INV-2024-010',
-    order_id: 'ORD-010',
-    plan_id: 'quarterly',
-    plan_name: 'Quarterly',
-    amount: 24.99,
-    currency: 'USD',
-    status: 'PENDING',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: null,
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_11',
-    invoice_number: 'INV-2024-011',
-    order_id: 'ORD-011',
-    plan_id: 'annual',
-    plan_name: 'Annual',
-    amount: 89.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 149 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-  {
-    id: 'inv_12',
-    invoice_number: 'INV-2024-012',
-    order_id: 'ORD-012',
-    plan_id: 'weekly',
-    plan_name: 'Weekly',
-    amount: 2.99,
-    currency: 'USD',
-    status: 'PAID',
-    payment_method: 'EasyPaisa',
-    created_at: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
-    paid_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    tenant_id: 'tenant_1',
-  },
-];
+interface InvoiceWithId extends Invoice {
+  id: string;
+  invoice_number: string;
+  order_id: string;
+  plan_name: string;
+  payment_method: string;
+  currency: string;
+  status: Invoice['status'];
+  paid_at: string | null;
+}
 
 export default function InvoicesPage() {
   const router = useRouter();
-  const [invoices, setInvoices] = useState<Invoice[]>(DEMO_INVOICES);
+  const { role, loading: authLoading } = useCurrentUser();
+  const [invoices, setInvoices] = useState<InvoiceWithId[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isDark, setIsDark] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceWithId | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-  
-  // ✅ Pagination state
+  const [downloading, setDownloading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // ── Theme listener ──
+  // ── Theme ──
   useEffect(() => {
     const updateTheme = () => {
       const theme = getTheme();
@@ -283,65 +106,103 @@ export default function InvoicesPage() {
   const colors = getColors(isDark);
   const accents = getAccents(isDark);
 
-  // ── Pagination logic ──
+  // ── Role Check ──
+  useEffect(() => {
+    if (!authLoading && role !== 'tenant') {
+      router.replace('/dashboard');
+    }
+  }, [role, authLoading, router]);
+
+  // ── Load Invoices ──
+  const loadInvoices = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const tenantData = await fetchMyTenant().catch(() => null);
+      
+      if (!tenantData) {
+        setError('Could not load tenant information');
+        setLoading(false);
+        return;
+      }
+
+      const data = await fetchInvoices(tenantData.tenantId);
+      
+      const mappedInvoices: InvoiceWithId[] = data.map((inv: any) => ({
+        id: inv.invoiceId || inv.id || `inv_${Date.now()}`,
+        invoiceId: inv.invoiceId || inv.id || `inv_${Date.now()}`,
+        invoice_number: inv.invoiceId || inv.invoice_number || `INV-${Date.now()}`,
+        order_id: inv.orderId || inv.order_id || `ORD-${Date.now()}`,
+        orderId: inv.orderId || inv.order_id || `ORD-${Date.now()}`,
+        plan_id: inv.planId || inv.plan_id || 'monthly',
+        plan_name: inv.planName || inv.plan_name || 'Monthly',
+        amount: String(inv.amount ?? '0'),
+        currency: inv.currency || 'USD',
+        status: inv.status || 'PAID',
+        payment_method: inv.paymentMethod || inv.payment_method || 'EasyPaisa',
+        created_at: inv.createdAt || inv.created_at || new Date().toISOString(),
+        createdAt: inv.createdAt || inv.created_at || new Date().toISOString(),
+        paid_at: inv.paidAt || inv.paid_at || null,
+        tenant_id: inv.tenantId || inv.tenant_id || tenantData.tenantId,
+        downloadUrl: inv.downloadUrl || '',
+        s3Key: inv.s3Key || '',
+      }));
+
+      setInvoices(mappedInvoices);
+      setCurrentPage(1);
+    } catch (e: any) {
+      console.error('❌ Error loading invoices:', e);
+      setError(e?.message || 'Failed to load invoices');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (role === 'tenant') {
+      loadInvoices();
+    }
+  }, [role, loadInvoices]);
+
+  // ── Pagination ──
   const totalPages = Math.ceil(invoices.length / PAGE_SIZE);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const endIndex = startIndex + PAGE_SIZE;
   const paginatedInvoices = invoices.slice(startIndex, endIndex);
 
-  // ── Reset page when invoices change ──
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [invoices.length]);
-
-  // ── Refresh ──
-  const refreshInvoices = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setInvoices(DEMO_INVOICES);
-      setCurrentPage(1);
-      setLoading(false);
-    }, 500);
-  };
-
-  // ── Pagination handlers ──
   const goToPage = (page: number) => {
     if (page < 1 || page > totalPages) return;
     setCurrentPage(page);
   };
 
-  const goToPreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
+  // ── Format helpers ──
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '—';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return '—';
     }
   };
 
-  const goToNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
-  // ── Format date ──
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
-  // ── Format price ──
   const formatPrice = (price: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(price);
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency || 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(price);
+    } catch {
+      return `$${price.toFixed(2)}`;
+    }
   };
 
-  // ── Get status badge ──
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; color: string; bg: string }> = {
       'PAID': { label: 'Paid', color: '#16a34a', bg: isDark ? 'rgba(34,197,94,0.15)' : '#F0FFF4' },
@@ -352,7 +213,6 @@ export default function InvoicesPage() {
     return statusMap[status] || statusMap['PENDING'];
   };
 
-  // ── Get plan icon ──
   const getPlanIcon = (planId: string) => {
     const icons: Record<string, React.ReactNode> = {
       'weekly': <Clock size={16} />,
@@ -363,6 +223,45 @@ export default function InvoicesPage() {
     };
     return icons[planId] || <CreditCard size={16} />;
   };
+
+  // ── Download handler ──
+  const handleDownload = async (invoice: InvoiceWithId) => {
+    setDownloading(true);
+    setError('');
+
+    try {
+      if (invoice.downloadUrl) {
+        window.open(invoice.downloadUrl, '_blank');
+      } else {
+        await downloadInvoice(invoice.id);
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Failed to download invoice');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // ── If not tenant ──
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          background: colors.bg,
+        }}
+      >
+        <Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} color={BRAND} />
+      </div>
+    );
+  }
+
+  if (role !== 'tenant') {
+    return null;
+  }
 
   return (
     <div
@@ -425,7 +324,7 @@ export default function InvoicesPage() {
           </p>
         </div>
         <button
-          onClick={refreshInvoices}
+          onClick={loadInvoices}
           disabled={loading}
           style={{
             display: 'inline-flex',
@@ -621,7 +520,7 @@ export default function InvoicesPage() {
                 }}
               >
                 {paginatedInvoices.map((invoice) => {
-                  const statusBadge = getStatusBadge(invoice.status);
+                  const statusBadge = getStatusBadge(invoice.status || 'PENDING');
                   return (
                     <div
                       key={invoice.id}
@@ -667,7 +566,7 @@ export default function InvoicesPage() {
                             color: BRAND,
                           }}
                         >
-                          {getPlanIcon(invoice.plan_id)}
+                          {getPlanIcon(invoice.planId || 'monthly')}
                         </div>
                         <div>
                           <p
@@ -678,7 +577,7 @@ export default function InvoicesPage() {
                               margin: 0,
                             }}
                           >
-                            {invoice.invoice_number}
+                            {invoice.invoice_number || invoice.id}
                           </p>
                           <p
                             style={{
@@ -687,8 +586,8 @@ export default function InvoicesPage() {
                               margin: 0,
                             }}
                           >
-                            {invoice.plan_name} Plan ·{' '}
-                            {formatDate(invoice.created_at)}
+                            {invoice.plan_name || 'Plan'} ·{' '}
+                            {formatDate(invoice.createdAt)}
                           </p>
                         </div>
                       </div>
@@ -701,7 +600,7 @@ export default function InvoicesPage() {
                             color: colors.text,
                           }}
                         >
-                          {formatPrice(invoice.amount, invoice.currency)}
+                          {formatPrice(Number(invoice.amount || 0), invoice.currency || 'USD')}
                         </span>
                         <span
                           style={{
@@ -722,7 +621,7 @@ export default function InvoicesPage() {
                 })}
               </div>
 
-              {/* ✅ Pagination Controls */}
+              {/* Pagination */}
               {totalPages > 1 && (
                 <div
                   style={{
@@ -755,7 +654,7 @@ export default function InvoicesPage() {
                     }}
                   >
                     <button
-                      onClick={goToPreviousPage}
+                      onClick={() => goToPage(currentPage - 1)}
                       disabled={currentPage === 1}
                       style={{
                         display: 'flex',
@@ -764,81 +663,54 @@ export default function InvoicesPage() {
                         width: 36,
                         height: 36,
                         borderRadius: 8,
-                        border: `1.5px solid ${currentPage === 1 ? colors.border : colors.border}`,
-                        background: currentPage === 1 ? colors.card2 : colors.card,
+                        border: `1.5px solid ${colors.border}`,
+                        background: colors.card,
                         color: currentPage === 1 ? colors.subtle : colors.text,
                         cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
                         opacity: currentPage === 1 ? 0.5 : 1,
-                        transition: 'all 0.2s ease',
-                        outline: 'none',
                       }}
                     >
                       <ChevronLeft size={18} />
                     </button>
 
-                    {/* Page Numbers */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                        let pageNum;
-                        if (totalPages <= 7) {
-                          pageNum = i + 1;
-                        } else if (currentPage <= 4) {
-                          pageNum = i + 1;
-                          if (i === 6) pageNum = totalPages;
-                        } else if (currentPage >= totalPages - 3) {
-                          pageNum = totalPages - 6 + i;
-                        } else {
-                          pageNum = currentPage - 3 + i;
-                        }
-                        
-                        const isActive = pageNum === currentPage;
-                        const isEllipsis = i === 3 && totalPages > 7 && currentPage > 4 && currentPage < totalPages - 3;
-                        
-                        if (isEllipsis) {
-                          return (
-                            <span key={`ellipsis-${i}`} style={{
-                              padding: '0 4px',
-                              color: colors.subtle,
-                              fontSize: 13,
-                            }}>
-                              …
-                            </span>
-                          );
-                        }
-                        
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => goToPage(pageNum)}
-                            style={{
-                              minWidth: 36,
-                              height: 36,
-                              padding: '0 8px',
-                              borderRadius: 8,
-                              border: `1.5px solid ${isActive ? BRAND : colors.border}`,
-                              background: isActive ? BRAND : colors.card,
-                              color: isActive ? '#fff' : colors.text,
-                              fontWeight: isActive ? 700 : 500,
-                              fontSize: 13,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease',
-                              outline: 'none',
-                            }}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      const isActive = pageNum === currentPage;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => goToPage(pageNum)}
+                          style={{
+                            minWidth: 36,
+                            height: 36,
+                            padding: '0 8px',
+                            borderRadius: 8,
+                            border: `1.5px solid ${isActive ? BRAND : colors.border}`,
+                            background: isActive ? BRAND : colors.card,
+                            color: isActive ? '#fff' : colors.text,
+                            fontWeight: isActive ? 700 : 500,
+                            fontSize: 13,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
 
                     <button
-                      onClick={goToNextPage}
+                      onClick={() => goToPage(currentPage + 1)}
                       disabled={currentPage === totalPages}
                       style={{
                         display: 'flex',
@@ -847,13 +719,11 @@ export default function InvoicesPage() {
                         width: 36,
                         height: 36,
                         borderRadius: 8,
-                        border: `1.5px solid ${currentPage === totalPages ? colors.border : colors.border}`,
-                        background: currentPage === totalPages ? colors.card2 : colors.card,
+                        border: `1.5px solid ${colors.border}`,
+                        background: colors.card,
                         color: currentPage === totalPages ? colors.subtle : colors.text,
                         cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
                         opacity: currentPage === totalPages ? 0.5 : 1,
-                        transition: 'all 0.2s ease',
-                        outline: 'none',
                       }}
                     >
                       <ChevronRight size={18} />
@@ -894,7 +764,6 @@ export default function InvoicesPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close */}
             <button
               onClick={() => setShowDetail(false)}
               style={{
@@ -927,7 +796,7 @@ export default function InvoicesPage() {
                 marginBottom: 20,
               }}
             >
-              {selectedInvoice.invoice_number}
+              {selectedInvoice.invoice_number || selectedInvoice.id}
             </p>
 
             <div
@@ -958,7 +827,7 @@ export default function InvoicesPage() {
                     margin: 2,
                   }}
                 >
-                  {selectedInvoice.plan_name}
+                  {selectedInvoice.plan_name || '—'}
                 </p>
               </div>
               <div>
@@ -981,7 +850,7 @@ export default function InvoicesPage() {
                     margin: 2,
                   }}
                 >
-                  {formatPrice(selectedInvoice.amount, selectedInvoice.currency)}
+                  {formatPrice(Number(selectedInvoice.amount || 0), selectedInvoice.currency || 'USD')}
                 </p>
               </div>
               <div>
@@ -1003,12 +872,12 @@ export default function InvoicesPage() {
                     borderRadius: 20,
                     fontSize: 12,
                     fontWeight: 700,
-                    color: getStatusBadge(selectedInvoice.status).color,
-                    background: getStatusBadge(selectedInvoice.status).bg,
+                    color: getStatusBadge(selectedInvoice.status || 'PENDING').color,
+                    background: getStatusBadge(selectedInvoice.status || 'PENDING').bg,
                     marginTop: 2,
                   }}
                 >
-                  {getStatusBadge(selectedInvoice.status).label}
+                  {getStatusBadge(selectedInvoice.status || 'PENDING').label}
                 </span>
               </div>
               <div>
@@ -1031,7 +900,7 @@ export default function InvoicesPage() {
                     margin: 2,
                   }}
                 >
-                  {selectedInvoice.payment_method}
+                  {selectedInvoice.payment_method || '—'}
                 </p>
               </div>
               <div>
@@ -1053,7 +922,7 @@ export default function InvoicesPage() {
                     margin: 2,
                   }}
                 >
-                  {formatDate(selectedInvoice.created_at)}
+                  {formatDate(selectedInvoice.createdAt)}
                 </p>
               </div>
               {selectedInvoice.paid_at && (
@@ -1093,6 +962,8 @@ export default function InvoicesPage() {
               }}
             >
               <button
+                onClick={() => handleDownload(selectedInvoice)}
+                disabled={downloading}
                 style={{
                   flex: 1,
                   padding: '10px',
@@ -1102,25 +973,41 @@ export default function InvoicesPage() {
                   color: colors.text,
                   fontWeight: 600,
                   fontSize: 13,
-                  cursor: 'pointer',
+                  cursor: downloading ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
+                  opacity: downloading ? 0.6 : 1,
                   transition: 'all 0.2s ease',
-                  outline: 'none',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = BRAND;
+                  if (!downloading) {
+                    e.currentTarget.style.borderColor = BRAND;
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = colors.border;
+                  if (!downloading) {
+                    e.currentTarget.style.borderColor = colors.border;
+                  }
                 }}
               >
-                <Download size={16} />
+                {downloading ? (
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <Download size={16} />
+                )}
                 Download PDF
               </button>
-              <button                style={{
+              <button
+                onClick={() => {
+                  if (selectedInvoice.downloadUrl) {
+                    window.open(selectedInvoice.downloadUrl, '_blank');
+                  } else {
+                    handleDownload(selectedInvoice);
+                  }
+                }}
+                style={{
                   flex: 1,
                   padding: '10px',
                   borderRadius: 10,
@@ -1135,7 +1022,6 @@ export default function InvoicesPage() {
                   justifyContent: 'center',
                   gap: 8,
                   transition: 'all 0.2s ease',
-                  outline: 'none',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = '#e64a1a';

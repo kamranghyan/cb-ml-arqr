@@ -1,31 +1,23 @@
-// app/api/v1/plans/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
-import { getValidIdToken } from '@/lib/cognito';
 
-const SUBS_SVC_BASE = process.env.NEXT_PUBLIC_SUBS_SVC_API_BASE || 'http://localhost:8002';
+const SUBS_SVC_BASE = process.env.NEXT_PUBLIC_SUBS_SVC_API_BASE 
+  || 'https://j024yuqlaa.execute-api.ap-south-1.amazonaws.com/Stage';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ Get auth token (optional for plans - public read)
-    const token = await getValidIdToken();
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Tenant-Id': request.headers.get('X-Tenant-Id') || '',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
+    const authHeader = request.headers.get('authorization');
     const searchParams = request.nextUrl.searchParams;
     const activeOnly = searchParams.get('active_only') || 'true';
 
-    const res = await fetch(`${SUBS_SVC_BASE}/api/v1/plans?active_only=${activeOnly}`, {
-      cache: 'no-store',
-      headers,
-    });
+    const res = await fetch(
+      `${SUBS_SVC_BASE}/api/v1/plans?active_only=${activeOnly}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader || '',
+        },
+      }
+    );
 
     if (!res.ok) {
       const error = await res.text();

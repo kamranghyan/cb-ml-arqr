@@ -1,6 +1,5 @@
-// app/api/v1/invoices/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
+import { getValidIdToken } from '@/lib/cognito';
 
 const PAYMENT_SVC_BASE = process.env.NEXT_PUBLIC_PAYMENT_SVC_API_BASE || 'http://localhost:8003';
 
@@ -16,12 +15,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get auth token
+    const token = await getValidIdToken();
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Tenant-Id': tenantId,
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch(`${PAYMENT_SVC_BASE}/api/v1/invoices?tenant_id=${tenantId}`, {
       cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-Id': request.headers.get('X-Tenant-Id') || '',
-      },
+      headers,
     });
 
     if (!res.ok) {
@@ -33,8 +41,13 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    
+    // ✅ Ensure we return array
+    const invoices = Array.isArray(data) ? data : data?.invoices || [];
+    
+    return NextResponse.json({ invoices });
   } catch (error: any) {
+    console.error('❌ Invoices API error:', error);
     return NextResponse.json(
       { error: error?.message || 'Internal server error' },
       { status: 500 }
