@@ -75,6 +75,7 @@ export interface ApiMenuResponse {
   items: ApiMenuItem[]
 }
 
+
 export interface CreateAddonPayload {
   name: string
   description?: string
