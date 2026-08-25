@@ -10,7 +10,7 @@ s3_prefix = "subscription-svc-dev"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 parameter_overrides = "Environment=\"dev\" CognitoRegion=\"ap-south-1\" CognitoUserPoolId=\"ap-south-1_RkmSFSjU4\" TenantTable=\"TenantTable-dev\" RestaurantTable=\"RestaurantTable-dev\" LogLevel=\"INFO\" EventBusName=\"arqr-event-bus-dev\""
-resolve_s3 = true
+# resolve_s3 = true   <-- Isko comment kar diya gaya hai
 disable_rollback = true
 image_repositories = []
 
@@ -25,5 +25,6 @@ parameter_overrides = "Environment=dev CognitoUserPoolId=us-east-1_XXXXXXXXX Cog
 [default.sync.parameters]
 watch = true
 resource = "subscription-svc"
+
 [default.global.parameters]
 region = "ap-south-1"

@@ -247,7 +247,14 @@ export default function BranchMenuPage() {
   }>({ open: false });
   const [sizes, setSizes] = useState<{ name: string; price: string }[]>([]);
   // ✅ Slides state for multiple images
-  const [slides, setSlides] = useState<{ file: File | null; preview: string | null }[]>([]);
+  const [slides, setSlides] = useState<
+    {
+      file: File | null
+      preview: string | null
+      imageKey?: string
+      position?: number
+    }[]
+  >([])
 
   // ── Theme listener ──
   useEffect(() => {
@@ -437,123 +444,225 @@ export default function BranchMenuPage() {
     setAddonDescription('');
     setSaveErr('');
   };
+const openModal = async (item?: ApiMenuItem) => {
+  setModal({
+    open: true,
+    item,
+  });
 
-  const openModal = async (item?: ApiMenuItem) => {
-    setModal({ open: true, item });
+  setIsActive(
+    item
+      ? item.status === 'active'
+      : true,
+  );
 
-    setIsActive(item ? item.status === 'active' : true);
-    setIsChef(item ? (item.tags ?? []).includes('chef') : false);
-    setUploadFile(null);
-    setUploadName(null);
-    setGlbFile(null);
-    setImagePreview(null);
-    setGlbName(null);
-    setGlbStatus('idle');
-    setGlbError('');
-    setSaveMsg('');
-    setSaveErr('');
-    setAddons([]);
-    setAddonInput('');
-    setAddonPrice('');
-    setAddonDescription('');
-    setItemImages([]);
-    setItemImagePreviews([]);
+  setIsChef(
+    item
+      ? (item.tags ?? []).includes('chef')
+      : false,
+  );
 
-    if (item?.id) {
-      try {
-        const existingAddons = await fetchMenuItemAddons(
+  setUploadFile(null);
+  setUploadName(null);
+
+  setGlbFile(null);
+  setImagePreview(null);
+
+  setGlbName(null);
+  setGlbStatus('idle');
+  setGlbError('');
+
+  setSaveMsg('');
+  setSaveErr('');
+
+  setAddonInput('');
+  setAddonPrice('');
+  setAddonDescription('');
+
+  setItemImages([]);
+  setItemImagePreviews([]);
+
+  setSizes([]);
+  setSlides([]);
+
+  // ------------------------------------------------------------
+  // Existing addons
+  // ------------------------------------------------------------
+
+  if (item?.id) {
+    try {
+      const existingAddons =
+        await fetchMenuItemAddons(
           item.id,
-          restaurantId
+          restaurantId,
         );
-        setExistingAddons(existingAddons ?? []);  // ✅ Track existing
-        setAddons(existingAddons ?? []);          // Display all
-      } catch (err) {
-        console.error('Failed to load addons:', err);
-        setExistingAddons([]);
-        setAddons([]);
-      }
-    } else {
+
+      setExistingAddons(
+        existingAddons ?? [],
+      );
+
+      setAddons(
+        existingAddons ?? [],
+      );
+    } catch (err) {
+      console.error(
+        'Failed to load addons:',
+        err,
+      );
+
       setExistingAddons([]);
       setAddons([]);
     }
+  } else {
+    setExistingAddons([]);
+    setAddons([]);
+  }
 
-    let selectedCategory = '';
+  // ------------------------------------------------------------
+  // Category
+  // ------------------------------------------------------------
 
-    if (item) {
-      const itemCategoryId = String(
+  let selectedCategory = '';
+
+  if (item) {
+    const itemCategoryId =
+      String(
         item.categoryId ??
-        (item as any).category?.id ??
-        ''
+          (item as any).category?.id ??
+          '',
       );
 
-      const itemCategoryName = String(
+    const itemCategoryName =
+      String(
         item.categoryName ??
-        (item as any).category?.name ??
-        (typeof (item as any).category === 'string'
-          ? (item as any).category
-          : '') ??
-        ''
-      ).trim().toLowerCase();
+          (item as any).category?.name ??
+          (typeof (item as any).category ===
+          'string'
+            ? (item as any).category
+            : '') ??
+          '',
+      )
+        .trim()
+        .toLowerCase();
 
-      const categoryById = cats.find(
-        c => String(c.id) === itemCategoryId
-      );
-
-      const categoryByName = cats.find(
+    const categoryById =
+      cats.find(
         c =>
-          c.name.trim().toLowerCase() ===
-          itemCategoryName
+          String(c.id) ===
+          itemCategoryId,
       );
 
-      selectedCategory =
-        categoryById?.id ??
-        categoryByName?.id ??
-        '';
-    } else {
-      selectedCategory = cats[0]?.id ?? '';
-    }
+    const categoryByName =
+      cats.find(
+        c =>
+          c.name
+            .trim()
+            .toLowerCase() ===
+          itemCategoryName,
+      );
 
-    setForm({
-      name: item?.name ?? '',
-      description: item?.description ?? '',
-      price:
-        item?.price !== undefined && item?.price !== null
-          ? String(item.price)
-          : '',
-      category: selectedCategory,
-      prepTime: item?.prepTime ?? '',
-      calories:
-        item?.calories !== undefined &&
-          item?.calories !== null
-          ? String(item.calories)
-          : '',
-    });
+    selectedCategory =
+      categoryById?.id ??
+      categoryByName?.id ??
+      '';
+  } else {
+    selectedCategory =
+      cats[0]?.id ?? '';
+  }
 
-    // ✅ Load sizes if editing
-    if (item) {
-      if (item.sizes && item.sizes.length > 0) {
-        setSizes(item.sizes.map(s => ({
-          name: s.name,
-          price: String(s.price || 0),
-        })));
-      } else {
-        setSizes([]);
-      }
+  // ------------------------------------------------------------
+  // Basic form
+  // ------------------------------------------------------------
 
-      // ✅ Load slides (existing images from API)
-      if (item.slides && item.slides.length > 0) {
-        setSlides(item.slides.map(s => ({
+  setForm({
+    name: item?.name ?? '',
+    description:
+      item?.description ?? '',
+
+    price:
+      item?.price !== undefined &&
+      item?.price !== null
+        ? String(item.price)
+        : '',
+
+    category: selectedCategory,
+
+    prepTime:
+      item?.prepTime ?? '',
+
+    calories:
+      item?.calories !== undefined &&
+      item?.calories !== null
+        ? String(item.calories)
+        : '',
+  });
+
+  // ------------------------------------------------------------
+  // Existing sizes
+  // ------------------------------------------------------------
+
+  if (
+    item?.sizes &&
+    item.sizes.length > 0
+  ) {
+    setSizes(
+      item.sizes.map(size => ({
+        name: size.name,
+        price: String(
+          size.price ?? 0,
+        ),
+      })),
+    );
+  } else {
+    setSizes([]);
+  }
+
+  // ------------------------------------------------------------
+  // Existing slides
+  //
+  // IMPORTANT:
+  // Preserve imageKey.
+  // ------------------------------------------------------------
+
+  if (
+    item?.slides &&
+    item.slides.length > 0
+  ) {
+    const existingSlides =
+      item.slides
+        .sort(
+          (a, b) =>
+            a.position -
+            b.position,
+        )
+        .map((slide, index) => ({
           file: null,
-          preview: s.imageUrl || null,
-        })));
-      } else {
-        setSlides([]);
-      }
-    } else {
-      setSizes([]);
-      setSlides([]);
-    }
-  };
+
+          preview:
+            slide.imageUrl ||
+            null,
+
+          imageKey:
+            slide.imageKey ||
+            '',
+
+          position:
+            slide.position ||
+            index + 1,
+        }));
+
+    console.log(
+      '📸 Existing slides loaded:',
+      existingSlides,
+    );
+
+    setSlides(
+      existingSlides,
+    );
+  } else {
+    setSlides([]);
+  }
+};
 
   const uploadToS3 = async (url: string, file: File, ct: string) => {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': ct }, body: file });
@@ -1845,7 +1954,7 @@ export default function BranchMenuPage() {
               </div>
             </div>
 
-            {/* ── Slides (Multiple Images) ── */}
+
             <div style={{ marginBottom: 14 }}>
               <FieldLabel>
                 Slides (Additional Images)
@@ -1874,17 +1983,18 @@ export default function BranchMenuPage() {
                   border: `1px solid ${colors.border}`,
                 }}>
                   {slide.preview ? (
-                    <Image
-                      src={slide.preview}
-                      alt={`Slide ${index + 1}`}
-                      width={50}
-                      height={50}
-                      unoptimized
-                      style={{
-                        objectFit: 'cover',
-                        borderRadius: 8,
-                      }}
-                    />
+                    <div style={{ position: 'relative', width: 50, height: 50 }}>
+                      <Image
+                        src={slide.preview}
+                        alt={`Slide ${index + 1}`}
+                        fill
+                        unoptimized
+                        style={{
+                          objectFit: 'cover',
+                          borderRadius: 8,
+                        }}
+                      />
+                    </div>
                   ) : (
                     <div style={{
                       width: 50,
@@ -1909,17 +2019,24 @@ export default function BranchMenuPage() {
                     }}>
                       Slide {index + 1}
                     </p>
+                    {slide.file && (
+                      <p style={{
+                        fontSize: 10,
+                        color: colors.subtle,
+                        margin: 0,
+                        fontFamily: "'Poppins', sans-serif",
+                      }}>
+                        {slide.file.name}
+                      </p>
+                    )}
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      // ✅ Fix: Clean up both slide and itemImages state
-                      const fileToRemove = slides[index].file;
+                      // ✅ Fix: Properly remove slide and associated file
                       setSlides(prev => prev.filter((_, i) => i !== index));
-                      if (fileToRemove) {
-                        setItemImages(prev => prev.filter((_, i) => i !== index));
-                        setItemImagePreviews(prev => prev.filter((_, i) => i !== index));
-                      }
+                      setItemImages(prev => prev.filter((_, i) => i !== index));
+                      setItemImagePreviews(prev => prev.filter((_, i) => i !== index));
                     }}
                     style={{
                       padding: '4px 10px',
@@ -1940,7 +2057,7 @@ export default function BranchMenuPage() {
                 </div>
               ))}
 
-              {/* Add new slide (Multiple files support) */}
+              {/* Add new slide */}
               {slides.length < 6 && (
                 <label
                   style={{
@@ -1957,7 +2074,6 @@ export default function BranchMenuPage() {
                     fontFamily: "'Poppins', sans-serif",
                   }}
                 >
-                  {/* ✅ CHANGE: added 'multiple' attribute to select multiple files at once */}
                   <input
                     type="file"
                     multiple
@@ -1966,28 +2082,27 @@ export default function BranchMenuPage() {
                     onChange={(e) => {
                       const files = e.target.files;
                       if (files && files.length > 0) {
-                        // ✅ Loop through all selected files
+                        const remainingSlots = 6 - slides.length;
+                        const filesToAdd = Math.min(files.length, remainingSlots);
+
                         const newSlides: { file: File | null; preview: string | null }[] = [];
                         const newItemImages: File[] = [];
                         const newPreviews: string[] = [];
 
-                        // Only take files until we reach max 6 slides
-                        const remainingSlots = 6 - slides.length;
-                        const filesToAdd = Math.min(files.length, remainingSlots);
-
                         for (let i = 0; i < filesToAdd; i++) {
                           const file = files[i];
                           const previewUrl = URL.createObjectURL(file);
-
                           newSlides.push({ file, preview: previewUrl });
                           newItemImages.push(file);
                           newPreviews.push(previewUrl);
                         }
 
-                        // Add to state
                         setSlides(prev => [...prev, ...newSlides]);
                         setItemImages(prev => [...prev, ...newItemImages]);
                         setItemImagePreviews(prev => [...prev, ...newPreviews]);
+
+                        // ✅ Clear input to allow re-uploading same files
+                        e.target.value = '';
                       }
                     }}
                   />

@@ -3,9 +3,9 @@
 from pydantic import BaseModel, Field
 
 class PaymentInitiateRequest(BaseModel):
-    tenant_id: str
-    plan_id: str
+    tenantId: str
+    planId: str
     amount: float = Field(..., gt=0)
-    order_id: str
+    orderId: str
     email: str
-    mobile_no: str
+    mobileNo: str

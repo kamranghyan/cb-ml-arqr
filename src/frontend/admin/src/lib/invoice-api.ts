@@ -1,4 +1,4 @@
-import { getValidIdToken } from './cognito';
+import { getValidIdToken, getValidToken, loadUser } from './cognito';
 
 export interface Invoice {
   invoiceId: string;
@@ -14,22 +14,31 @@ export interface Invoice {
   paymentMethod?: string;
 }
 
+// AWS Cloud API Gateway Base URL
+const BASE_URL = process.env.NEXT_PUBLIC_INVOICE_API_URL || 'https://o4m6177cp9.execute-api.ap-south-1.amazonaws.com/Prod';
+
+// 🟢 Base Helper Function
 async function invoiceFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = await getValidIdToken();
+  let token = await getValidIdToken();
+  if (!token) token = await getValidToken();
+
+  const user = loadUser();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (user?.tenantId) headers['X-Tenant-Id'] = user.tenantId;
 
-  const res = await fetch(`/api/v1/invoices${path}`, {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const fullUrl = `${BASE_URL}${cleanPath}`;
+
+  const res = await fetch(fullUrl, {
     ...options,
     headers,
   });
@@ -45,57 +54,80 @@ async function invoiceFetch<T>(
       // Keep raw text
     }
 
-    if (res.status === 401) {
-      throw new Error('Session expired — please log in again.');
-    }
-
-    if (res.status === 403) {
-      throw new Error(message || 'You do not have access to this.');
-    }
+    if (res.status === 401) throw new Error('Session expired — please log in again.');
+    if (res.status === 403) throw new Error(message || 'Access Forbidden (403).');
 
     throw new Error(message || `Request failed (${res.status})`);
   }
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
+  if (res.status === 204) return undefined as T;
 
   const body = await res.text();
   return (body ? JSON.parse(body) : undefined) as T;
 }
 
-// ── Get Invoices for Tenant ──
+// 1️⃣ Get All Invoices for Tenant (Robust Response Parsing)
 export async function fetchInvoices(tenantId: string): Promise<Invoice[]> {
   try {
-    const data = await invoiceFetch<{ invoices: Invoice[] }>(
-      `?tenant_id=${encodeURIComponent(tenantId)}`
-    );
-    return data?.invoices || [];
+    if (!tenantId) {
+      console.warn('⚠️ fetchInvoices called without tenantId');
+      return [];
+    }
+
+    // Both query parameter patterns added for safety
+    const path = `/invoices?tenantId=${encodeURIComponent(tenantId)}&tenant_id=${encodeURIComponent(tenantId)}`;
+    const data = await invoiceFetch<any>(path);
+
+    console.log('📡 Raw Invoice API Response:', data);
+
+    // 🔴 Multi-format check for API responses
+    if (Array.isArray(data)) {
+      return data;
+    } else if (Array.isArray(data?.invoices)) {
+      return data.invoices;
+    } else if (Array.isArray(data?.data)) {
+      return data.data;
+    } else if (Array.isArray(data?.items)) {
+      return data.items;
+    }
+
+    return [];
   } catch (error) {
     console.error('Failed to fetch invoices:', error);
     return [];
   }
 }
 
-// ── Download Invoice PDF ──
+// 2️⃣ Get Single Invoice Details
+export async function fetchInvoiceDetails(invoiceId: string): Promise<Invoice | null> {
+  try {
+    const data = await invoiceFetch<any>(`/invoices/${encodeURIComponent(invoiceId)}`);
+    return data?.invoice || data || null;
+  } catch (error) {
+    console.error('Failed to fetch invoice details:', error);
+    return null;
+  }
+}
+
+// 3️⃣ Download Invoice PDF
 export async function downloadInvoice(invoiceId: string): Promise<void> {
   try {
-    const token = await getValidIdToken();
-    
-    const res = await fetch(`/api/v1/invoices/${invoiceId}/download`, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
+    let token = await getValidIdToken();
+    if (!token) token = await getValidToken();
+
+    const user = loadUser();
+
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (user?.tenantId) headers['X-Tenant-Id'] = user.tenantId;
+
+    const res = await fetch(`${BASE_URL}/invoices/${encodeURIComponent(invoiceId)}/download`, {
+      headers,
     });
 
-    if (!res.ok) {
-      throw new Error('Failed to download invoice');
-    }
+    if (!res.ok) throw new Error('Failed to download invoice');
 
-    // Get blob from response
     const blob = await res.blob();
-    
-    // Create download link
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -107,15 +139,5 @@ export async function downloadInvoice(invoiceId: string): Promise<void> {
   } catch (error) {
     console.error('Failed to download invoice:', error);
     throw error;
-  }
-}
-
-// ── Get Invoice Details ──
-export async function fetchInvoiceDetails(invoiceId: string): Promise<Invoice | null> {
-  try {
-    return await invoiceFetch<Invoice>(`/${encodeURIComponent(invoiceId)}`);
-  } catch (error) {
-    console.error('Failed to fetch invoice details:', error);
-    return null;
   }
 }

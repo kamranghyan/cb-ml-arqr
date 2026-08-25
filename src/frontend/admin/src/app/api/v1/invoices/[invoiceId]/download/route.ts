@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getValidIdToken } from '@/lib/cognito';
 
-const PAYMENT_SVC_BASE = process.env.NEXT_PUBLIC_PAYMENT_SVC_API_BASE || 'http://localhost:8003';
+const PAYMENT_SVC_BASE = process.env.NEXT_PUBLIC_PAYMENT_SVC_API_BASE;
 
 export async function GET(
   request: NextRequest,
@@ -17,39 +17,59 @@ export async function GET(
       );
     }
 
+    // 1. Get Auth Token
     const token = await getValidIdToken();
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/pdf',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    // 🔴 FIX 1: Token missing ho to aage request na bhejen
+    if (!token) {
+      console.error('❌ No valid Cognito token found');
+      return NextResponse.json(
+        { error: 'Unauthorized: No valid session/token found' },
+        { status: 401 }
+      );
     }
 
-    const res = await fetch(
-      `${PAYMENT_SVC_BASE}/api/v1/invoices/${invoiceId}/download`,
-      {
-        headers,
-      }
-    );
+    // 🔴 FIX 2: Request Headers fix (Content-Type ki bajaye Accept use karein)
+    const headers: Record<string, string> = {
+      'Accept': 'application/pdf',
+      'Authorization': `Bearer ${token}`,
+    };
+
+    // Optional: Agar backend tenant-id bi expect kar raha hai to query se pass karein
+    const tenantId = request.nextUrl.searchParams.get('tenant_id');
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId;
+    }
+
+    const backendUrl = `${PAYMENT_SVC_BASE}/api/v1/invoices/${invoiceId}/download`;
+    console.log(`📡 Fetching PDF from: ${backendUrl}`);
+
+    const res = await fetch(backendUrl, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+    });
 
     if (!res.ok) {
-      const error = await res.text();
+      const errorText = await res.text();
+      console.error(`❌ Payment Service returned ${res.status}:`, errorText);
+      
       return NextResponse.json(
-        { error: error || 'Failed to download invoice' },
+        { error: errorText || 'Failed to download invoice' },
         { status: res.status }
       );
     }
 
-    // Get the PDF blob
-    const blob = await res.blob();
+    // 🔴 FIX 3: Buffer arrayBuffer convert karke return karein (Server-side reliability ke liye)
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    return new NextResponse(blob, {
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename=invoice-${invoiceId}.pdf`,
+        'Content-Disposition': `attachment; filename="invoice-${invoiceId}.pdf"`,
+        'Content-Length': buffer.byteLength.toString(),
       },
     });
   } catch (error: any) {

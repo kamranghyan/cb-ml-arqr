@@ -1,28 +1,33 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+
 Description: SAM Template for Payment Service (payment_svc)
 
 Globals:
   Function:
     Timeout: 30
     MemorySize: 256
-    Runtime: python3.13
+    Runtime: python3.12
     Architectures:
       - arm64
+
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
         PAYMENTS_TABLE_NAME: !Ref PaymentTable
         EVENT_BUS_NAME: !Ref EventBusName
+
         EASYPAISA_STORE_ID: !Ref EasyPaisaStoreId
         EASYPAISA_CREDENTIALS: !Ref EasyPaisaCredentials
         EASYPAISA_ACCOUNT_NUM: !Ref EasyPaisaAccountNum
         EASYPAISA_BASE_URL: !Ref EasyPaisaBaseUrl
         EASYPAISA_POST_BACK_URL: !Ref EasyPaisaPostBackUrl
         EASYPAISA_ENV: !Ref EasyPaisaEnv
-        USE_MOCK_PAYMENTS: "true"
+
+        USE_MOCK_PAYMENTS: "false"
 
 Parameters:
+
   Environment:
     Type: String
     Default: dev
@@ -59,100 +64,72 @@ Parameters:
     Type: String
     Default: "https://example.com/callback"
 
+
 Resources:
 
+  # ============================================================
   # Shared Lambda Layer
+  # ============================================================
+
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: !Sub "menulay-shared-${Environment}"
       ContentUri: ../layers/shared_layer
       CompatibleRuntimes:
-        - python3.13
+        - python3.12
       CompatibleArchitectures:
         - arm64
       RetentionPolicy: Delete
 
-  # DynamoDB Table
+
+  # ============================================================
+  # Payment DynamoDB Table
+  # ============================================================
+
   PaymentTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub "PaymentTable-${Environment}"
       BillingMode: PAY_PER_REQUEST
+
       AttributeDefinitions:
         - AttributeName: orderId
           AttributeType: S
+
       KeySchema:
         - AttributeName: orderId
           KeyType: HASH
 
-  # SQS DLQ
-  PaymentEventsDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "payment-events-dlq-${Environment}"
-      MessageRetentionPeriod: 1209600
 
-  PaymentEventsDLQPolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref PaymentEventsDLQ
-      PolicyDocument:
-        Statement:
-          - Sid: AllowEventBridgeToSendToDLQ
-            Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sqs:SendMessage
-            Resource: !GetAtt PaymentEventsDLQ.Arn
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !GetAtt PaymentSucceededRule.Arn
+  # ============================================================
+  # Payment Lambda
+  # ============================================================
 
-  # EventBridge Rule
-  PaymentSucceededRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Sub "payment-succeeded-rule-${Environment}"
-      EventBusName: !Ref EventBusName
-      State: ENABLED
-      EventPattern:
-        source:
-          - app.payment_svc
-        detail-type:
-          - payment.succeeded
-      Targets:
-        - Id: PaymentServiceLoggerTarget
-          Arn: !GetAtt PaymentServiceFunction.Arn
-          RetryPolicy:
-            MaximumRetryAttempts: 3
-            MaximumEventAgeInSeconds: 3600
-          DeadLetterConfig:
-            Arn: !GetAtt PaymentEventsDLQ.Arn
-
-  PaymentSucceededRulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref PaymentServiceFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt PaymentSucceededRule.Arn
-
-  # Lambda Function
   PaymentServiceFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "payment-svc-${Environment}"
+
       CodeUri: .
+
       Handler: app.main.handler
+
       Layers:
         - !Ref SharedLayer
+
       Policies:
+
+        # Payment DynamoDB access
         - DynamoDBCrudPolicy:
             TableName: !Ref PaymentTable
+
+        # Payment SVC publishes payment.succeeded
+        # to the shared EventBridge bus.
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref EventBusName
+
       Events:
         PaymentApi:
           Type: Api
@@ -160,6 +137,20 @@ Resources:
             Path: /{proxy+}
             Method: ANY
 
+
 Outputs:
+
   PaymentApiUrl:
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Description: Payment Service API URL
+
+    Value: !Sub
+      - "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+      - {}
+
+  PaymentTableName:
+    Description: Payment DynamoDB table name
+    Value: !Ref PaymentTable
+
+  EventBusName:
+    Description: Shared EventBridge bus used by Payment SVC
+    Value: !Ref EventBusName

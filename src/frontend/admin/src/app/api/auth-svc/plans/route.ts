@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const SUBS_SVC_BASE = process.env.NEXT_PUBLIC_SUBS_SVC_API_BASE 
-  || 'https://j024yuqlaa.execute-api.ap-south-1.amazonaws.com/Stage';
+  || 'https://j024yuqlaa.execute-api.ap-south-1.amazonaws.com/dev';
 
 export async function GET(request: NextRequest) {
   try {

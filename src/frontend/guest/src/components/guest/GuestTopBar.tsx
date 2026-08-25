@@ -159,6 +159,13 @@ export default function GuestTopBar() {
     setIsBellOpen(false);
   };
 
+  // ✅ NEW: Handle logo click - navigates to home with scope
+  const handleLogoClick = () => {
+    const homeHref = withScope('/guest', scope);
+    router.push(homeHref);
+    closeAll();
+  };
+
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
@@ -251,10 +258,25 @@ export default function GuestTopBar() {
           fontFamily: "'Poppins', sans-serif",
         }}
       >
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Image src="/images/nav/logo.png" alt="Menulay Logo" width={107.5} height={35} />
-        </div>
+        {/* ✅ Logo - Now Clickable! */}
+        <button
+          onClick={handleLogoClick}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            outline: 'none',
+            borderRadius: 8,
+            transition: 'all 0.2s ease',
+          }}
+          aria-label="Go to Home"
+        >
+          <Image src="/images/nav/logo.png" alt="MenuLay Logo" width={107.5} height={35} />
+        </button>
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -275,10 +297,6 @@ export default function GuestTopBar() {
               borderRadius: 8,
               transition: 'all 0.2s ease',
             }}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onMouseEnter={handleButtonMouseEnter}
-            onMouseLeave={handleButtonMouseLeave}
           >
             <Image src="/images/nav/Bell.png" alt="Notifications" width={28} height={28} />
             {unreadCount > 0 && (
@@ -322,10 +340,7 @@ export default function GuestTopBar() {
               borderRadius: 8,
               transition: 'all 0.2s ease',
             }}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onMouseEnter={handleButtonMouseEnter}
-            onMouseLeave={handleButtonMouseLeave}
+
           >
             {isMenuOpen ? (
               <X size={28} color={BRAND} />

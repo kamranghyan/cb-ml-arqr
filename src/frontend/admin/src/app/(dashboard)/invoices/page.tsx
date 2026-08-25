@@ -120,7 +120,7 @@ export default function InvoicesPage() {
 
     try {
       const tenantData = await fetchMyTenant().catch(() => null);
-      
+
       if (!tenantData) {
         setError('Could not load tenant information');
         setLoading(false);
@@ -128,7 +128,7 @@ export default function InvoicesPage() {
       }
 
       const data = await fetchInvoices(tenantData.tenantId);
-      
+
       const mappedInvoices: InvoiceWithId[] = data.map((inv: any) => ({
         id: inv.invoiceId || inv.id || `inv_${Date.now()}`,
         invoiceId: inv.invoiceId || inv.id || `inv_${Date.now()}`,
@@ -499,6 +499,9 @@ export default function InvoicesPage() {
           {invoices.length === 0 ? (
             <div
               style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
                 textAlign: 'center',
                 padding: '60px 20px',
                 color: colors.muted,
@@ -540,9 +543,8 @@ export default function InvoicesPage() {
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = BRAND;
-                        e.currentTarget.style.boxShadow = `0 4px 12px ${
-                          isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.06)'
-                        }`;
+                        e.currentTarget.style.boxShadow = `0 4px 12px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.06)'
+                          }`;
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = colors.border;
@@ -645,7 +647,7 @@ export default function InvoicesPage() {
                   >
                     Showing {startIndex + 1}–{Math.min(endIndex, invoices.length)} of {invoices.length} invoices
                   </div>
-                  
+
                   <div
                     style={{
                       display: 'flex',
@@ -684,9 +686,9 @@ export default function InvoicesPage() {
                       } else {
                         pageNum = currentPage - 2 + i;
                       }
-                      
+
                       const isActive = pageNum === currentPage;
-                      
+
                       return (
                         <button
                           key={pageNum}

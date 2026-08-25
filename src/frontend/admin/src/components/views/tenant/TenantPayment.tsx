@@ -44,15 +44,20 @@ interface SubscriptionData {
 export default function TenantPayment() {
     const router = useRouter();
     const searchParams = useSearchParams();
+
     const { role, loading: authLoading } = useCurrentUser();
+
     const [isDark, setIsDark] = useState(false);
-    const [loading, setLoading] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState('');
-    const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+    const [subscription, setSubscription] =
+        useState<SubscriptionData | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
 
-    // ── Get subscription data from URL params ──
+    // ─────────────────────────────────────────────
+    // Get subscription data from URL
+    // ─────────────────────────────────────────────
+
     useEffect(() => {
         const plan = searchParams.get('plan');
         const name = searchParams.get('name');
@@ -62,34 +67,40 @@ export default function TenantPayment() {
 
         if (plan && name && price) {
             setSubscription({
-                tenant_id: '', // Will be filled from user
+                tenant_id: '',
                 plan_id: plan,
                 plan_name: name,
                 price: parseFloat(price),
                 currency: currency || 'USD',
-                duration_days: parseInt(duration || '30'),
+                duration_days: parseInt(duration || '30', 10),
                 status: 'PENDING',
             });
         } else {
-            // No subscription data, redirect back
             router.push('/tenant/subscription');
         }
     }, [searchParams, router]);
 
-    // ── Theme ──
+    // ─────────────────────────────────────────────
+    // Theme
+    // ─────────────────────────────────────────────
+
     useEffect(() => {
         const updateTheme = () => {
             const theme = getTheme();
             setIsDark(theme === 'dark');
         };
+
         updateTheme();
 
         const handleStorage = (e: StorageEvent) => {
-            if (e.key === 'admin_theme') updateTheme();
+            if (e.key === 'admin_theme') {
+                updateTheme();
+            }
         };
-        window.addEventListener('storage', handleStorage);
 
         const handleThemeToggle = () => updateTheme();
+
+        window.addEventListener('storage', handleStorage);
         window.addEventListener('themeChange', handleThemeToggle);
 
         return () => {
@@ -100,14 +111,20 @@ export default function TenantPayment() {
 
     const colors = getColors(isDark);
 
-    // ── Role Check ──
+    // ─────────────────────────────────────────────
+    // Role Check
+    // ─────────────────────────────────────────────
+
     useEffect(() => {
         if (!authLoading && role !== 'tenant') {
             router.replace('/dashboard');
         }
     }, [role, authLoading, router]);
 
-    // ── Format Price ──
+    // ─────────────────────────────────────────────
+    // Format price
+    // ─────────────────────────────────────────────
+
     const formatPrice = (price: number, currency: string) => {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
@@ -116,9 +133,12 @@ export default function TenantPayment() {
         }).format(price);
     };
 
-    // ── Handle Payment ──
+    // ─────────────────────────────────────────────
+    // HANDLE PAYMENT
+    // ─────────────────────────────────────────────
+
     const handlePayment = async () => {
-        if (!subscription) return;
+        if (!subscription || processing) return;
 
         setProcessing(true);
         setError('');
@@ -127,53 +147,138 @@ export default function TenantPayment() {
             const token = await getValidIdToken();
 
             if (!token) {
-                setError('Session expired. Please login again.');
-                setProcessing(false);
-                return;
+                throw new Error('Session expired. Please login again.');
             }
 
-            // ✅ Get tenant_id from token or user
-            // Option 1: From localStorage
-            const user = JSON.parse(localStorage.getItem('menulay_user') || '{}');
-            const tenantId = user?.tenantId || subscription.tenant_id;
+            // Get tenant ID
+            const user = JSON.parse(
+                localStorage.getItem('menulay_user') || '{}'
+            );
 
-            // Option 2: From token
-            // const tokenData = parseJwt(token);
-            // const tenantId = tokenData['custom:tenant_id'];
+            const tenantId =
+                user?.tenantId ||
+                user?.tenant_id ||
+                subscription.tenant_id;
 
-            // ── Confirm subscription with tenant_id ──
-            const confirmRes = await fetch('/api/auth-svc/subscriptions/confirm', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Tenant-Id': tenantId,  // ✅ Add tenant_id in header
-                },
-                body: JSON.stringify({
-                    tenant_id: tenantId,  // ✅ Add tenant_id in body
-                    plan_id: subscription.plan_id,
-                    payment_id: `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-                }),
-            });
-
-            if (!confirmRes.ok) {
-                const error = await confirmRes.json();
-                throw new Error(error?.error || 'Payment confirmation failed');
+            if (!tenantId) {
+                throw new Error(
+                    'Tenant ID not found. Please login again.'
+                );
             }
 
+            /*
+             * IMPORTANT:
+             *
+             * We DO NOT call:
+             *
+             * /api/auth-svc/subscriptions/confirm
+             *
+             * here anymore.
+             *
+             * Payment SVC is responsible for:
+             *
+             * 1. Creating PaymentTable record
+             * 2. Calling EasyPaisa
+             * 3. Updating payment status
+             * 4. Publishing payment.succeeded event
+             */
+
+            const orderId = `SUB_${tenantId}_${Date.now()}`;
+
+            const paymentPayload = {
+                tenantId,
+                planId: subscription.plan_id,
+                amount: subscription.price,
+                orderId,
+                email: user?.email || '',
+                mobileNo:
+                    user?.mobileNo ||
+                    user?.mobile_no ||
+                    user?.phone ||
+                    '',
+            };
+
+            console.log(
+                '[PAYMENT] Initiating payment:',
+                paymentPayload
+            );
+
+            const paymentRes = await fetch(
+                '/api/payment-svc/payment/initiate',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                        'X-Tenant-Id': tenantId,
+                    },
+                    body: JSON.stringify(paymentPayload),
+                }
+            );
+
+            const paymentData = await paymentRes.json();
+
+            console.log(
+                '[PAYMENT] Payment service response:',
+                paymentData
+            );
+
+            if (!paymentRes.ok) {
+                throw new Error(
+                    paymentData?.detail ||
+                        paymentData?.error ||
+                        'Payment initiation failed'
+                );
+            }
+
+            /*
+             * Payment SVC currently uses:
+             *
+             * USE_MOCK_PAYMENTS=true
+             *
+             * therefore successful response should be:
+             *
+             * {
+             *   status: "SUCCESS",
+             *   orderId: "...",
+             *   data: {...}
+             * }
+             */
+
+            if (paymentData?.status !== 'SUCCESS') {
+                throw new Error(
+                    paymentData?.message ||
+                        'Payment was not successful'
+                );
+            }
+
+            // Payment succeeded
             setIsSuccess(true);
+
             localStorage.removeItem('pending_payment');
 
+            /*
+             * Give EventBridge / subscription service a little
+             * time to process payment.succeeded event.
+             */
             setTimeout(() => {
                 router.push('/subscription');
             }, 3000);
-
         } catch (e: any) {
-            setError(e?.message || 'Payment failed. Please try again.');
+            console.error('[PAYMENT] Error:', e);
+
+            setError(
+                e?.message ||
+                    'Payment failed. Please try again.'
+            );
         } finally {
             setProcessing(false);
         }
     };
+
+    // ─────────────────────────────────────────────
+    // Loading
+    // ─────────────────────────────────────────────
 
     if (authLoading || !subscription) {
         return (
@@ -186,10 +291,20 @@ export default function TenantPayment() {
                     background: colors.bg,
                 }}
             >
-                <Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} color={BRAND} />
+                <Loader2
+                    size={28}
+                    style={{
+                        animation: 'spin 1s linear infinite',
+                    }}
+                    color={BRAND}
+                />
             </div>
         );
     }
+
+    // ─────────────────────────────────────────────
+    // UI
+    // ─────────────────────────────────────────────
 
     return (
         <div
@@ -204,18 +319,29 @@ export default function TenantPayment() {
         >
             <style>{`
                 @keyframes spin {
-                    to { transform: rotate(360deg); }
+                    to {
+                        transform: rotate(360deg);
+                    }
                 }
+
                 @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
+
                 .fade-in {
                     animation: fadeIn 0.3s ease-out;
                 }
             `}</style>
 
-            {/* ── Back Button ── */}
+            {/* Back Button */}
             <button
                 onClick={() => router.back()}
                 style={{
@@ -236,7 +362,6 @@ export default function TenantPayment() {
             </button>
 
             {isSuccess ? (
-                // ── Success Screen ──
                 <div
                     className="fade-in"
                     style={{
@@ -253,7 +378,8 @@ export default function TenantPayment() {
                             width: 64,
                             height: 64,
                             borderRadius: '50%',
-                            background: 'rgba(34,197,94,0.12)',
+                            background:
+                                'rgba(34,197,94,0.12)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -263,6 +389,7 @@ export default function TenantPayment() {
                     >
                         <CheckCircle size={36} />
                     </div>
+
                     <h2
                         style={{
                             fontSize: 24,
@@ -273,6 +400,7 @@ export default function TenantPayment() {
                     >
                         Payment Successful! 🎉
                     </h2>
+
                     <p
                         style={{
                             fontSize: 14,
@@ -280,20 +408,23 @@ export default function TenantPayment() {
                             margin: 0,
                         }}
                     >
-                        Your subscription has been activated.
-                        Redirecting to dashboard...
+                        Your subscription payment has been
+                        processed.
+                        <br />
+                        Redirecting to subscription...
                     </p>
+
                     <Loader2
                         size={20}
                         style={{
-                            animation: 'spin 1s linear infinite',
+                            animation:
+                                'spin 1s linear infinite',
                             marginTop: 16,
                             color: colors.muted,
                         }}
                     />
                 </div>
             ) : (
-                // ── Payment Details ──
                 <div className="fade-in">
                     <h1
                         style={{
@@ -309,6 +440,7 @@ export default function TenantPayment() {
                         <CreditCard size={24} color={BRAND} />
                         Payment Details
                     </h1>
+
                     <p
                         style={{
                             color: colors.muted,
@@ -319,7 +451,7 @@ export default function TenantPayment() {
                         Review and confirm your subscription
                     </p>
 
-                    {/* ── Error ── */}
+                    {/* Error */}
                     {error && (
                         <div
                             style={{
@@ -327,19 +459,23 @@ export default function TenantPayment() {
                                 alignItems: 'center',
                                 gap: 8,
                                 padding: '12px 16px',
-                                background: 'rgba(220,38,38,0.12)',
-                                border: '1px solid rgba(220,38,38,0.3)',
+                                background:
+                                    'rgba(220,38,38,0.12)',
+                                border:
+                                    '1px solid rgba(220,38,38,0.3)',
                                 borderRadius: 10,
                                 color: '#dc2626',
                                 marginBottom: 16,
                             }}
                         >
                             <AlertCircle size={18} />
-                            <span style={{ fontSize: 14 }}>{error}</span>
+                            <span style={{ fontSize: 14 }}>
+                                {error}
+                            </span>
                         </div>
                     )}
 
-                    {/* ── Plan Details ── */}
+                    {/* Plan Details */}
                     <div
                         style={{
                             background: colors.card,
@@ -371,6 +507,7 @@ export default function TenantPayment() {
                                 >
                                     Plan
                                 </p>
+
                                 <p
                                     style={{
                                         fontSize: 20,
@@ -382,11 +519,13 @@ export default function TenantPayment() {
                                     {subscription.plan_name}
                                 </p>
                             </div>
+
                             <div
                                 style={{
                                     padding: '4px 12px',
                                     borderRadius: 20,
-                                    background: 'rgba(251,146,60,0.15)',
+                                    background:
+                                        'rgba(251,146,60,0.15)',
                                     color: '#d97706',
                                     fontSize: 12,
                                     fontWeight: 700,
@@ -399,7 +538,8 @@ export default function TenantPayment() {
                         <div
                             style={{
                                 display: 'grid',
-                                gridTemplateColumns: '1fr 1fr',
+                                gridTemplateColumns:
+                                    '1fr 1fr',
                                 gap: 16,
                                 paddingTop: 16,
                             }}
@@ -411,12 +551,14 @@ export default function TenantPayment() {
                                         color: colors.subtle,
                                         margin: 0,
                                         fontWeight: 600,
-                                        textTransform: 'uppercase',
+                                        textTransform:
+                                            'uppercase',
                                         letterSpacing: 0.5,
                                     }}
                                 >
                                     Duration
                                 </p>
+
                                 <p
                                     style={{
                                         fontSize: 16,
@@ -425,9 +567,11 @@ export default function TenantPayment() {
                                         margin: '4px 0 0',
                                     }}
                                 >
-                                    {subscription.duration_days} days
+                                    {subscription.duration_days}{' '}
+                                    days
                                 </p>
                             </div>
+
                             <div>
                                 <p
                                     style={{
@@ -435,12 +579,14 @@ export default function TenantPayment() {
                                         color: colors.subtle,
                                         margin: 0,
                                         fontWeight: 600,
-                                        textTransform: 'uppercase',
+                                        textTransform:
+                                            'uppercase',
                                         letterSpacing: 0.5,
                                     }}
                                 >
                                     Amount
                                 </p>
+
                                 <p
                                     style={{
                                         fontSize: 24,
@@ -449,13 +595,16 @@ export default function TenantPayment() {
                                         margin: '4px 0 0',
                                     }}
                                 >
-                                    {formatPrice(subscription.price, subscription.currency)}
+                                    {formatPrice(
+                                        subscription.price,
+                                        subscription.currency
+                                    )}
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* ── Security Badges ── */}
+                    {/* Security Badges */}
                     <div
                         style={{
                             display: 'flex',
@@ -476,6 +625,7 @@ export default function TenantPayment() {
                             <Lock size={16} />
                             Secure Payment
                         </div>
+
                         <div
                             style={{
                                 display: 'flex',
@@ -488,6 +638,7 @@ export default function TenantPayment() {
                             <Shield size={16} />
                             Protected
                         </div>
+
                         <div
                             style={{
                                 display: 'flex',
@@ -502,7 +653,7 @@ export default function TenantPayment() {
                         </div>
                     </div>
 
-                    {/* ── Pay Now Button ── */}
+                    {/* Pay Now */}
                     <button
                         onClick={handlePayment}
                         disabled={processing}
@@ -511,35 +662,56 @@ export default function TenantPayment() {
                             padding: '16px',
                             borderRadius: 12,
                             border: 'none',
-                            background: processing ? colors.muted : BRAND,
+                            background: processing
+                                ? colors.muted
+                                : BRAND,
                             color: '#fff',
                             fontSize: 18,
                             fontWeight: 700,
-                            cursor: processing ? 'not-allowed' : 'pointer',
+                            cursor: processing
+                                ? 'not-allowed'
+                                : 'pointer',
                             opacity: processing ? 0.6 : 1,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: 10,
                             transition: 'all 0.2s ease',
-                            fontFamily: "'Poppins', sans-serif",
+                            fontFamily:
+                                "'Poppins', sans-serif",
                         }}
                         onMouseEnter={(e) => {
-                            if (!processing) e.currentTarget.style.background = '#e64a1a';
+                            if (!processing) {
+                                e.currentTarget.style.background =
+                                    '#e64a1a';
+                            }
                         }}
                         onMouseLeave={(e) => {
-                            if (!processing) e.currentTarget.style.background = BRAND;
+                            if (!processing) {
+                                e.currentTarget.style.background =
+                                    BRAND;
+                            }
                         }}
                     >
                         {processing ? (
                             <>
-                                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                                <Loader2
+                                    size={20}
+                                    style={{
+                                        animation:
+                                            'spin 1s linear infinite',
+                                    }}
+                                />
                                 Processing…
                             </>
                         ) : (
                             <>
                                 <Lock size={18} />
-                                Pay {formatPrice(subscription.price, subscription.currency)}
+                                Pay{' '}
+                                {formatPrice(
+                                    subscription.price,
+                                    subscription.currency
+                                )}
                             </>
                         )}
                     </button>
@@ -552,7 +724,8 @@ export default function TenantPayment() {
                             margin: '12px 0 0',
                         }}
                     >
-                        By clicking Pay, you agree to our Terms of Service
+                        By clicking Pay, you agree to our Terms
+                        of Service
                     </p>
                 </div>
             )}

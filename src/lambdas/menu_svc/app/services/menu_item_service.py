@@ -167,35 +167,41 @@ class MenuItemService:
         now = utc_now()
 
         menu_item = MenuItem(
-            itemId=item_id,
-            tenantId=tenant_id,
-            restaurantId=restaurant_id,
-            categoryId=body.get("categoryId", ""),
-            categoryName=body.get("categoryName", ""),
-            name=body.get("name", ""),
-            description=body.get("description", ""),
-            priceMinorUnits=int(body.get("priceMinorUnits", 0)),
-            isActive=bool(body.get("isActive", True)),
-            version=1,
-            createdAt=now,
-            updatedAt=now,
+    itemId=item_id,
+    tenantId=tenant_id,
+    restaurantId=restaurant_id,
+    categoryId=body.get("categoryId", ""),
+    categoryName=body.get("categoryName", ""),
+    name=body.get("name", ""),
+    description=body.get("description", ""),
+    priceMinorUnits=int(body.get("priceMinorUnits", 0)),
+    isActive=bool(body.get("isActive", True)),
+    version=1,
+    createdAt=now,
+    updatedAt=now,
 
-            prepTime=(
-                int(body["prepTime"])
-                if body.get("prepTime") is not None
-                else None
-            ),
-            calories=(
-                int(body["calories"])
-                if body.get("calories") is not None
-                else None
-            ),
+    prepTime=(
+        int(body["prepTime"])
+        if body.get("prepTime") is not None
+        else None
+    ),
+    calories=(
+        int(body["calories"])
+        if body.get("calories") is not None
+        else None
+    ),
 
-            imageKey=body.get("imageKey"),
-            allergens=list(body.get("allergens") or []),
-            arModelKey=body.get("arModelKey"),
-            sizes=self._parse_sizes(body.get("sizes")),
-        )
+    imageKey=body.get("imageKey"),
+    allergens=list(body.get("allergens") or []),
+    arModelKey=body.get("arModelKey"),
+    sizes=self._parse_sizes(body.get("sizes")),
+
+    # ✅ ADD THIS
+    slides=[
+        MenuItemSlide.from_dict(slide)
+        for slide in (body.get("slides") or [])
+    ],
+)
         menu_item.validate()
 
         self._ddb_put(self._to_item(menu_item))

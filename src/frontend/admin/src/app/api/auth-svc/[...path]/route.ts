@@ -1,41 +1,73 @@
 // src/app/api/auth-svc/[...path]/route.ts
-//
-// Server-side proxy to auth_svc for tenant and user management.
-// The browser never calls the API Gateway directly; this route forwards the
-// caller's Authorization header so auth_svc can apply its own role checks.
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const AUTH_API =
-  process.env.NEXT_PUBLIC_AUTH_API_BASE
+const AUTH_API = process.env.NEXT_PUBLIC_AUTH_API_BASE
 
 async function forward(req: NextRequest, path: string[]) {
-  const upstream = `${AUTH_API}/${path.join('/')}${req.nextUrl.search}`
+  if (!AUTH_API) {
+    console.error('❌ NEXT_PUBLIC_AUTH_API_BASE is not defined in environment variables!')
+    return NextResponse.json(
+      { error: 'Server configuration error: Base API URL missing' },
+      { status: 500 }
+    )
+  }
 
-  // API Gateway drops a bare token — always send the Bearer scheme.
+  // Clean trailing slashes from AUTH_API
+  const baseUrl = AUTH_API.replace(/\/+$/, '')
+  const pathString = path.join('/')
+  const upstream = `${baseUrl}/${pathString}${req.nextUrl.search}`
+
   let auth = req.headers.get('authorization') ?? ''
-  if (auth && !auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
+  if (auth && !auth.startsWith('Bearer ')) {
+    auth = `Bearer ${auth}`
+  }
+
+  const ct = req.headers.get('content-type') ?? 'application/json'
+
+  const headers: Record<string, string> = {
+    'Content-Type': ct,
+    ...(auth ? { Authorization: auth } : {}),
+  }
 
   const init: RequestInit = {
     method: req.method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(auth ? { Authorization: auth } : {}),
-    },
+    headers,
     cache: 'no-store',
   }
 
   if (!['GET', 'HEAD', 'DELETE'].includes(req.method)) {
-    init.body = await req.text()
+    try {
+      init.body = await req.text()
+    } catch (err) {
+      console.error('❌ Failed to read request body:', err)
+    }
   }
 
-  const res  = await fetch(upstream, init)
-  const text = await res.text()
-
   try {
-    return NextResponse.json(text ? JSON.parse(text) : {}, { status: res.status })
-  } catch {
-    return new NextResponse(text, { status: res.status })
+    console.log(`========== AUTH PROXY ==========`)
+    console.log(`METHOD: ${req.method}`)
+    console.log(`UPSTREAM: ${upstream}`)
+    console.log(`================================`)
+
+    const res = await fetch(upstream, init)
+    const text = await res.text()
+
+    if (res.status === 204) {
+      return new NextResponse(null, { status: 204 })
+    }
+
+    try {
+      return NextResponse.json(text ? JSON.parse(text) : {}, { status: res.status })
+    } catch {
+      return new NextResponse(text, { status: res.status })
+    }
+  } catch (error: any) {
+    console.error('❌ Proxy upstream fetch crashed:', error?.message || error)
+    return NextResponse.json(
+      { error: 'Failed to communicate with Auth Service upstream', details: error?.message },
+      { status: 502 }
+    )
   }
 }
 

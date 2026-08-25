@@ -1,98 +1,166 @@
+import json
 import logging
-from fastapi import APIRouter, Request, HTTPException, status, Depends
-from pydantic import BaseModel, EmailStr, Field
+from urllib.parse import parse_qs
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    status,
+)
+
+from app.schemas.payment import PaymentInitiateRequest
 from app.services.easypaisa_service import EasyPaisaService
 from app.services.payment_db_service import PaymentDbService
 from app.services.eventbridge_service import EventBridgeService
 
+
 logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
-class InitiatePaymentRequest(BaseModel):
-    order_id: str = Field(..., example="MS5007")
-    amount: float = Field(..., gt=0, example=12.00)
-    mobile_no: str = Field(..., example="03458508726")
-    email: EmailStr = Field(..., example="testEmail@gmail.com")
-    tenant_id: str = Field(..., example="1c71a684-c20f-411b-9cd6-45ab2f24413b")
-    plan_id: str = Field(..., example="PLAN#starter")
-
-
-class InquirePaymentRequest(BaseModel):
-    order_id: str = Field(..., example="abc123")
-
-
-@router.post("/initiate", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/initiate",
+    status_code=status.HTTP_201_CREATED,
+)
 async def initiate_payment(
-    payload: InitiatePaymentRequest,
+    payload: PaymentInitiateRequest,
     easypaisa_svc: EasyPaisaService = Depends(),
     db_svc: PaymentDbService = Depends(),
     event_svc: EventBridgeService = Depends(),
 ):
+    """
+    Payment flow:
+
+        Frontend
+            ↓
+        /payment/initiate
+            ↓
+        PaymentTable = PENDING
+            ↓
+        EasyPaisa
+            ↓
+        Callback
+            ↓
+        PaymentTable = SUCCESS
+            ↓
+        EventBridge
+            ↓
+        Invoice SVC
+    """
+
     try:
-        # 1. Create initial PENDING record in DynamoDB
-        db_svc.create_payment_record(
-            order_id=payload.order_id,
-            tenant_id=payload.tenant_id,
-            plan_id=payload.plan_id,
+        # =====================================================
+        # 1. Create PENDING payment
+        # =====================================================
+
+        payment = db_svc.create_payment_record(
+            order_id=payload.orderId,
+            tenant_id=payload.tenantId,
+            plan_id=payload.planId,
             amount=payload.amount,
             email=payload.email,
-            mobile_no=payload.mobile_no,
+            mobile_no=payload.mobileNo,
             status="PENDING",
         )
 
-        # 2. Invoke Easypaisa Direct MA API directly
+        logger.info(
+            "Payment created as PENDING",
+            extra={
+                "order_id": payload.orderId,
+                "tenant_id": payload.tenantId,
+                "plan_id": payload.planId,
+            },
+        )
+
+        # =====================================================
+        # 2. Initiate EasyPaisa transaction
+        # =====================================================
+
         res_data = await easypaisa_svc.initiate_ma_transaction(
-            order_id=payload.order_id,
+            order_id=payload.orderId,
             amount=payload.amount,
-            mobile_no=payload.mobile_no,
+            mobile_no=payload.mobileNo,
             email=payload.email,
         )
 
         response_code = res_data.get("responseCode")
 
-        # 3. Synchronous Response Handling
+        transaction_id = res_data.get(
+            "transactionId"
+        )
+
+        # =====================================================
+        # 3. EasyPaisa accepted transaction
+        #
+        # This does NOT mean final payment SUCCESS.
+        # Keep payment PENDING until callback.
+        # =====================================================
+
         if response_code == "0000":
-            transaction_id = res_data.get("transactionId", "N/A")
 
-            db_svc.update_payment_status(
-                order_id=payload.order_id,
-                status="SUCCESS",
-                transaction_id=transaction_id,
-                raw_response=res_data,
-            )
+            if transaction_id:
+                db_svc.update_payment_status(
+                    order_id=payload.orderId,
+                    status="PENDING",
+                    transaction_id=transaction_id,
+                    raw_response=res_data,
+                )
 
-            event_svc.publish_payment_succeeded(
-                tenant_id=payload.tenant_id,
-                plan_id=payload.plan_id,
-                order_id=payload.order_id,
-                amount=payload.amount,
+            logger.info(
+                "EasyPaisa transaction initiated",
+                extra={
+                    "order_id": payload.orderId,
+                    "transaction_id": transaction_id,
+                },
             )
 
             return {
-                "status": "SUCCESS",
-                "message": "Payment processed successfully",
-                "order_id": payload.order_id,
+                "status": "PENDING",
+                "message": (
+                    "Payment initiated successfully. "
+                    "Waiting for confirmation."
+                ),
+                "orderId": payload.orderId,
+                "transactionId": transaction_id,
                 "data": res_data,
             }
-        else:
-            db_svc.update_payment_status(
-                order_id=payload.order_id,
-                status="FAILED",
-                raw_response=res_data,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Payment failed: {res_data.get('responseDesc')}",
-            )
+
+        # =====================================================
+        # 4. EasyPaisa rejected initiation
+        # =====================================================
+
+        db_svc.update_payment_status(
+            order_id=payload.orderId,
+            status="FAILED",
+            transaction_id=transaction_id,
+            raw_response=res_data,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Payment initiation failed: "
+                f"{res_data.get('responseDesc', 'Unknown error')}"
+            ),
+        )
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Error initiating payment: {str(e)}")
+
+    except Exception as exc:
+        logger.exception(
+            "Error initiating payment",
+            extra={
+                "order_id": payload.orderId,
+            },
+        )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to initiate payment: {str(e)}",
+            detail=f"Failed to initiate payment: {str(exc)}",
         )
 
 
@@ -102,33 +170,79 @@ async def easypaisa_callback(
     db_svc: PaymentDbService = Depends(),
     event_svc: EventBridgeService = Depends(),
 ):
-    """Handles asynchronous payment callback payloads sent by Easypaisa."""
+    """
+    EasyPaisa final callback.
+
+    SUCCESS callback:
+
+        EasyPaisa
+            ↓
+        PaymentTable SUCCESS
+            ↓
+        EventBridge payment.succeeded
+            ↓
+        Invoice SVC
+    """
+
     try:
-        # Safely parse body based on content-type without triggering request.form()
-        content_type = request.headers.get("content-type", "")
+        # =====================================================
+        # 1. Parse callback
+        # =====================================================
+
+        content_type = request.headers.get(
+            "content-type",
+            "",
+        ).lower()
 
         if "application/json" in content_type:
+
             payload = await request.json()
+
         else:
-            # Fallback: Parse raw body string or URL-encoded bytes safely
+
             body_bytes = await request.body()
-            body_str = body_bytes.decode("utf-8")
+
+            body_str = body_bytes.decode(
+                "utf-8"
+            )
 
             try:
-                import json
+                payload = json.loads(
+                    body_str
+                )
 
-                payload = json.loads(body_str)
             except Exception:
-                from urllib.parse import parse_qs
 
-                parsed = parse_qs(body_str)
-                payload = {k: v[0] for k, v in parsed.items()}
+                parsed = parse_qs(
+                    body_str
+                )
 
-        logger.info(f"[EASYPAISA] Callback Received: {payload}")
+                payload = {
+                    key: values[0]
+                    for key, values in parsed.items()
+                }
 
-        order_id = payload.get("orderId") or payload.get("order_id")
-        response_code = payload.get("responseCode") or payload.get(
-            "response_code"
+        logger.info(
+            "EasyPaisa callback received",
+            extra={
+                "payload": payload,
+            },
+        )
+
+        # =====================================================
+        # 2. Extract values
+        # =====================================================
+
+        order_id = payload.get(
+            "orderId"
+        )
+
+        response_code = payload.get(
+            "responseCode"
+        )
+
+        transaction_id = payload.get(
+            "transactionId"
         )
 
         if not order_id:
@@ -137,163 +251,152 @@ async def easypaisa_callback(
                 detail="Missing orderId in callback payload",
             )
 
-        existing_record = db_svc.get_payment_by_order_id(order_id)
+        # =====================================================
+        # 3. Get payment
+        # =====================================================
+
+        existing_record = (
+            db_svc.get_payment_by_order_id(
+                order_id
+            )
+        )
+
         if not existing_record:
+
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found",
+                detail="Payment record not found",
             )
 
-        if existing_record.get("status") == "SUCCESS":
-            return {"status": "ACKNOWLEDGE", "message": "Already processed"}
+        # =====================================================
+        # 4. Idempotency
+        # =====================================================
+
+        if existing_record.get(
+            "status"
+        ) == "SUCCESS":
+
+            return {
+                "status": "ACKNOWLEDGE",
+                "message": "Already processed",
+            }
+
+        # =====================================================
+        # 5. SUCCESS
+        # =====================================================
 
         if response_code == "0000":
-            transaction_id = payload.get("transactionId", "N/A")
 
-            db_svc.update_payment_status(
-                order_id=order_id,
-                status="SUCCESS",
-                transaction_id=transaction_id,
-                raw_response=payload,
+            if not transaction_id:
+                transaction_id = existing_record.get(
+                    "transactionId"
+                )
+
+            transaction_amount = payload.get(
+                "transactionAmount"
             )
-
-            event_svc.publish_payment_succeeded(
-                tenant_id=existing_record["tenantId"],
-                plan_id=existing_record["planId"],
-                order_id=order_id,
-                amount=float(
-                    payload.get(
-                        "transactionAmount", existing_record.get("amount", 0.0)
-                    )
-                ),
-            )
-        else:
-            db_svc.update_payment_status(
-                order_id=order_id,
-                status="FAILED",
-                transaction_id=payload.get("transactionId"),
-                raw_response=payload,
-            )
-
-        return {"status": "ACKNOWLEDGE"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Error processing callback: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process callback: {str(e)}",
-        )@router.post("/callback")
-async def easypaisa_callback(
-    request: Request,
-    db_svc: PaymentDbService = Depends(),
-    event_svc: EventBridgeService = Depends(),
-):
-    """Handles asynchronous payment callback payloads sent by Easypaisa."""
-    try:
-        # Safely parse body based on content-type without triggering request.form()
-        content_type = request.headers.get("content-type", "")
-
-        if "application/json" in content_type:
-            payload = await request.json()
-        else:
-            # Fallback: Parse raw body string or URL-encoded bytes safely
-            body_bytes = await request.body()
-            body_str = body_bytes.decode("utf-8")
 
             try:
-                import json
+                amount = float(
+                    transaction_amount
+                    if transaction_amount is not None
+                    else existing_record.get(
+                        "amount",
+                        0,
+                    )
+                )
 
-                payload = json.loads(body_str)
-            except Exception:
-                from urllib.parse import parse_qs
+            except (
+                TypeError,
+                ValueError,
+            ):
+                amount = float(
+                    existing_record.get(
+                        "amount",
+                        0,
+                    )
+                )
 
-                parsed = parse_qs(body_str)
-                payload = {k: v[0] for k, v in parsed.items()}
+            # =================================================
+            # 6. Update DB FIRST
+            # =================================================
 
-        logger.info(f"[EASYPAISA] Callback Received: {payload}")
-
-        order_id = payload.get("orderId") or payload.get("order_id")
-        response_code = payload.get("responseCode") or payload.get(
-            "response_code"
-        )
-
-        if not order_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing orderId in callback payload",
+            updated_payment = (
+                db_svc.update_payment_status(
+                    order_id=order_id,
+                    status="SUCCESS",
+                    transaction_id=transaction_id,
+                    raw_response=payload,
+                )
             )
 
-        existing_record = db_svc.get_payment_by_order_id(order_id)
-        if not existing_record:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found",
-            )
-
-        if existing_record.get("status") == "SUCCESS":
-            return {"status": "ACKNOWLEDGE", "message": "Already processed"}
-
-        if response_code == "0000":
-            transaction_id = payload.get("transactionId", "N/A")
-
-            db_svc.update_payment_status(
-                order_id=order_id,
-                status="SUCCESS",
-                transaction_id=transaction_id,
-                raw_response=payload,
-            )
+            # =================================================
+            # 7. Publish EventBridge
+            # =================================================
 
             event_svc.publish_payment_succeeded(
-                tenant_id=existing_record["tenantId"],
-                plan_id=existing_record["planId"],
-                order_id=order_id,
-                amount=float(
-                    payload.get(
-                        "transactionAmount", existing_record.get("amount", 0.0)
-                    )
+                tenantId=updated_payment[
+                    "tenantId"
+                ],
+                planId=updated_payment[
+                    "planId"
+                ],
+                orderId=updated_payment[
+                    "orderId"
+                ],
+                amount=amount,
+                transactionId=updated_payment.get(
+                    "transactionId"
                 ),
-            )
-        else:
-            db_svc.update_payment_status(
-                order_id=order_id,
-                status="FAILED",
-                transaction_id=payload.get("transactionId"),
-                raw_response=payload,
+                currency="PKR",
             )
 
-        return {"status": "ACKNOWLEDGE"}
+            logger.info(
+                "Payment SUCCESS + EventBridge published",
+                extra={
+                    "order_id": order_id,
+                    "transaction_id": transaction_id,
+                },
+            )
+
+            return {
+                "status": "ACKNOWLEDGE",
+                "message": "Payment successful",
+                "orderId": order_id,
+            }
+
+        # =====================================================
+        # 8. FAILED
+        # =====================================================
+
+        db_svc.update_payment_status(
+            order_id=order_id,
+            status="FAILED",
+            transaction_id=transaction_id,
+            raw_response=payload,
+        )
+
+        return {
+            "status": "ACKNOWLEDGE",
+            "message": "Payment failed",
+            "orderId": order_id,
+        }
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Error processing callback: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process callback: {str(e)}",
+
+    except Exception as exc:
+        logger.exception(
+            "Error processing EasyPaisa callback",
+            extra={
+                "error": str(exc),
+            },
         )
 
-
-@router.post("/inquire")
-async def inquire_payment_post(
-    payload: InquirePaymentRequest,
-    easypaisa_svc: EasyPaisaService = Depends(),
-):
-    """
-    POST endpoint to inquire payment status via JSON body.
-    """
-    res_data = await easypaisa_svc.inquire_transaction(payload.order_id)
-    return {"status": "SUCCESS", "data": res_data}
-
-
-@router.get("/inquire/{order_id}")
-async def inquire_payment_get(
-    order_id: str,
-    easypaisa_svc: EasyPaisaService = Depends(),
-):
-    """
-    GET endpoint to check payment status directly via URL parameter.
-    """
-    res_data = await easypaisa_svc.inquire_transaction(order_id)
-    return {"status": "SUCCESS", "data": res_data}
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Failed to process payment callback: "
+                f"{str(exc)}"
+            ),
+        )

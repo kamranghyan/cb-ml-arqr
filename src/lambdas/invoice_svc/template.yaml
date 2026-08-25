@@ -6,7 +6,7 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.13
+    Runtime: python3.12
     Architectures:
       - arm64
     Environment:
@@ -19,30 +19,42 @@ Parameters:
   Environment:
     Type: String
     Default: dev
+
   EventBusName:
     Type: String
     Default: arqr-event-bus-dev
 
 Resources:
 
+  # =========================================================
+  # S3 - Invoice PDFs
+  # =========================================================
   InvoicesBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "arqr-invoices-${Environment}-${AWS::AccountId}"
 
+
+  # =========================================================
+  # DynamoDB - Invoice Records
+  # =========================================================
   InvoicesTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub "InvoicesTable-${Environment}"
       BillingMode: PAY_PER_REQUEST
+
       AttributeDefinitions:
         - AttributeName: invoiceId
           AttributeType: S
+
         - AttributeName: orderId
           AttributeType: S
+
       KeySchema:
         - AttributeName: invoiceId
           KeyType: HASH
+
       GlobalSecondaryIndexes:
         - IndexName: OrderIdIndex
           KeySchema:
@@ -51,33 +63,128 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+
+  # =========================================================
+  # API Gateway
+  # =========================================================
+  InvoicesApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Tenant-Id'"
+        AllowOrigin: "'*'"
+
+
+  # =========================================================
+  # Invoice Lambda
+  # =========================================================
   InvoiceServiceFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "invoice-svc-${Environment}"
+
       CodeUri: .
+
       Handler: app.main.handler
+
+      Runtime: python3.12
+
       Policies:
+
+        # DynamoDB permissions
         - DynamoDBCrudPolicy:
             TableName: !Ref InvoicesTable
+
+        # Query permissions for GSI
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub
+                - "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*"
+                - TableName: !Ref InvoicesTable
+
+        # S3 permissions
         - S3CrudPolicy:
             BucketName: !Ref InvoicesBucket
+
       Events:
-        PaymentSucceededEvent:
-          Type: EventBridgeRule
+
+        # -----------------------------------------------------
+        # GET /invoices?tenantId=...
+        # -----------------------------------------------------
+        GetInvoicesListApi:
+          Type: Api
           Properties:
-            EventBusName: !Ref EventBusName
-            Pattern:
-              source:
-                - app.payment_svc
-              detail-type:
-                - payment.succeeded
+            RestApiId: !Ref InvoicesApi
+            Path: /invoices
+            Method: GET
+
+        # -----------------------------------------------------
+        # GET /invoices/{invoiceId}
+        # -----------------------------------------------------
         GetInvoiceApi:
           Type: Api
           Properties:
-            Path: /invoices/{orderId}
+            RestApiId: !Ref InvoicesApi
+            Path: /invoices/{invoiceId}
             Method: GET
 
+        # -----------------------------------------------------
+        # GET /invoices/{invoiceId}/download
+        # -----------------------------------------------------
+        DownloadInvoiceApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref InvoicesApi
+            Path: /invoices/{invoiceId}/download
+            Method: GET
+
+
+  # =========================================================
+  # EventBridge
+  # Payment Service -> Invoice Lambda
+  # =========================================================
+  InvoicePaymentSucceededRule:
+    Type: AWS::Events::Rule
+
+    Properties:
+      Name: !Sub "invoice-payment-succeeded-rule-${Environment}"
+
+      EventBusName: !Ref EventBusName
+
+      State: ENABLED
+
+      EventPattern:
+        source:
+          - app.payment_svc
+
+        detail-type:
+          - payment.succeeded
+
+      Targets:
+        - Id: InvoiceServiceTarget
+          Arn: !GetAtt InvoiceServiceFunction.Arn
+
+
+  # =========================================================
+  # Allow EventBridge to invoke Invoice Lambda
+  # =========================================================
+  InvoicePaymentSucceededRulePermission:
+    Type: AWS::Lambda::Permission
+
+    Properties:
+      FunctionName: !Ref InvoiceServiceFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt InvoicePaymentSucceededRule.Arn
+
+
 Outputs:
+
   InvoiceApiUrl:
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value: !Sub "https://${InvoicesApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
