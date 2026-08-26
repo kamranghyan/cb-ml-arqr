@@ -42,18 +42,22 @@ async def initiate_payment(
             ↓
         EasyPaisa
             ↓
-        Callback
-            ↓
-        PaymentTable = SUCCESS
-            ↓
-        EventBridge
-            ↓
-        Invoice SVC
+        ┌──────────────────────────────┐
+        │ MOCK                         │
+        │ → SUCCESS immediately        │
+        │ → EventBridge                │
+        │                              │
+        │ REAL                         │
+        │ → PENDING                    │
+        │ → EasyPaisa callback         │
+        │ → SUCCESS                    │
+        │ → EventBridge                │
+        └──────────────────────────────┘
     """
 
     try:
         # =====================================================
-        # 1. Create PENDING payment
+        # 1. Create PENDING payment record
         # =====================================================
 
         payment = db_svc.create_payment_record(
@@ -87,30 +91,103 @@ async def initiate_payment(
         )
 
         response_code = res_data.get("responseCode")
+        transaction_id = res_data.get("transactionId")
 
-        transaction_id = res_data.get(
-            "transactionId"
+        logger.info(
+            "EasyPaisa initiation response",
+            extra={
+                "order_id": payload.orderId,
+                "response_code": response_code,
+                "transaction_id": transaction_id,
+                "use_mock": easypaisa_svc.use_mock,
+            },
         )
 
         # =====================================================
-        # 3. EasyPaisa accepted transaction
-        #
-        # This does NOT mean final payment SUCCESS.
-        # Keep payment PENDING until callback.
+        # 3. Validate transaction response
         # =====================================================
 
-        if response_code == "0000":
+        if response_code != "0000":
 
-            if transaction_id:
-                db_svc.update_payment_status(
-                    order_id=payload.orderId,
-                    status="PENDING",
-                    transaction_id=transaction_id,
-                    raw_response=res_data,
-                )
+            db_svc.update_payment_status(
+                order_id=payload.orderId,
+                status="FAILED",
+                transaction_id=transaction_id,
+                raw_response=res_data,
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Payment initiation failed: "
+                    f"{res_data.get('responseDesc', 'Unknown error')}"
+                ),
+            )
+
+        # =====================================================
+        # 4. Transaction ID is required
+        # =====================================================
+
+        if not transaction_id:
+
+            db_svc.update_payment_status(
+                order_id=payload.orderId,
+                status="FAILED",
+                raw_response=res_data,
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Payment transaction ID missing",
+            )
+
+        # =====================================================
+        # 5. MOCK PAYMENT
+        # =====================================================
+        #
+        # Mock EasyPaisa returns responseCode=0000.
+        #
+        # Since this is a local/test payment, we treat it as
+        # immediately SUCCESSFUL.
+        #
+        # Real EasyPaisa does NOT do this.
+        # Real payment stays PENDING until callback.
+        # =====================================================
+
+        if easypaisa_svc.use_mock:
+
+            updated_payment = db_svc.update_payment_status(
+                order_id=payload.orderId,
+                status="SUCCESS",
+                transaction_id=transaction_id,
+                raw_response=res_data,
+            )
 
             logger.info(
-                "EasyPaisa transaction initiated",
+                "MOCK payment marked SUCCESS",
+                extra={
+                    "order_id": payload.orderId,
+                    "transaction_id": transaction_id,
+                },
+            )
+
+            # =================================================
+            # Publish payment.succeeded
+            # =================================================
+
+            event_svc.publish_payment_succeeded(
+                tenantId=updated_payment["tenantId"],
+                planId=updated_payment["planId"],
+                orderId=updated_payment["orderId"],
+                amount=payload.amount,
+                transactionId=updated_payment.get(
+                    "transactionId"
+                ),
+                currency="PKR",
+            )
+
+            logger.info(
+                "MOCK payment.succeeded event published",
                 extra={
                     "order_id": payload.orderId,
                     "transaction_id": transaction_id,
@@ -118,50 +195,103 @@ async def initiate_payment(
             )
 
             return {
-                "status": "PENDING",
-                "message": (
-                    "Payment initiated successfully. "
-                    "Waiting for confirmation."
-                ),
+                "status": "SUCCESS",
+                "message": "Payment successful",
                 "orderId": payload.orderId,
                 "transactionId": transaction_id,
                 "data": res_data,
             }
 
         # =====================================================
-        # 4. EasyPaisa rejected initiation
+        # 6. REAL EASYPAISA PAYMENT
+        # =====================================================
+        #
+        # responseCode=0000 means the transaction was accepted,
+        # NOT that the customer has completed payment.
+        #
+        # Therefore keep it PENDING.
+        #
+        # Later:
+        #
+        # EasyPaisa → /payment/callback
+        #              ↓
+        #         SUCCESS / FAILED
         # =====================================================
 
         db_svc.update_payment_status(
             order_id=payload.orderId,
-            status="FAILED",
+            status="PENDING",
             transaction_id=transaction_id,
             raw_response=res_data,
         )
 
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Payment initiation failed: "
-                f"{res_data.get('responseDesc', 'Unknown error')}"
-            ),
+        logger.info(
+            "Real EasyPaisa payment initiated; waiting for callback",
+            extra={
+                "order_id": payload.orderId,
+                "transaction_id": transaction_id,
+            },
         )
+
+        return {
+            "status": "PENDING",
+            "message": (
+                "Payment initiated successfully. "
+                "Waiting for confirmation."
+            ),
+            "orderId": payload.orderId,
+            "transactionId": transaction_id,
+            "data": res_data,
+        }
+
+    # =========================================================
+    # HTTP EXCEPTION
+    # =========================================================
 
     except HTTPException:
         raise
 
+    # =========================================================
+    # UNEXPECTED ERROR
+    # =========================================================
+
     except Exception as exc:
+
         logger.exception(
             "Error initiating payment",
             extra={
                 "order_id": payload.orderId,
+                "error": str(exc),
             },
         )
 
+        # Try to mark payment as FAILED if the record exists.
+        try:
+            db_svc.update_payment_status(
+                order_id=payload.orderId,
+                status="FAILED",
+                raw_response={
+                    "error": str(exc),
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Could not mark payment as FAILED",
+                extra={
+                    "order_id": payload.orderId,
+                },
+            )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to initiate payment: {str(exc)}",
+            detail=(
+                f"Failed to initiate payment: {str(exc)}"
+            ),
         )
+
+
+
+
 
 @router.get("/status/{order_id}")
 async def get_payment_status(
