@@ -24,9 +24,10 @@ def generate_presigned_url(s3_key: str, expiration: int = 86400) -> str:
 
 def handle_payment_event(event):
     detail = event.get('detail', {})
-    order_id = detail.get('orderId')
+    order_id = detail.get('order_id') or detail.get('orderId')
     amount = detail.get('amount', 0.0)
-    tenant_id = detail.get('tenantId', '')
+    tenant_id = detail.get('tenant_id') or detail.get('tenantId', '')
+    currency = detail.get('currency', 'PKR')
 
     if not order_id:
         print("Error: Missing orderId in event detail")
@@ -35,7 +36,12 @@ def handle_payment_event(event):
     invoice_id = f"INV-{uuid.uuid4().hex[:8].upper()}"
 
     # 1. PDF Generation
-    pdf_bytes = generate_invoice_pdf(invoice_id, order_id, amount)
+    pdf_bytes = generate_invoice_pdf(
+    invoice_id,
+    order_id,
+    amount,
+    currency
+)
 
     # 2. S3 Upload
     s3_key = f"invoices/{order_id}/{invoice_id}.pdf"
@@ -63,6 +69,7 @@ def handle_payment_event(event):
     return {"statusCode": 200, "body": json.dumps({"message": f"Invoice {invoice_id} created"})}
 
 
+
 # Universal CORS Headers
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*", # ya aapka localhost URL
@@ -71,61 +78,248 @@ CORS_HEADERS = {
 }
 
 def handle_get_invoice_api(event):
-    try:
-        query_parameters = event.get('queryStringParameters') or {}
-        
-        # Read from both camelCase and snake_case query params
-        tenant_id = query_parameters.get('tenantId') or query_parameters.get('tenant_id')
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*"
-        }
+    headers = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
+    }
 
-        if tenant_id:
-            response = table.scan()
-            raw_items = response.get('Items', [])
-            
-            # Casing safe filtering (checks both tenantId and tenant_id in DB items)
-            items = [
-                itm for itm in raw_items 
-                if itm.get('tenantId') == tenant_id or itm.get('tenant_id') == tenant_id
-            ]
-            
-            for itm in items:
-                if 's3Key' in itm:
-                    try:
-                        itm['downloadUrl'] = generate_presigned_url(itm['s3Key'])
-                    except Exception as e:
-                        print(f"Error generating url: {e}")
-            
+    try:
+        # =====================================================
+        # 1. OPTIONS / CORS
+        # =====================================================
+
+        if event.get("httpMethod") == "OPTIONS":
             return {
-                "statusCode": 200, 
-                "headers": headers, 
-                "body": json.dumps({"invoices": items})
+                "statusCode": 200,
+                "headers": headers,
+                "body": json.dumps({"message": "OK"}),
             }
 
+        # =====================================================
+        # 2. Read request information
+        # =====================================================
+
+        path = event.get("path", "")
+        path_parameters = event.get("pathParameters") or {}
+        query_parameters = event.get("queryStringParameters") or {}
+
+        invoice_id = path_parameters.get("invoiceId")
+
+        tenant_id = (
+            query_parameters.get("tenantId")
+            or query_parameters.get("tenant_id")
+        )
+
+        print(
+            "Invoice API request:",
+            json.dumps(
+                {
+                    "httpMethod": event.get("httpMethod"),
+                    "path": path,
+                    "pathParameters": path_parameters,
+                    "queryStringParameters": query_parameters,
+                }
+            ),
+        )
+
+        # =====================================================
+        # 3. GET /invoices/{invoiceId}/download
+        # =====================================================
+
+        if invoice_id and path.endswith("/download"):
+
+            response = table.get_item(
+                Key={
+                    "invoiceId": invoice_id
+                }
+            )
+
+            item = response.get("Item")
+
+            if not item:
+                return {
+                    "statusCode": 404,
+                    "headers": headers,
+                    "body": json.dumps(
+                        {
+                            "error": "Invoice not found",
+                            "invoiceId": invoice_id,
+                        }
+                    ),
+                }
+
+            s3_key = item.get("s3Key")
+
+            if not s3_key:
+                return {
+                    "statusCode": 404,
+                    "headers": headers,
+                    "body": json.dumps(
+                        {
+                            "error": "Invoice PDF not found"
+                        }
+                    ),
+                }
+
+            # Generate a fresh URL
+            download_url = generate_presigned_url(
+                s3_key
+            )
+
+            return {
+                "statusCode": 200,
+                "headers": headers,
+                "body": json.dumps(
+                    {
+                        "invoiceId": item.get("invoiceId"),
+                        "orderId": item.get("orderId"),
+                        "downloadUrl": download_url,
+                    }
+                ),
+            }
+
+        # =====================================================
+        # 4. GET /invoices/{invoiceId}
+        # =====================================================
+
+        if invoice_id:
+
+            response = table.get_item(
+                Key={
+                    "invoiceId": invoice_id
+                }
+            )
+
+            item = response.get("Item")
+
+            if not item:
+                return {
+                    "statusCode": 404,
+                    "headers": headers,
+                    "body": json.dumps(
+                        {
+                            "error": "Invoice not found",
+                            "invoiceId": invoice_id,
+                        }
+                    ),
+                }
+
+            # Refresh presigned URL
+            if item.get("s3Key"):
+                item["downloadUrl"] = generate_presigned_url(
+                    item["s3Key"]
+                )
+
+            return {
+                "statusCode": 200,
+                "headers": headers,
+                "body": json.dumps(
+                    {
+                        "invoice": item
+                    }
+                ),
+            }
+
+        # =====================================================
+        # 5. GET /invoices?tenantId=...
+        # =====================================================
+
+        if tenant_id:
+
+            response = table.scan()
+
+            raw_items = response.get(
+                "Items",
+                []
+            )
+
+            items = [
+                item
+                for item in raw_items
+                if (
+                    item.get("tenantId") == tenant_id
+                    or item.get("tenant_id") == tenant_id
+                )
+            ]
+
+            # Refresh presigned URLs
+            for item in items:
+
+                if item.get("s3Key"):
+
+                    try:
+                        item["downloadUrl"] = (
+                            generate_presigned_url(
+                                item["s3Key"]
+                            )
+                        )
+
+                    except Exception as exc:
+                        print(
+                            f"Error generating URL: {exc}"
+                        )
+
+            return {
+                "statusCode": 200,
+                "headers": headers,
+                "body": json.dumps(
+                    {
+                        "invoices": items
+                    }
+                ),
+            }
+
+        # =====================================================
+        # 6. No invoiceId and no tenantId
+        # =====================================================
+
         return {
-            "statusCode": 200, 
-            "headers": headers, 
-            "body": json.dumps({"invoices": []})
+            "statusCode": 200,
+            "headers": headers,
+            "body": json.dumps(
+                {
+                    "invoices": []
+                }
+            ),
         }
 
-    except Exception as e:
-        print(f"Error: {str(e)}")
+    except Exception as exc:
+
+        print(
+            f"Invoice API error: {str(exc)}"
+        )
+
         return {
             "statusCode": 500,
             "headers": headers,
-            "body": json.dumps({"error": str(e)})
+            "body": json.dumps(
+                {
+                    "error": str(exc)
+                }
+            ),
         }
 
+
+
 def handler(event, context):
-    print("Received Payload:", json.dumps(event))
+    print(
+        "Received Payload:",
+        json.dumps(event)
+    )
 
     if "httpMethod" in event:
         return handle_get_invoice_api(event)
+
     elif event.get("source") == "app.payment_svc":
         return handle_payment_event(event)
 
-    return {"statusCode": 400, "body": json.dumps({"error": "Unknown event source"})}
+    return {
+        "statusCode": 400,
+        "body": json.dumps(
+            {
+                "error": "Unknown event source"
+            }
+        ),
+    }

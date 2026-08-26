@@ -24,7 +24,7 @@ Globals:
         EASYPAISA_POST_BACK_URL: !Ref EasyPaisaPostBackUrl
         EASYPAISA_ENV: !Ref EasyPaisaEnv
 
-        USE_MOCK_PAYMENTS: "false"
+        USE_MOCK_PAYMENTS: "true"
 
 Parameters:
 

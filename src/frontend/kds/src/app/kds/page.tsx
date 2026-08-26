@@ -46,8 +46,12 @@ export default function KitchenDisplayPage() {
   const prevIds = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const wsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef(audio);
-  useEffect(() => { audioRef.current = audio; }, [audio]);
+
+  useEffect(() => {
+    audioRef.current = audio;
+  }, [audio]);
 
   async function handleLogout() { setLoggingOut(true); await logout(); router.push('/login/kds'); }
 
@@ -59,84 +63,339 @@ export default function KitchenDisplayPage() {
   const addWsLog = (msg: string) => { const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); setWsLog(prev => [`[${time}] ${msg}`, ...prev.slice(0, 9)]); };
 
   const connectWs = useCallback(async () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    setWsState('connecting'); addWsLog('Connecting to WebSocket…');
-    const ws = await connectWebSocket(); wsRef.current = ws;
-    ws.onopen = () => { setWsState('connected'); addWsLog('✓ Connected'); ws.send(JSON.stringify({ action: 'subscribe', channel: 'orders' })); };
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data); addWsLog(`← ${JSON.stringify(msg).slice(0, 80)}`);
-        const orderId = msg.orderId ?? msg.order_id; const status = msg.status ?? msg.orderStatus; const flags = msg.flags;
-        if (orderId && (status || flags)) {
-          const kdsStatus = toKdsStatus(status ?? '', flags); const displayId = `LM-${orderId.slice(0, 6).toUpperCase()}`;
-          setOrders(prev => {
-            const exists = prev.find(o => (o as any)._apiId === orderId || o.id === displayId);
-            if (exists) { showToast(`📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`); return prev.map(o => ((o as any)._apiId === orderId || o.id === displayId) ? { ...o, status: kdsStatus } : o); }
-            else if (msg.lineItems || msg.items) { const n = normaliseOrder(msg); showToast(`🔔 WS: New order #${n.id} — Table ${n.table}`); if (audioRef.current) playNewOrderBeep(); return [n, ...prev]; }
-            return prev;
-          });
-        }
-      } catch { addWsLog(`← (non-JSON) ${event.data?.slice(0, 60)}`); }
-    };
-    ws.onerror = () => { setWsState('error'); addWsLog('✗ WebSocket error'); };
-    ws.onclose = (e) => { setWsState('disconnected'); addWsLog(`✗ Disconnected (code ${e.code})`); if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRetryRef.current = setTimeout(connectWs, 5000); };
-  }, []);
+    // Already connected/connecting
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
 
-  useEffect(() => { connectWs(); return () => { if (wsRetryRef.current) clearTimeout(wsRetryRef.current); wsRef.current?.close(); }; }, [connectWs]);
+    setWsState('connecting');
+    addWsLog('Connecting to WebSocket…');
+
+    try {
+      const ws = await connectWebSocket();
+
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsState('connected');
+        addWsLog('✓ Connected');
+
+        // Stop REST fallback polling when WS is live
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+
+        ws.send(
+          JSON.stringify({
+            action: 'subscribe',
+            channel: 'orders',
+          })
+        );
+
+        addWsLog('→ Subscribed to orders');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          addWsLog(
+            `← ${JSON.stringify(msg).slice(0, 80)}`
+          );
+
+          const orderId = msg.orderId ?? msg.order_id;
+          const status = msg.status ?? msg.orderStatus;
+          const flags = msg.flags;
+
+          if (!orderId) return;
+
+          // Status update
+          if (status || flags) {
+            const kdsStatus = toKdsStatus(
+              status ?? '',
+              flags
+            );
+
+            const displayId =
+              `LM-${String(orderId)
+                .slice(0, 6)
+                .toUpperCase()}`;
+
+            setOrders(prev => {
+              const exists = prev.find(
+                o =>
+                  (o as any)._apiId === orderId ||
+                  o.id === displayId
+              );
+
+              if (exists) {
+                showToast(
+                  `📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`
+                );
+
+                return prev.map(o =>
+                  (o as any)._apiId === orderId ||
+                    o.id === displayId
+                    ? {
+                      ...o,
+                      status: kdsStatus,
+                    }
+                    : o
+                );
+              }
+
+              // New order sent through WS
+              if (msg.lineItems || msg.items) {
+                const newOrder = normaliseOrder(msg);
+
+                showToast(
+                  `🔔 WS: New order #${newOrder.id} — Table ${newOrder.table}`
+                );
+
+                if (audioRef.current) {
+                  playNewOrderBeep();
+                }
+
+                return [newOrder, ...prev];
+              }
+
+              return prev;
+            });
+          }
+        } catch {
+          addWsLog(
+            `← (non-JSON) ${String(event.data).slice(0, 60)}`
+          );
+        }
+      };
+
+      ws.onerror = () => {
+        setWsState('error');
+        addWsLog('✗ WebSocket error');
+      };
+
+      ws.onclose = e => {
+        setWsState('disconnected');
+
+        addWsLog(
+          `✗ Disconnected (code ${e.code})`
+        );
+
+        wsRef.current = null;
+
+        // Start REST fallback
+        startPolling();
+
+        // Retry WS connection
+        if (wsRetryRef.current) {
+          clearTimeout(wsRetryRef.current);
+        }
+
+        wsRetryRef.current = setTimeout(() => {
+          connectWs();
+        }, 5000);
+      };
+    } catch (err: any) {
+      setWsState('error');
+
+      addWsLog(
+        `✗ WebSocket connection failed: ${err?.message ?? 'Unknown error'
+        }`
+      );
+
+      // If WS cannot connect, use REST fallback
+      startPolling();
+
+      if (wsRetryRef.current) {
+        clearTimeout(wsRetryRef.current);
+      }
+
+      wsRetryRef.current = setTimeout(() => {
+        connectWs();
+      }, 5000);
+    }
+  }, []);
   const wsSend = (p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } };
 
-  const loadOrders = useCallback(async (silent = false) => {
-    if (!silent) setApiState('loading');
-    try {
-      // The proxy derives restaurantId from the signed-in user's token, server-side —
-      // this is just a friendlier early error for the "not linked to a branch" case.
-      if (!user?.restaurantId) {
+  const loadOrders = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setApiState('loading');
+      }
+
+      try {
+        if (!user?.restaurantId) {
+          setApiState('error');
+          setApiError(
+            'No restaurant assigned to this account'
+          );
+          return;
+        }
+
+        const res = await fetch('/api/orders', {
+          cache: 'no-store',
+          headers: await authHeaders(),
+        });
+
+        if (!res.ok) {
+          throw new Error(`API ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        const fresh = data.orders ?? [];
+
+        const freshIds = new Set<string>(
+          fresh.map((o: any) => String(o.orderId))
+        );
+
+        // Detect new orders
+        const newOnes = fresh.filter(
+          (o: any) =>
+            !prevIds.current.has(
+              String(o.orderId)
+            )
+        );
+
+        if (
+          newOnes.length > 0 &&
+          prevIds.current.size > 0
+        ) {
+          newOnes.forEach((o: any) => {
+            showToast(
+              `🔔 New order #${String(o.orderId)
+                .slice(0, 6)
+                .toUpperCase()} — Table ${o.tableNumber ??
+                o.tableName ??
+                o.tableId ??
+                'N/A'
+              }`
+            );
+
+            if (audioRef.current) {
+              playNewOrderBeep();
+            }
+          });
+        }
+
+        prevIds.current = freshIds;
+
+        setOrders(prev => {
+          const previousMap = new Map(
+            prev.map(o => [o.id, o])
+          );
+
+          return fresh.map((o: any) => {
+            const kdsOrder = normaliseOrder(o);
+
+            const existing =
+              previousMap.get(kdsOrder.id);
+
+            if (!existing) {
+              return kdsOrder;
+            }
+
+            const existingRank =
+              STATUS_RANK[existing.status] ?? 0;
+
+            const freshRank =
+              STATUS_RANK[kdsOrder.status] ?? 0;
+
+            const status =
+              existingRank > freshRank
+                ? existing.status
+                : kdsOrder.status;
+
+            return {
+              ...kdsOrder,
+              status,
+
+              // Keep local timer
+              elapsedSeconds:
+                existing.elapsedSeconds,
+
+              // Keep local dish done state
+              items: existing.items,
+            };
+          });
+        });
+
+        setApiState('live');
+        setApiError('');
+        pollStart.current = Date.now();
+      } catch (err: any) {
+        console.error(
+          '❌ KDS API ERROR:',
+          err
+        );
+
+        setApiError(
+          err?.message ?? 'Failed to load orders'
+        );
+
         setApiState('error');
-        setApiError('No restaurant assigned to this account');
+      }
+    },
+    [user]
+  );
+  useEffect(() => {
+    // Initial REST load
+    loadOrders();
+
+    // Try WebSocket
+    connectWs();
+
+    return () => {
+      if (wsRetryRef.current) {
+        clearTimeout(wsRetryRef.current);
+        wsRetryRef.current = null;
+      }
+
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [loadOrders, connectWs]);
+  const startPolling = useCallback(() => {
+    // Don't create duplicate intervals
+    if (pollRef.current) {
+      return;
+    }
+
+    addWsLog(
+      'REST fallback polling started'
+    );
+
+    // Immediately refresh once
+    loadOrders(true);
+
+    pollRef.current = setInterval(() => {
+      // If WS became connected, stop polling
+      if (
+        wsRef.current?.readyState === WebSocket.OPEN
+      ) {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+
         return;
       }
 
-      const res = await fetch('/api/orders', {
-        cache: 'no-store',
-        headers: await authHeaders(),   // was missing — every poll was 403ing without this
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
+      loadOrders(true);
+    }, POLL_INTERVAL);
+  }, [loadOrders]);
 
-      const data = await res.json();
-
-      const fresh = data.orders ?? [];
-      const freshIds = new Set<string>(fresh.map((o: any) => String(o.orderId)));
-
-      const newOnes = fresh.filter((o: any) => !prevIds.current.has(o.orderId));
-      if (newOnes.length > 0 && prevIds.current.size > 0) {
-        newOnes.forEach((o: any) => {
-          showToast(`🔔 New order #${o.orderId.slice(0, 6).toUpperCase()} — Table ${o.tableId ? 'Dine-in' : 'Walk-in'}`);
-          if (audio) playNewOrderBeep();
-        });
-      }
-      prevIds.current = freshIds;
-
-      setOrders(prev => {
-        const m = new Map(prev.map(o => [o.id, o]));
-        return fresh.map((o: any) => {
-          // ✅ NORMALISE KDS ORDER
-          const kdsOrder = normaliseOrder(o);
-          const e = m.get(kdsOrder.id);
-          if (!e) return kdsOrder;
-          const er = STATUS_RANK[e.status] ?? 0;
-          const fr = STATUS_RANK[kdsOrder.status] ?? 0;
-          const status = er > fr ? e.status : kdsOrder.status;
-          return { ...kdsOrder, status, elapsedSeconds: e.elapsedSeconds, items: e.items };
-        });
-      });
-      setApiState('live'); pollStart.current = Date.now();
-    } catch (err: any) {
-      console.error('❌ KDS API ERROR:', err);
-      setApiError(err?.message ?? 'Failed'); setApiState('error');
-    }
-  }, [user]);
-
-  useEffect(() => { loadOrders(); const id = setInterval(() => loadOrders(true), POLL_INTERVAL); return () => clearInterval(id); }, [loadOrders]);
 
   const advanceOrder = async (orderId: string) => {
     const order = orders.find(o => o.id === orderId); if (!order) return;
