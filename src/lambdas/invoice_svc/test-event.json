@@ -1,0 +1,20 @@
+{
+  "version": "0",
+  "id": "test-invoice-20260826031725",
+  "detail-type": "payment.succeeded",
+  "source": "app.payment_svc",
+  "account": "990016797093",
+  "time": "2026-08-25T22:26:23Z",
+  "region": "ap-south-1",
+  "resources": [],
+  "detail": {
+    "tenant_id": "1c71a684-c20f-411b-9cd6-45ab2f24413b",
+    "plan_id": "monthly",
+    "payment_id": "MOCK_TXN_TEST_PAYMENT_20260826031725",
+    "payment_status": "succeeded",
+    "amount": 30.99,
+    "currency": "PKR",
+    "order_id": "TEST_PAYMENT_20260826031725",
+    "transaction_id": "MOCK_TXN_TEST_PAYMENT_20260826031725"
+  }
+}

@@ -163,6 +163,47 @@ async def initiate_payment(
             detail=f"Failed to initiate payment: {str(exc)}",
         )
 
+@router.get("/status/{order_id}")
+async def get_payment_status(
+    order_id: str,
+    db_svc: PaymentDbService = Depends(),
+):
+    try:
+        payment = db_svc.get_payment_by_order_id(order_id)
+
+        if not payment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment record not found",
+            )
+
+        return {
+            "status": payment.get("status"),
+            "orderId": payment.get("orderId"),
+            "transactionId": payment.get("transactionId"),
+            "amount": payment.get("amount"),
+            "tenantId": payment.get("tenantId"),
+            "planId": payment.get("planId"),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception(
+            "Error fetching payment status",
+            extra={
+                "order_id": order_id,
+                "error": str(exc),
+            },
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch payment status: {str(exc)}",
+        )
+
+
 
 @router.post("/callback")
 async def easypaisa_callback(

@@ -45,6 +45,7 @@ export function loadTokens(): CognitoTokens | null {
  * sidebar. Anything making an API call should use `getValidIdToken`, which
  * refreshes first if the token is close to expiring.
  */
+
 export function getStoredIdToken(): string | null {
   return loadTokens()?.idToken ?? null
 }
@@ -169,7 +170,14 @@ export async function refreshTokens(): Promise<CognitoTokens | null> {
     return tokens
   } catch { return null }
 }
-
+export async function getValidToken(): Promise<string | null> {
+  let tokens = loadTokens()
+  if (!tokens) return null
+  if (Date.now() > tokens.expiresAt - 5 * 60 * 1000) {
+    tokens = await refreshTokens()
+  }
+  return tokens?.accessToken ?? null
+}
 // ── Get valid tokens (auto-refresh) ──────────────────────────────────────────
 export async function getValidIdToken(): Promise<string | null> {
   let tokens = loadTokens()
@@ -180,14 +188,7 @@ export async function getValidIdToken(): Promise<string | null> {
   return tokens?.idToken ?? null
 }
 
-export async function getValidToken(): Promise<string | null> {
-  let tokens = loadTokens()
-  if (!tokens) return null
-  if (Date.now() > tokens.expiresAt - 5 * 60 * 1000) {
-    tokens = await refreshTokens()
-  }
-  return tokens?.accessToken ?? null
-}
+
 
 // ── Forgot password ──────────────────────────────────────────────────────────
 export async function forgotPassword(email: string): Promise<void> {
