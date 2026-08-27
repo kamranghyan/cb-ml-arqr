@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Search, ShoppingCart, Loader2, Plus, Check } from 'lucide-react';
 import { fetchMenuItems, normaliseItem, type ApiMenuItem } from '@/lib/menu-api';
 import { useCartStore } from '@/lib/store';
+import { toast } from 'sonner';
 import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
@@ -44,8 +45,11 @@ function MenuContent() {
     const urlTid = params.get('tid') || '';
     const storedRid = sessionStorage.getItem('lm_rid') || '';
     const storedTid = sessionStorage.getItem('lm_tid') || '';
-    if (!urlRid && !urlTid && !storedRid && !storedTid) { window.location.href = '/guest'; return; }
-    if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
+    if (!urlRid && !urlTid && !storedRid && !storedTid) {
+      toast.error('Please scan a table QR code first.');
+      window.location.href = '/guest';
+      return;
+    } if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
     if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
 
     const menuRid = getGuestScope().restaurantId;
@@ -58,7 +62,12 @@ function MenuContent() {
         if ((raw[0] as any)?.restaurantName) setRestName((raw[0] as any).restaurantName + ' Menu');
         setLoading(false);
       })
-      .catch(() => { clearTimeout(timeout); setLoading(false); });
+      .catch((error) => {
+        console.error('Failed to load menu:', error);
+        clearTimeout(timeout);
+        setLoading(false);
+        toast.error('Unable to load menu. Please try again.');
+      });
   }, [params]);
 
   const catRaw = params.get('cat') || 'all';
@@ -123,6 +132,7 @@ function MenuContent() {
       imageUrl: (item as any).imageUrl || '',
     });
     setAdded(p => ({ ...p, [item.id]: true }));
+    toast.success(`${item.name} added to cart`);
     setTimeout(() => setAdded(p => ({ ...p, [item.id]: false })), 1600);
   };
 
@@ -503,7 +513,7 @@ function MenuContent() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      opacity: added? "1" : "0.5",
+                      opacity: added ? "1" : "0.5",
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
                       outline: 'none',
@@ -526,7 +536,7 @@ function MenuContent() {
                       }
                     }}
                   >
-                     <Plus size={16} />
+                    <Plus size={16} />
                   </button>
                 </div>
               </div>

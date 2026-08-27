@@ -16,6 +16,7 @@ import { getTheme, toggleTheme } from '@/lib/theme';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { isDark } = useTheme();
+  
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // Get initial theme

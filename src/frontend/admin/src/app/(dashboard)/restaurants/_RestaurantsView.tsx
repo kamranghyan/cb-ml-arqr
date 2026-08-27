@@ -6,6 +6,7 @@ import {
   Plus, Edit2, Trash2, X, Loader2, RefreshCw, Store, AlertCircle, Lock, ChevronRight,
   CloudUpload, MapPin,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   fetchRestaurants,
   fetchRestaurant,
@@ -54,14 +55,12 @@ const getAccents = (isDark: boolean) => ({
   },
 });
 
-type Toast = { msg: string; kind: 'ok' | 'err' } | null;
 
 export default function RestaurantsView() {
   const [rows, setRows] = useState<ApiRestaurant[]>([]);
   const [tenant, setTenant] = useState<ApiTenant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<Toast>(null);
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiRestaurant }>({ open: false });
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
@@ -96,9 +95,12 @@ export default function RestaurantsView() {
   const accents = getAccents(isDark);
 
   const showToast = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 4500);
-  };
+  if (kind === 'err') {
+    toast.error(msg);
+  } else {
+    toast.success(msg);
+  }
+};
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -539,27 +541,6 @@ export default function RestaurantsView() {
           accents={accents}
           isDark={isDark}
         />
-      )}
-
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          padding: '12px 18px',
-          borderRadius: 10,
-          background: toast.kind === 'ok' ? colors.green : BRAND,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 14,
-          maxWidth: 420,
-          zIndex: 100,
-          fontFamily: "'Poppins', sans-serif",
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-        }}>
-          {toast.msg}
-        </div>
       )}
 
       {/* ── Confirm Delete Modal ── */}

@@ -17,6 +17,7 @@
     "react-dom": "^18",
     "react-toastify": "^11.1.0",
     "socket.io-client": "^4.7.5",
+    "sonner": "^2.0.8",
     "three": "^0.164.1",
     "tsx": "^4.23.7",
     "zustand": "^4.5.2"

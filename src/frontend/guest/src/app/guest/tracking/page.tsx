@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle, ChefHat, Bell, Bike, Plus, Minus, ThumbsUp, Sparkles } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { toast } from 'sonner';
 import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
@@ -87,11 +88,11 @@ export default function TrackingPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [prepTime, setPrepTime] = useState('20-30 mins');
-  
+
   // ✅ New states for order completion
   const [showCompleteOverlay, setShowCompleteOverlay] = useState(false);
   const [isOrderCompleted, setIsOrderCompleted] = useState(false);
-  
+
   const isMounted = useRef(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstLoad = useRef(true);
@@ -115,9 +116,9 @@ export default function TrackingPage() {
   // Session check only once
   useEffect(() => {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
-    if (!hasSession) { 
-      window.location.href = '/guest'; 
-      return; 
+    if (!hasSession) {
+      window.location.href = '/guest';
+      return;
     }
     setSessionTid(sessionStorage.getItem('lm_tid') ?? '');
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
@@ -128,29 +129,29 @@ export default function TrackingPage() {
       console.log('⏭️ Skipping duplicate load call');
       return;
     }
-    
+
     if (!silent) {
       setLoading(true);
       isFirstLoad.current = false;
     }
-    
+
     try {
       const { restaurantId } = getGuestScope();
       const url = new URL('/api/orders', window.location.origin);
       url.searchParams.set('rid', restaurantId);
       console.log("📡 Fetching orders from:", url.toString());
 
-      const res = await fetch(url.toString(), { 
+      const res = await fetch(url.toString(), {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache'
         }
       });
-      
+
       if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
-      const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) => 
+      const all = (data.orders ?? []).sort((a: ApiOrder, b: ApiOrder) =>
         new Date(b.placedAt ?? 0).getTime() - new Date(a.placedAt ?? 0).getTime()
       );
 
@@ -174,14 +175,14 @@ export default function TrackingPage() {
           return { ...o, status: (!isFinal && er > fr) ? ex.status : o.status };
         });
       });
-      
+
       setLastSync(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
       setError('');
     } catch (e: any) {
       console.error('❌ API ERROR:', e);
       setError(e?.message ?? 'Failed');
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -235,7 +236,7 @@ export default function TrackingPage() {
 
   const currentStep = latest ? getStepIndex(latest.status) : 0;
   const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
-  
+
   // ✅ Check if order is at DELIVERED/Enjoy step
   const isAtDeliveredStep = latest ? getStepIndex(latest.status) === 3 : false;
   const isOrderAlreadyCompleted = latest ? ['COMPLETED', 'DONE'].includes((latest.status ?? '').toUpperCase()) : false;
@@ -252,27 +253,41 @@ export default function TrackingPage() {
 
   const cancelOrder = async () => {
     if (!latest) return;
-    setCancelling(true); setCancelError('');
+
+    setCancelling(true);
+    setCancelError('');
+
     try {
       const apiId = (latest as any)._apiId ?? latest.orderId;
       const { restaurantId: rid } = getGuestScope();
+
       const res = await fetch(`/api/orders/${apiId}?rid=${rid}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           restaurantId: getGuestScope().restaurantId,
           orderId: apiId,
           cancelled: true,
         }),
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error ?? `Error ${res.status}`);
       }
+
+      toast.success('Order cancelled successfully');
+
       setShowCancel(false);
+
       router.push('/guest');
     } catch (err: any) {
-      setCancelError(err?.message ?? 'Failed to cancel order');
+      const message = err?.message ?? 'Failed to cancel order';
+
+      setCancelError(message);
+      toast.error(message);
       setCancelling(false);
     }
   };
@@ -280,21 +295,21 @@ export default function TrackingPage() {
   // ✅ Handle "Received" button click - show completion overlay
   const handleOrderReceived = () => {
     setShowCompleteOverlay(true);
-    
+
     // Auto-redirect after 3 seconds with dynamic query params
     redirectTimerRef.current = setTimeout(() => {
       setShowCompleteOverlay(false);
       setIsOrderCompleted(true);
-      
+
       // ✅ Get restaurantId and tableId from session storage
       const restaurantId = sessionStorage.getItem('lm_rid') || '';
       const tableId = sessionStorage.getItem('lm_tid') || '';
-      
+
       // Clear session storage
       sessionStorage.removeItem('lm_rid');
       sessionStorage.removeItem('lm_tid');
       sessionStorage.removeItem('lm_table');
-      
+
       // ✅ Redirect to /guest with dynamic query parameters
       router.push(`/guest?rid=${restaurantId}&tid=${tableId}`);
     }, 3000);
@@ -378,7 +393,7 @@ export default function TrackingPage() {
             }}>
               <CheckCircle size={40} color={D.btnText} />
             </div>
-            
+
             <h2 style={{
               fontSize: 22,
               fontWeight: 700,
@@ -401,7 +416,7 @@ export default function TrackingPage() {
             }}>
               Redirecting to home...
             </p>
-            
+
             {/* Progress dots */}
             <div style={{
               display: 'flex',
@@ -581,7 +596,7 @@ export default function TrackingPage() {
         </div>
       </div>
 
-      <div style={{ flex: 1, marginBottom:"50px", overflowY: 'auto', padding: `0 20px ${latest && !isCancelled && !isAtDeliveredStep ? 180 : 100}px` }}>
+      <div style={{ flex: 1, marginBottom: "50px", overflowY: 'auto', padding: `0 20px ${latest && !isCancelled && !isAtDeliveredStep ? 180 : 100}px` }}>
 
         {/* Loading */}
         {loading && orders.length === 0 && (
@@ -977,7 +992,7 @@ export default function TrackingPage() {
       )}
 
       <BottomNav />
-      
+
       <style>{`
         .animate-spin {
           animation: spin 0.8s linear infinite;

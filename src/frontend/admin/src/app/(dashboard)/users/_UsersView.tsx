@@ -8,6 +8,7 @@ import {
   fetchUsers, createAdmin, deleteUser, fetchTenants,
   type ApiUser, type ApiTenant,
 } from '@/lib/auth-api';
+import { toast } from 'sonner';
 import { loadUser } from '@/lib/cognito';
 import { getTheme } from '@/lib/theme';
 
@@ -39,7 +40,6 @@ export default function UsersView() {
   const [tenants, setTenants] = useState<ApiTenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [isDark, setIsDark] = useState(false);
@@ -71,10 +71,7 @@ export default function UsersView() {
 
   const me = typeof window !== 'undefined' ? loadUser() : null;
 
-  const say = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 4000);
-  };
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,16 +105,18 @@ export default function UsersView() {
 
   async function remove(u: ApiUser) {
     if (me && u.email === me.email) {
-      say('You cannot delete your own account.', 'err');
+      toast.error('You cannot delete your own account.');
       return;
     }
     if (!confirm(`Delete ${u.email}? They lose access immediately.`)) return;
     try {
       await deleteUser(u.username);
-      say('User deleted');
-      load();
+      toast.success(`User ${u.email} deleted successfully.`);
+      await load();
     } catch (e: any) {
-      say(e.message, 'err');
+      toast.error(
+        e?.message || `Failed to delete ${u.email}. Please try again.`
+      );
     }
   }
 
@@ -527,31 +526,9 @@ export default function UsersView() {
         <AdminModal
           onClose={() => setOpen(false)}
           onSaved={() => { setOpen(false); load(); }}
-          say={say}
           colors={colors}
           isDark={isDark}
         />
-      )}
-
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          padding: '12px 18px',
-          borderRadius: 10,
-          background: toast.kind === 'ok' ? colors.green : BRAND,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 14,
-          maxWidth: 420,
-          zIndex: 100,
-          fontFamily: "'Poppins', sans-serif",
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-        }}>
-          {toast.msg}
-        </div>
       )}
     </div>
   );
@@ -564,13 +541,11 @@ export default function UsersView() {
 function AdminModal({
   onClose,
   onSaved,
-  say,
   colors,
   isDark,
 }: {
   onClose: () => void;
   onSaved: () => void;
-  say: (m: string, k?: 'ok' | 'err') => void;
   colors: ReturnType<typeof getColors>;
   isDark: boolean;
 }) {
@@ -580,12 +555,20 @@ function AdminModal({
 
   async function save() {
     setSaving(true);
+
     try {
       await createAdmin(f);
-      say(`Administrator created — share the login with ${f.email}`);
+
+      toast.success(
+        `Administrator ${f.email} created successfully.`
+      );
+
       onSaved();
     } catch (e: any) {
-      say(e.message, 'err');
+      toast.error(
+        e?.message ||
+        `Failed to create administrator ${f.email}. Please check the details and try again.`
+      );
     } finally {
       setSaving(false);
     }

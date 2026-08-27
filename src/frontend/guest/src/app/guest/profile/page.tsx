@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, User, MapPin, Sun, Moon, FileText, Heart, QrCode, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useGuestProfileStore } from '@/lib/guest-profile-store';
-import { clearGuestScope , extractTableNumber} from '@/lib/guest-scope';
+import { clearGuestScope, extractTableNumber } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import GuestTopBar from '@/components/guest/GuestTopBar';
+import { toast } from 'sonner';
 import jsQR from 'jsqr';
 
 const BRAND = '#ff5723';
@@ -90,6 +91,7 @@ export default function ProfilePage() {
         console.error('Camera error:', error);
         if (!cancelled) {
           setScanError('Unable to access camera. Please allow camera permissions.');
+          toast.error('Unable to access camera. Please allow camera permissions.');
           setScanning(false);
         }
       }
@@ -199,7 +201,12 @@ export default function ProfilePage() {
 
         sessionStorage.setItem('lm_rid', data.restaurantId);
         sessionStorage.setItem('lm_tid', data.tableId);
-        sessionStorage.setItem('lm_table', tableNumber || '');
+
+        if (tableNum) {
+          sessionStorage.setItem('lm_table', tableNum);
+        }
+
+        toast.success(`Table ${tableNum || ''} selected`);
 
         console.log('✅ Redirecting to /guest/menu');
         router.push('/guest/menu');
@@ -207,6 +214,7 @@ export default function ProfilePage() {
       } else {
         console.warn('⚠️ Missing restaurantId or tableId in JSON:', data);
         setScanError('Invalid QR data. Missing restaurant or table info.');
+        toast.error('Invalid QR code: restaurant or table information is missing.');
       }
     } catch (e) {
       console.log('Not JSON, trying URL...');
@@ -244,10 +252,13 @@ export default function ProfilePage() {
         } else {
           console.warn('⚠️ Missing rid or tid in URL:', { rid, tid });
           setScanError('Invalid QR URL. Missing restaurant or table info.');
+          toast.error('Invalid QR code: restaurant or table information is missing.');
         }
       } catch (err) {
         console.error('❌ Invalid QR code:', err);
         setScanError('Invalid QR code format. Please scan a valid table QR.');
+        toast.error('Invalid QR code. Please scan a valid table QR.');
+
         setTimeout(() => {
           setScanError('');
           setShowScanner(true);
@@ -260,6 +271,9 @@ export default function ProfilePage() {
     setFullName(nameInput.trim());
     setPhone(phoneInput.trim());
     setSaved(true);
+
+    toast.success('Profile details saved successfully');
+
     setTimeout(() => setSaved(false), 1600);
   };
 
@@ -268,6 +282,7 @@ export default function ProfilePage() {
     sessionStorage.removeItem('lm_table');
     sessionStorage.removeItem('lm_rid');
     sessionStorage.removeItem('lm_tid');
+    toast.info('Scan a QR code to switch to another table');
     setShowScanner(true);
   };
 
