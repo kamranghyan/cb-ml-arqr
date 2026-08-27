@@ -31,20 +31,20 @@ const getColors = (isDark: boolean) => ({
 
 // ── Accent colors based on theme ──
 const getAccents = (isDark: boolean) => ({
-  green: { 
-    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
-    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
-    text: isDark ? '#4ade80' : '#16a34a' 
+  green: {
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
+    text: isDark ? '#4ade80' : '#16a34a'
   },
-  orange: { 
-    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
-    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
-    text: isDark ? '#fb923c' : '#d97706' 
+  orange: {
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A',
+    text: isDark ? '#fb923c' : '#d97706'
   },
-  danger: { 
-    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
-    text: isDark ? '#ff8a5c' : BRAND 
+  danger: {
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0',
+    text: isDark ? '#ff8a5c' : BRAND
   },
 });
 
@@ -81,17 +81,17 @@ export default function AdminHistory() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -414,27 +414,35 @@ export default function AdminHistory() {
                         fontWeight: 700,
                         cursor: 'pointer',
                         background: active ? colors.text : colors.card2,
-                        color: active ? '#fff' : colors.muted,
+                        color: active
+                          ? (isDark ? '#111111' : '#FFFFFF')
+                          : colors.muted,
                         transition: 'all 0.2s ease',
                         fontFamily: "'Poppins', sans-serif",
                         outline: 'none',
                       }}
                       onFocus={(e) => {
                         e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+                        e.currentTarget.style.borderColor = colors.text;
                       }}
                       onBlur={(e) => {
                         e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = active
+                          ? colors.text
+                          : colors.border;
                       }}
                       onMouseEnter={(e) => {
                         if (!active) {
                           e.currentTarget.style.background = colors.hoverBg;
                           e.currentTarget.style.color = colors.text;
+                          e.currentTarget.style.borderColor = colors.text;
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!active) {
                           e.currentTarget.style.background = colors.card2;
                           e.currentTarget.style.color = colors.muted;
+                          e.currentTarget.style.borderColor = colors.border;
                         }
                       }}
                     >
@@ -497,10 +505,10 @@ export default function AdminHistory() {
               color: colors.muted,
             }}>
               <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-              <p style={{ 
-                marginTop: 12, 
-                fontSize: 14, 
-                fontFamily: "'Poppins', sans-serif" 
+              <p style={{
+                marginTop: 12,
+                fontSize: 14,
+                fontFamily: "'Poppins', sans-serif"
               }}>
                 Loading orders…
               </p>
@@ -712,7 +720,7 @@ export default function AdminHistory() {
                                 maxWidth: '180px',
                                 fontFamily: "'Poppins', sans-serif",
                               }}>
-                                <div style={{ 
+                                <div style={{
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',

@@ -59,11 +59,30 @@ export default function TenantPayment() {
     const [subscription, setSubscription] =
         useState<SubscriptionData | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [mobileNo, setMobileNo] = useState('');
 
     // ─────────────────────────────────────────────
     // Subscription data
     // ─────────────────────────────────────────────
+    useEffect(() => {
+        try {
+            const storedUser = JSON.parse(
+                localStorage.getItem('menulay_user') || '{}'
+            );
 
+            const savedMobile =
+                storedUser?.mobileNo ||
+                storedUser?.mobile_no ||
+                storedUser?.phone ||
+                '';
+
+            if (savedMobile) {
+                setMobileNo(savedMobile);
+            }
+        } catch {
+            // Ignore invalid localStorage data
+        }
+    }, []);
     useEffect(() => {
         const plan = searchParams.get('plan');
         const name = searchParams.get('name');
@@ -372,295 +391,280 @@ export default function TenantPayment() {
             );
         }
     };
-    
+
     const handlePayment = async () => {
-    if (!subscription || processing) {
-        return;
-    }
-
-    setProcessing(true);
-    setError('');
-
-    try {
-        // ─────────────────────────────────────
-        // ACCESS TOKEN
-        // ─────────────────────────────────────
-
-        const token = await getValidToken();
-
-        if (!token) {
-            throw new Error(
-                'Session expired. Please login again.'
-            );
+        if (!subscription || processing) {
+            return;
         }
 
-        // Debug token to verify that this is
-        // the Cognito ACCESS token expected by
-        // API Gateway Cognito Authorizer.
-        debugCognitoToken(token);
-
-        console.log(
-            '[PAYMENT] Access token available:',
-            {
-                exists: !!token,
-                parts: token.split('.').length,
-            }
-        );
-
-        // ─────────────────────────────────────
-        // USER
-        // ─────────────────────────────────────
-
-        let user: any = {};
+        setProcessing(true);
+        setError('');
 
         try {
-            user = JSON.parse(
-                localStorage.getItem(
-                    'menulay_user'
-                ) || '{}'
+            // ─────────────────────────────────────
+            // ACCESS TOKEN
+            // ─────────────────────────────────────
+
+            const token = await getValidToken();
+
+            if (!token) {
+                throw new Error(
+                    'Session expired. Please login again.'
+                );
+            }
+
+            // Debug Cognito access token
+            debugCognitoToken(token);
+
+            console.log(
+                '[PAYMENT] Access token available:',
+                {
+                    exists: !!token,
+                    parts: token.split('.').length,
+                }
             );
-        } catch {
-            user = {};
-        }
 
-        // ─────────────────────────────────────
-        // TENANT ID
-        // ─────────────────────────────────────
+            // ─────────────────────────────────────
+            // USER
+            // ─────────────────────────────────────
 
-        const tenantId =
-            user?.tenantId ||
-            user?.tenant_id ||
-            subscription.tenant_id;
+            let user: any = {};
 
-        if (!tenantId) {
-            throw new Error(
-                'Tenant ID not found. Please login again.'
-            );
-        }
+            try {
+                user = JSON.parse(
+                    localStorage.getItem(
+                        'menulay_user'
+                    ) || '{}'
+                );
+            } catch {
+                user = {};
+            }
 
-        // ─────────────────────────────────────
-        // ORDER ID
-        // ─────────────────────────────────────
+            // ─────────────────────────────────────
+            // TENANT ID
+            // ─────────────────────────────────────
 
-        const orderId =
-            `SUB_${tenantId}_${Date.now()}`;
+            const tenantId =
+                user?.tenantId ||
+                user?.tenant_id ||
+                subscription.tenant_id;
 
-        // ─────────────────────────────────────
-        // PAYMENT PAYLOAD
-        // ─────────────────────────────────────
+            if (!tenantId) {
+                throw new Error(
+                    'Tenant ID not found. Please login again.'
+                );
+            }
 
-        const paymentPayload = {
-            tenantId,
+            if (!mobileNo.trim()) {
+                throw new Error(
+                    'Mobile number is required.'
+                );
+            }
+            // ─────────────────────────────────────
+            // ORDER ID
+            // ─────────────────────────────────────
 
-            planId:
-                subscription.plan_id,
+            const orderId =
+                `SUB_${tenantId}_${Date.now()}`;
 
-            amount:
-                subscription.price,
+            // ─────────────────────────────────────
+            // PAYMENT PAYLOAD
+            // ─────────────────────────────────────
 
-            orderId,
-
-            email:
-                user?.email || '',
-
-            mobileNo:
-                user?.mobileNo ||
-                user?.mobile_no ||
-                user?.phone ||
-                '',
-        };
-
-        console.log(
-            '[PAYMENT] Initiating:',
-            {
+            const paymentPayload = {
                 tenantId,
+
                 planId:
                     subscription.plan_id,
+
                 amount:
                     subscription.price,
+
                 orderId,
+
                 email:
                     user?.email || '',
+
                 mobileNo:
-                    user?.mobileNo ||
-                    user?.mobile_no ||
-                    user?.phone ||
-                    '',
-            }
-        );
-
-        // ─────────────────────────────────────
-        // INITIATE PAYMENT
-        // ─────────────────────────────────────
-
-        const paymentRes = await fetch(
-            '/api/payment-svc/payment/initiate',
-            {
-                method: 'POST',
-
-                headers: {
-                    'Content-Type':
-                        'application/json',
-
-                    Authorization:
-                        `Bearer ${token}`,
-
-                    'X-Tenant-Id':
-                        tenantId,
-
-                    Accept:
-                        'application/json',
-                },
-
-                body:
-                    JSON.stringify(
-                        paymentPayload
-                    ),
-
-                cache:
-                    'no-store',
-            }
-        );
-
-        // ─────────────────────────────────────
-        // READ RESPONSE
-        // ─────────────────────────────────────
-
-        const raw =
-            await paymentRes.text();
-
-        let paymentData: any = {};
-
-        try {
-            paymentData =
-                raw
-                    ? JSON.parse(raw)
-                    : {};
-        } catch {
-            paymentData = {
-                message: raw,
+                    mobileNo.trim(),
             };
-        }
 
-        console.log(
-            '[PAYMENT] Initiate response:',
-            {
-                status:
-                    paymentRes.status,
+            console.log(
+                '[PAYMENT] Initiating:',
+                {
+                    tenantId,
+                    planId:
+                        subscription.plan_id,
+                    amount:
+                        subscription.price,
+                    orderId,
+                    email:
+                        user?.email || '',
+                    mobileNo:
+                        mobileNo.trim(),
+                }
+            );
 
-                data:
-                    paymentData,
+            // ─────────────────────────────────────
+            // INITIATE PAYMENT
+            // ─────────────────────────────────────
+
+            const paymentRes = await fetch(
+                '/api/payment-svc/payment/initiate',
+                {
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type':
+                            'application/json',
+
+                        Authorization:
+                            `Bearer ${token}`,
+
+                        'X-Tenant-Id':
+                            tenantId,
+
+                        Accept:
+                            'application/json',
+                    },
+
+                    body:
+                        JSON.stringify(
+                            paymentPayload
+                        ),
+
+                    cache:
+                        'no-store',
+                }
+            );
+
+            // ─────────────────────────────────────
+            // READ RESPONSE
+            // ─────────────────────────────────────
+
+            const raw =
+                await paymentRes.text();
+
+            let paymentData: any = {};
+
+            try {
+                paymentData =
+                    raw
+                        ? JSON.parse(raw)
+                        : {};
+            } catch {
+                paymentData = {
+                    message: raw,
+                };
             }
-        );
 
-        // ─────────────────────────────────────
-        // HTTP ERROR
-        // ─────────────────────────────────────
+            console.log(
+                '[PAYMENT] Initiate response:',
+                {
+                    status:
+                        paymentRes.status,
 
-        if (!paymentRes.ok) {
+                    data:
+                        paymentData,
+                }
+            );
+
+            // ─────────────────────────────────────
+            // HTTP ERROR
+            // ─────────────────────────────────────
+
+            if (!paymentRes.ok) {
+                throw new Error(
+                    paymentData?.detail ||
+                    paymentData?.message ||
+                    paymentData?.error ||
+                    `Payment initiation failed (${paymentRes.status})`
+                );
+            }
+
+            // ─────────────────────────────────────
+            // PAYMENT STATUS
+            // ─────────────────────────────────────
+
+            const paymentStatus =
+                String(
+                    paymentData?.status ||
+                    ''
+                ).toUpperCase();
+
+            console.log(
+                '[PAYMENT] Initial payment status:',
+                paymentStatus
+            );
+
+            // ─────────────────────────────────────
+            // PENDING
+            // No polling
+            // ─────────────────────────────────────
+
+            if (paymentStatus === 'PENDING') {
+                console.log(
+                    '[PAYMENT] Payment is PENDING. No polling.'
+                );
+
+                setError(
+                    'Payment is being processed. Please check your subscription shortly.'
+                );
+
+                return;
+            }
+
+            // ─────────────────────────────────────
+            // SUCCESS
+            // ─────────────────────────────────────
+
+            if (
+                paymentStatus === 'SUCCESS' ||
+                paymentStatus === 'SUCCEEDED'
+            ) {
+                console.log(
+                    '[PAYMENT] Payment confirmed successfully.'
+                );
+
+                setIsSuccess(true);
+
+                localStorage.removeItem(
+                    'pending_payment'
+                );
+
+                setTimeout(() => {
+                    router.push(
+                        '/subscription'
+                    );
+                }, 3000);
+
+                return;
+            }
+
+            // ─────────────────────────────────────
+            // UNKNOWN / FAILED STATUS
+            // ─────────────────────────────────────
+
             throw new Error(
-                paymentData?.detail ||
                 paymentData?.message ||
                 paymentData?.error ||
-                `Payment initiation failed (${paymentRes.status})`
+                `Payment initiation returned unexpected status: ${paymentStatus || 'UNKNOWN'}`
             );
+
+        } catch (e: any) {
+            console.error(
+                '[PAYMENT] Error:',
+                e
+            );
+
+            setError(
+                e?.message ||
+                'Payment failed. Please try again.'
+            );
+        } finally {
+            setProcessing(false);
         }
-
-        // ─────────────────────────────────────
-        // PAYMENT STATUS
-        // ─────────────────────────────────────
-
-        const paymentStatus =
-            String(
-                paymentData?.status ||
-                ''
-            ).toUpperCase();
-
-        console.log(
-            '[PAYMENT] Initial payment status:',
-            paymentStatus
-        );
-
-        if (
-            paymentStatus !==
-                'SUCCESS' &&
-            paymentStatus !==
-                'PENDING'
-        ) {
-            throw new Error(
-                paymentData?.message ||
-                'Payment initiation failed'
-            );
-        }
-
-        // ─────────────────────────────────────
-        // PENDING → POLL STATUS
-        // ─────────────────────────────────────
-
-        if (
-            paymentStatus ===
-            'PENDING'
-        ) {
-            console.log(
-                '[PAYMENT] Payment is PENDING. Starting status polling...'
-            );
-
-            const finalOrderId =
-                paymentData?.orderId ||
-                orderId;
-
-            console.log(
-                '[PAYMENT] Polling order:',
-                finalOrderId
-            );
-
-            const succeeded =
-                await checkPaymentStatus(
-                    finalOrderId,
-                    tenantId
-                );
-
-            if (!succeeded) {
-                throw new Error(
-                    'Payment could not be confirmed.'
-                );
-            }
-        }
-
-        // ─────────────────────────────────────
-        // SUCCESS
-        // ─────────────────────────────────────
-
-        console.log(
-            '[PAYMENT] Payment confirmed successfully.'
-        );
-
-        setIsSuccess(true);
-
-        localStorage.removeItem(
-            'pending_payment'
-        );
-
-        setTimeout(() => {
-            router.push(
-                '/subscription'
-            );
-        }, 3000);
-
-    } catch (e: any) {
-        console.error(
-            '[PAYMENT] Error:',
-            e
-        );
-
-        setError(
-            e?.message ||
-            'Payment failed. Please try again.'
-        );
-    } finally {
-        setProcessing(false);
-    }
-};
+    };
 
     // ─────────────────────────────────────────────
     // Loading
@@ -1068,7 +1072,65 @@ export default function TenantPayment() {
                             </div>
                         </div>
                     </div>
+                    <div
+                        style={{
+                            background: colors.card,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 16,
+                            padding: 24,
+                            marginBottom: 20,
+                        }}
+                    >
+                        <label
+                            htmlFor="mobileNo"
+                            style={{
+                                display: 'block',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: colors.text,
+                                marginBottom: 8,
+                            }}
+                        >
+                            Mobile Number
+                        </label>
 
+                        <input
+                            id="mobileNo"
+                            type="tel"
+                            value={mobileNo}
+                            onChange={(e) => {
+                                setMobileNo(e.target.value);
+                                if (error) {
+                                    setError('');
+                                }
+                            }}
+                            placeholder="03XXXXXXXXX"
+                            autoComplete="tel"
+                            disabled={processing}
+                            style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '13px 14px',
+                                borderRadius: 10,
+                                border: `1px solid ${colors.border}`,
+                                background: colors.card2,
+                                color: colors.text,
+                                fontSize: 14,
+                                outline: 'none',
+                                fontFamily: "'Poppins', sans-serif",
+                            }}
+                        />
+
+                        <p
+                            style={{
+                                margin: '8px 0 0',
+                                fontSize: 12,
+                                color: colors.subtle,
+                            }}
+                        >
+                            Enter your Easypaisa registered mobile number.
+                        </p>
+                    </div>
                     <div
                         style={{
                             display:

@@ -32,6 +32,10 @@ class SubscriptionService:
         self.plan_repo = PlanRepository()
         self.subscription_repo = SubscriptionRepository()
 
+    # ─────────────────────────────────────────────────────────────
+    # Create Subscription
+    # ─────────────────────────────────────────────────────────────
+
     def create_subscription(
         self,
         tenant_id: str,
@@ -42,7 +46,10 @@ class SubscriptionService:
         tenant = self.tenant_repo.get_tenant(tenant_id)
 
         if not tenant:
-            raise ResourceNotFoundError("Tenant", tenant_id)
+            raise ResourceNotFoundError(
+                "Tenant",
+                tenant_id,
+            )
 
         plan = self.plan_repo.get_plan(plan_id)
 
@@ -52,6 +59,7 @@ class SubscriptionService:
             )
 
         start_date = _now()
+
         end_date = start_date + timedelta(
             days=plan.duration_days
         )
@@ -71,7 +79,9 @@ class SubscriptionService:
             payment_status="PENDING",
         )
 
-        self.subscription_repo.create_subscription(subscription)
+        self.subscription_repo.create_subscription(
+            subscription
+        )
 
         self.tenant_repo.update_tenant_subscription(
             tenant_id,
@@ -96,6 +106,10 @@ class SubscriptionService:
             plan_id,
         )
 
+    # ─────────────────────────────────────────────────────────────
+    # Activate Subscription
+    # ─────────────────────────────────────────────────────────────
+
     def activate_subscription(
         self,
         tenant_id: str,
@@ -105,9 +119,7 @@ class SubscriptionService:
         """
         Activate subscription after verified payment.
 
-        This method is intentionally idempotent:
-        receiving the same successful payment again should not
-        create another subscription.
+        This method is intentionally idempotent.
         """
 
         subscription = (
@@ -140,10 +152,17 @@ class SubscriptionService:
                 "message": "Subscription already active",
                 "tenant_id": tenant_id,
                 "plan_id": plan_id,
+                "payment_id": payment_id,
+                "subscriptionStartDate": (
+                    subscription.start_date.isoformat()
+                ),
+                "subscriptionEndDate": (
+                    subscription.end_date.isoformat()
+                ),
                 "expires_at": subscription.end_date.isoformat(),
             }
 
-        # Only pending subscription should be activated by payment.
+        # Only pending subscription can be activated.
         if subscription.status != "PENDING":
             raise BadRequestError(
                 f"Cannot activate subscription with status "
@@ -182,14 +201,26 @@ class SubscriptionService:
             "tenant_id": tenant_id,
             "plan_id": plan_id,
             "payment_id": payment_id,
+            "subscriptionStartDate": (
+                subscription.start_date.isoformat()
+            ),
+            "subscriptionEndDate": (
+                subscription.end_date.isoformat()
+            ),
             "expires_at": subscription.end_date.isoformat(),
         }
+
+    # ─────────────────────────────────────────────────────────────
+    # Get Subscription Status
+    # ─────────────────────────────────────────────────────────────
 
     def get_subscription_status(
         self,
         tenant_id: str,
     ) -> SubscriptionResponse:
-        """Get current subscription status for tenant."""
+        """
+        Get current subscription status for tenant.
+        """
 
         tenant = self.tenant_repo.get_tenant(tenant_id)
 
@@ -204,6 +235,7 @@ class SubscriptionService:
             .get_latest_subscription(tenant_id)
         )
 
+        # Tenant exists but has no subscription.
         if not subscription:
             now = _now()
 
@@ -211,20 +243,40 @@ class SubscriptionService:
                 tenant_id=tenant_id,
                 plan_id="",
                 status="INACTIVE",
-                start_date=now,
-                end_date=now,
+                subscriptionStartDate=now,
+                subscriptionEndDate=now,
                 is_active=False,
                 days_remaining=0,
             )
 
+        # TenantRepository may return either a dict or model.
+        if isinstance(tenant, dict):
+            current_plan_id = (
+                tenant.get("current_plan_id")
+                or tenant.get("plan_id")
+            )
+        else:
+            current_plan_id = (
+                getattr(
+                    tenant,
+                    "current_plan_id",
+                    None,
+                )
+                or getattr(
+                    tenant,
+                    "plan_id",
+                    None,
+                )
+            )
+
         return self._to_response(
             subscription,
-            getattr(
-                tenant,
-                "current_plan_id",
-                None,
-            ),
+            current_plan_id or subscription.plan_id,
         )
+
+    # ─────────────────────────────────────────────────────────────
+    # Convert Subscription → Response
+    # ─────────────────────────────────────────────────────────────
 
     def _to_response(
         self,
@@ -238,8 +290,15 @@ class SubscriptionService:
         if subscription.status == "ACTIVE":
             now = _now()
 
+            end_date = subscription.end_date
+
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(
+                    tzinfo=timezone.utc
+                )
+
             days_remaining = (
-                subscription.end_date - now
+                end_date - now
             ).days
 
             days_remaining = max(
@@ -251,8 +310,8 @@ class SubscriptionService:
             tenant_id=subscription.tenant_id,
             plan_id=plan_id or subscription.plan_id,
             status=subscription.status,
-            start_date=subscription.start_date,
-            end_date=subscription.end_date,
+            subscriptionStartDate=subscription.start_date,
+            subscriptionEndDate=subscription.end_date,
             is_active=subscription.status == "ACTIVE",
             days_remaining=days_remaining,
         )

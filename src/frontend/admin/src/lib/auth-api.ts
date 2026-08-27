@@ -37,39 +37,50 @@ export interface Subscription {
 }
 
 export interface ApiTenant {
-  tenantId:        string
-  companyName:     string
-  email:           string
-  isActive:        boolean
-  planTier:        PlanTier
-  maxRestaurants:  number      // -1 = unlimited
+  tenantId: string
+  companyName: string
+  email: string
+  isActive: boolean
+
+  // Subscription
+  currentPlanId?: string | null
+  subscriptionStatus?: string | null
+  subscriptionStartDate?: string | null
+  subscriptionEndDate?: string | null
+  subscriptionIsActive?: boolean
+  subscriptionDaysRemaining?: number | null
+
+  // Restaurant limits
+  planTier: PlanTier
+  maxRestaurants: number
   restaurantCount: number
-  createdAt?:      string
-  updatedAt?:      string
+
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ApiUser {
-  username:     string
-  email:        string
-  name:         string
-  tenantId:     string
+  username: string
+  email: string
+  name: string
+  tenantId: string
   restaurantId: string
-  enabled:      boolean
-  status:       string
+  enabled: boolean
+  status: string
 }
 
 export type UserRole = 'admin' | 'tenant' | 'staff'
 
 export interface RegisterPayload {
-  role:     UserRole
-  email:    string
+  role: UserRole
+  email: string
   password: string
-  name?:    string
+  name?: string
   /** role=tenant */
   companyName?: string
-  planTier?:    PlanTier
+  planTier?: PlanTier
   /** role=staff */
-  tenantId?:     string
+  tenantId?: string
   restaurantId?: string
 }
 
@@ -128,20 +139,20 @@ export async function fetchMyTenant(): Promise<ApiTenant> {
  */
 export async function createTenant(payload: {
   companyName: string
-  email:       string
-  password:    string
-  name?:       string
-  planTier?:   PlanTier
+  email: string
+  password: string
+  name?: string
+  planTier?: PlanTier
 }): Promise<{ sub: string; email: string; tenantId: string }> {
   return authFetch('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
-      role:        'tenant',
-      email:       payload.email,
-      password:    payload.password,
-      name:        payload.name ?? '',
+      role: 'tenant',
+      email: payload.email,
+      password: payload.password,
+      name: payload.name ?? '',
       companyName: payload.companyName,
-      planTier:    payload.planTier ?? 'starter',
+      planTier: payload.planTier ?? 'starter',
     } satisfies RegisterPayload),
   })
 }
@@ -152,7 +163,7 @@ export async function updateTenant(
 ): Promise<ApiTenant> {
   return authFetch<ApiTenant>(`/auth/tenants/${tenantId}`, {
     method: 'PATCH',
-    body:   JSON.stringify(changes),
+    body: JSON.stringify(changes),
   })
 }
 
@@ -180,11 +191,11 @@ export async function fetchUsers(): Promise<ApiUser[]> {
 
 /** Kitchen staff for one restaurant. */
 export async function createStaff(payload: {
-  email:        string
-  password:     string
-  name?:        string
+  email: string
+  password: string
+  name?: string
   restaurantId: string
-  tenantId?:    string
+  tenantId?: string
 }): Promise<{ sub: string; email: string }> {
   return authFetch('/auth/register', {
     method: 'POST',
@@ -194,9 +205,9 @@ export async function createStaff(payload: {
 
 /** Another platform admin. Platform admin only. */
 export async function createAdmin(payload: {
-  email:    string
+  email: string
   password: string
-  name?:    string
+  name?: string
 }): Promise<{ sub: string; email: string }> {
   return authFetch('/auth/register', {
     method: 'POST',
@@ -213,9 +224,9 @@ export async function deleteUser(username: string): Promise<void> {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 export const PLAN_LABELS: Record<PlanTier, string> = {
-  starter:      'Starter — 1 restaurant',
+  starter: 'Starter — 1 restaurant',
   professional: 'Professional — up to 5 restaurants',
-  enterprise:   'Enterprise — unlimited',
+  enterprise: 'Enterprise — unlimited',
 }
 
 export function planUsage(tenant: ApiTenant): string {
@@ -227,5 +238,5 @@ export function planUsage(tenant: ApiTenant): string {
 
 export function isAtPlanLimit(tenant: ApiTenant): boolean {
   return tenant.maxRestaurants !== -1 &&
-         tenant.restaurantCount >= tenant.maxRestaurants
+    tenant.restaurantCount >= tenant.maxRestaurants
 }
