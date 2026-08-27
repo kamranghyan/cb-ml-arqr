@@ -200,6 +200,7 @@ Resources:
             Method: ANY
 
   # ---------- EVENTBRIDGE LISTENER: PAYMENT SUCCEEDED ----------
+  # ---------- EVENTBRIDGE LISTENER: PAYMENT SUCCEEDED ----------
   PaymentSucceededEventHandler:
     Type: AWS::Serverless::Function
     Properties:
@@ -207,27 +208,37 @@ Resources:
       Description: Consumer for payment.succeeded events from EventBridge
       CodeUri: ./
       Handler: app.events.payment_handler.handle_payment_succeeded
+
       Layers:
         - !Ref SharedLayer
+
       Policies:
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
+                - dynamodb:PutItem
                 - dynamodb:UpdateItem
+                - dynamodb:Query
               Resource:
                 - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}"
-                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TenantTable}/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantSubscriptionTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TenantSubscriptionTable-${Environment}/index/*"
+
       Events:
         PaymentSucceededRule:
           Type: EventBridgeRule
           Properties:
             EventBusName: !Ref EventBusName
+
             Pattern:
               source:
                 - "app.payment_svc"
+
               detail-type:
                 - "payment.succeeded"
+
+
 
   SubscriptionLogGroup:
     Type: AWS::Logs::LogGroup

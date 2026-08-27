@@ -100,6 +100,8 @@ class PlanService:
             update_data["description"] = updates.description
         if updates.is_active is not None:
             update_data["isActive"] = updates.is_active
+        if updates.currency is not None:
+            update_data["currency"] = updates.currency
         
         if not update_data:
             return self._to_response(existing)

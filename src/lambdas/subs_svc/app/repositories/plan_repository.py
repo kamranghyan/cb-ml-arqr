@@ -129,5 +129,11 @@ class PlanRepository:
         return True
     
     def delete_plan(self, plan_id: str) -> bool:
-        """Soft delete - set isActive to False"""
-        return self.update_plan(plan_id, {"isActive": False})
+        """Permanently delete plan from DynamoDB."""
+        self.table.delete_item(
+           Key={
+            "PK": f"PLAN#{plan_id}",
+            "SK": "METADATA",
+           }
+        )
+        return True

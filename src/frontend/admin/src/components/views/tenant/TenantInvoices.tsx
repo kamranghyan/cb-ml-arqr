@@ -401,7 +401,7 @@ export default function TenantInvoices() {
   ) => {
     const normalized =
       String(
-        status || 'PENDING'
+        // status || 'PENDING'
       ).toUpperCase();
 
     const statusMap: Record<
@@ -420,13 +420,13 @@ export default function TenantInvoices() {
           accents.green.bg,
       },
 
-      PENDING: {
-        label: 'Pending',
-        color:
-          accents.orange.text,
-        bg:
-          accents.orange.bg,
-      },
+      // PENDING: {
+      //   label: 'Pending',
+      //   color:
+      //     accents.orange.text,
+      //   bg:
+      //     accents.orange.bg,
+      // },
 
       FAILED: {
         label: 'Failed',
@@ -446,8 +446,8 @@ export default function TenantInvoices() {
     };
 
     return (
-      statusMap[normalized] ||
-      statusMap.PENDING
+      statusMap[normalized] || ""
+      // statusMap.PENDING
     );
   };
 
@@ -1020,7 +1020,7 @@ export default function TenantInvoices() {
                   (invoice) => {
                     const statusBadge =
                       getStatusBadge(
-                        invoice.status
+                        // invoice.status
                       );
 
                     return (
@@ -1694,7 +1694,7 @@ export default function TenantInvoices() {
                   {(() => {
                     const badge =
                       getStatusBadge(
-                        selectedInvoice.status
+                        // selectedInvoice.status
                       );
 
                     return (

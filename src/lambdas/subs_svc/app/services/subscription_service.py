@@ -275,6 +275,61 @@ class SubscriptionService:
         )
 
     # ─────────────────────────────────────────────────────────────
+    # Delete Subscription
+    # ─────────────────────────────────────────────────────────────
+
+    def delete_subscription(
+        self,
+        tenant_id: str,
+    ) -> dict:
+        """
+        Permanently delete the latest subscription
+        and reset tenant subscription information.
+        """
+
+        subscription = (
+            self.subscription_repo
+            .get_latest_subscription(tenant_id)
+        )
+
+        if not subscription:
+            raise ResourceNotFoundError(
+                "Subscription",
+                tenant_id,
+            )
+
+        # Permanently delete subscription from DynamoDB.
+        self.subscription_repo.delete_subscription(
+            tenant_id,
+            subscription.subscription_id,
+        )
+
+        # Reset tenant subscription state.
+        self.tenant_repo.update_tenant_subscription(
+            tenant_id,
+            {
+                "status": "INACTIVE",
+                "plan_id": None,
+                "start_date": None,
+                "end_date": None,
+                "is_active": False,
+            },
+        )
+
+        log.info(
+            "subscription.permanently_deleted",
+            tenant_id=tenant_id,
+            subscription_id=subscription.subscription_id,
+        )
+
+        return {
+            "status": "success",
+            "message": "Subscription deleted successfully",
+            "tenant_id": tenant_id,
+            "subscription_id": subscription.subscription_id,
+        }
+
+    # ─────────────────────────────────────────────────────────────
     # Convert Subscription → Response
     # ─────────────────────────────────────────────────────────────
 

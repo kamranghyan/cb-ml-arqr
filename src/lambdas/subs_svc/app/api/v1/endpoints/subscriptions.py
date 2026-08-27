@@ -251,3 +251,72 @@ async def get_subscription_status(
             status_code=500,
             detail=f"{type(e).__name__}: {str(e)}",
         )
+
+
+
+@router.delete(
+    "/{tenant_id}",
+)
+async def delete_subscription(
+    tenant_id: str,
+    request: Request,
+    tenant=Depends(get_current_tenant),
+):
+    print("")
+    print("==============================================")
+    print("       DELETE SUBSCRIPTION DEBUG")
+    print("==============================================")
+
+    print("Requested tenant_id:", tenant_id)
+    print("Authenticated tenant:", tenant)
+    print("Authenticated ID:", tenant.get("tenant_id"))
+    print("Authenticated role:", tenant.get("role"))
+
+    print("==============================================")
+
+    # Only platform/admin users can delete subscriptions
+    if tenant.get("role") not in {
+        "admin",
+        "platform_admin",
+        "menulay_admin",
+    }:
+        raise HTTPException(
+            status_code=403,
+            detail="Only platform admin can delete subscriptions",
+        )
+
+    try:
+        result = subscription_service.delete_subscription(
+            tenant_id
+        )
+
+        print("✅ SUBSCRIPTION DELETED:")
+        print(result)
+
+        return result
+
+    except ResourceNotFoundError as e:
+        print(
+            "❌ RESOURCE NOT FOUND:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(e),
+        )
+
+    except Exception as e:
+        import traceback
+
+        print("")
+        print("❌❌❌ DELETE SUBSCRIPTION ERROR ❌❌❌")
+        print("Exception type:", type(e).__name__)
+        print("Exception:", str(e))
+
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(e).__name__}: {str(e)}",
+        )

@@ -94,11 +94,68 @@ const getAccents = (isDark: boolean) => ({
 
 export default function AdminSubscription() {
     const router = useRouter();
+    const [tenantToDelete, setTenantToDelete] =
+        useState<ApiTenant | null>(null);
 
+    const [deletingTenant, setDeletingTenant] =
+        useState(false);
     const {
         role,
         loading: authLoading,
     } = useCurrentUser();
+
+
+    const handleDeleteSubscription = async () => {
+        if (!tenantToDelete) return;
+
+        setDeletingTenant(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const token = localStorage.getItem('accessToken');
+
+            const response = await fetch(
+                `/api/subscription-svc/subscriptions/${tenantToDelete.tenantId}`,
+                {
+                    method: 'DELETE',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data?.detail ||
+                    'Failed to delete subscription'
+                );
+            }
+
+            setSuccess(
+                `Subscription for "${tenantToDelete.companyName}" deleted successfully.`
+            );
+
+            setTenantToDelete(null);
+
+            await loadTenants();
+
+            setTimeout(() => {
+                setSuccess('');
+            }, 3000);
+
+        } catch (e: any) {
+            setError(
+                e?.message ||
+                'Failed to delete subscription'
+            );
+        } finally {
+            setDeletingTenant(false);
+        }
+    };
 
     // ─────────────────────────────────────────────
     // State
@@ -726,7 +783,7 @@ export default function AdminSubscription() {
 
         return (
             fallbackNames[
-                normalizedPlanId
+            normalizedPlanId
             ] ||
             currentPlanId
         );
@@ -776,19 +833,19 @@ export default function AdminSubscription() {
     // Stats
     // ─────────────────────────────────────────────
 
-    const activeSubscriptions =
-        tenants.filter(
-            (tenant) =>
-                tenant.subscriptionStatus ===
-                'ACTIVE'
-        ).length;
+   const activeSubscriptions =
+    tenants.filter(
+        (tenant) =>
+            tenant.subscriptionStatus === 'ACTIVE' &&
+            tenant.isActive === true
+    ).length;
 
-    const pendingSubscriptions =
-        tenants.filter(
-            (tenant) =>
-                tenant.subscriptionStatus ===
-                'PENDING'
-        ).length;
+const pendingSubscriptions =
+    tenants.filter(
+        (tenant) =>
+            tenant.subscriptionStatus === 'INACTIVE' ||
+            tenant.isActive === false
+    ).length;
 
     const totalTenants =
         tenants.length;
@@ -1437,8 +1494,27 @@ export default function AdminSubscription() {
                                                         }
                                                     />
                                                 </button>
-
                                                 <button
+                                                    onClick={() => {
+                                                        handleDeleteClick(plan);
+                                                    }}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 5,
+                                                        padding: '5px 9px',
+                                                        border: 'none',
+                                                        borderRadius: 7,
+                                                        background: accents.danger.bg,
+                                                        color: accents.danger.text,
+                                                        fontSize: 11,
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                    }}
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
+                                                {/* <button
                                                     onClick={() =>
                                                         handleDeleteClick(
                                                             plan
@@ -1486,7 +1562,7 @@ export default function AdminSubscription() {
                                                             16
                                                         }
                                                     />
-                                                </button>
+                                                </button> */}
                                             </div>
                                         </div>
 
@@ -1551,56 +1627,56 @@ export default function AdminSubscription() {
 
                         {displayPlans.length ===
                             0 && (
-                            <div
-                                style={{
-                                    gridColumn:
-                                        '1 / -1',
-                                    textAlign:
-                                        'center',
-                                    padding:
-                                        '40px 20px',
-                                    color:
-                                        colors.muted,
-                                }}
-                            >
-                                <CreditCard
-                                    size={40}
+                                <div
                                     style={{
-                                        opacity:
-                                            0.2,
-                                    }}
-                                />
-
-                                <p
-                                    style={{
-                                        marginTop:
-                                            12,
-                                        fontSize:
-                                            14,
-                                    }}
-                                >
-                                    No plans
-                                    created yet
-                                </p>
-
-                                <p
-                                    style={{
-                                        fontSize:
-                                            13,
+                                        gridColumn:
+                                            '1 / -1',
+                                        textAlign:
+                                            'center',
+                                        padding:
+                                            '40px 20px',
                                         color:
-                                            colors.subtle,
+                                            colors.muted,
                                     }}
                                 >
-                                    Click
-                                    "Create
-                                    Plan" to
-                                    add your
-                                    first
-                                    subscription
-                                    plan
-                                </p>
-                            </div>
-                        )}
+                                    <CreditCard
+                                        size={40}
+                                        style={{
+                                            opacity:
+                                                0.2,
+                                        }}
+                                    />
+
+                                    <p
+                                        style={{
+                                            marginTop:
+                                                12,
+                                            fontSize:
+                                                14,
+                                        }}
+                                    >
+                                        No plans
+                                        created yet
+                                    </p>
+
+                                    <p
+                                        style={{
+                                            fontSize:
+                                                13,
+                                            color:
+                                                colors.subtle,
+                                        }}
+                                    >
+                                        Click
+                                        "Create
+                                        Plan" to
+                                        add your
+                                        first
+                                        subscription
+                                        plan
+                                    </p>
+                                </div>
+                            )}
                     </div>
                 </div>
             )}
@@ -1658,14 +1734,12 @@ export default function AdminSubscription() {
                                     (
                                         tenant
                                     ) => {
-                                        const status =
-                                            tenant.subscriptionStatus ||
-                                            'INACTIVE';
+                                        const status = tenant.isActive
+                                            ? 'ACTIVE'
+                                            : 'INACTIVE';
 
                                         const statusBadge =
-                                            getStatusBadge(
-                                                status
-                                            );
+                                            getStatusBadge(status);
 
                                         const planName =
                                             getSubscriptionPlanName(
@@ -1817,97 +1891,75 @@ export default function AdminSubscription() {
                                                         }
                                                     </span>
 
-                                                    {/* <span
+                                                    <span
                                                         style={{
-                                                            padding:
-                                                                '3px 12px',
-                                                            borderRadius:
-                                                                20,
+                                                            padding: '3px 12px',
+                                                            borderRadius: 20,
                                                             fontSize: 11,
                                                             fontWeight: 700,
-                                                            color:
-                                                                statusBadge.color,
-                                                            background:
-                                                                statusBadge.bg,
+                                                            color: statusBadge.color,
+                                                            background: statusBadge.bg,
                                                         }}
                                                     >
-                                                        {
-                                                            statusBadge.label
-                                                        }
-                                                    </span> */}
-
-                                                    {tenant.subscriptionIsActive !==
-                                                        undefined && (
-                                                        <span
-                                                            style={{
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                                color:
-                                                                    tenant.subscriptionIsActive
-                                                                        ? accents
-                                                                            .green
-                                                                            .text
-                                                                        : colors.muted,
-                                                            }}
-                                                        >
-                                                            {tenant.subscriptionIsActive
-                                                                ? 'Subscription Active'
-                                                                : 'Subscription Inactive'}
-                                                        </span>
-                                                    )}
-
-                                                    {daysLeft !==
-                                                        null && (
-                                                        <span
-                                                            style={{
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                                color:
-                                                                    daysLeft <
-                                                                    7
-                                                                        ? accents
-                                                                            .danger
-                                                                            .text
-                                                                        : colors.muted,
-                                                            }}
-                                                        >
-                                                            {
-                                                                daysLeft
-                                                            }{' '}
-                                                            days
-                                                            left
-                                                        </span>
-                                                    )}
-
-                                                    {tenant.subscriptionStartDate && (
-                                                        <span
-                                                            style={{
-                                                                fontSize: 11,
-                                                                color:
-                                                                    colors.subtle,
-                                                            }}
-                                                        >
-                                                            Start:{' '}
-                                                            {formatDate(
-                                                                tenant.subscriptionStartDate
+                                                        {statusBadge.label}
+                                                    </span>
+                                                    <div className='flex flex-col item-end'>
+                                                        {daysLeft !==
+                                                            null && (
+                                                                <span
+                                                                    style={{
+                                                                        fontSize: 11,
+                                                                        fontWeight: 600,
+                                                                        textAlign: "right",
+                                                                        color:
+                                                                            daysLeft <
+                                                                                7
+                                                                                ? accents
+                                                                                    .danger
+                                                                                    .text
+                                                                                : colors.muted,
+                                                                    }}
+                                                                >
+                                                                    {
+                                                                        daysLeft
+                                                                    }{' '}
+                                                                    days
+                                                                    left
+                                                                </span>
                                                             )}
-                                                        </span>
-                                                    )}
 
-                                                    {tenant.subscriptionEndDate && (
-                                                        <span
-                                                            style={{
-                                                                fontSize: 11,
-                                                                color:
-                                                                    colors.subtle,
-                                                            }}
-                                                        >
-                                                            End:{' '}
-                                                            {formatDate(
-                                                                tenant.subscriptionEndDate
-                                                            )}
-                                                        </span>
-                                                    )}
+                                                        {tenant.subscriptionStartDate && (
+                                                            <span
+                                                                style={{
+                                                                    fontSize: 11,
+                                                                    textAlign: "right",
+                                                                    color:
+                                                                        colors.subtle,
+                                                                }}
+                                                            >
+                                                                Start:{' '}
+                                                                {formatDate(
+                                                                    tenant.subscriptionStartDate
+                                                                )}
+                                                            </span>
+                                                        )}
+
+                                                        {tenant.subscriptionEndDate && (
+                                                            <span
+                                                                style={{
+                                                                    fontSize: 11,
+                                                                    textAlign: "right",
+                                                                    color:
+                                                                        colors.subtle,
+                                                                }}
+                                                            >
+                                                                End:{' '}
+                                                                {formatDate(
+                                                                    tenant.subscriptionEndDate
+                                                                )}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -1916,25 +1968,25 @@ export default function AdminSubscription() {
 
                             {tenants.length >
                                 10 && (
-                                <p
-                                    style={{
-                                        textAlign:
-                                            'center',
-                                        fontSize:
-                                            13,
-                                        color:
-                                            colors.subtle,
-                                        padding:
-                                            '12px 0',
-                                    }}
-                                >
-                                    +
-                                    {tenants.length -
-                                        10}{' '}
-                                    more
-                                    tenants
-                                </p>
-                            )}
+                                    <p
+                                        style={{
+                                            textAlign:
+                                                'center',
+                                            fontSize:
+                                                13,
+                                            color:
+                                                colors.subtle,
+                                            padding:
+                                                '12px 0',
+                                        }}
+                                    >
+                                        +
+                                        {tenants.length -
+                                            10}{' '}
+                                        more
+                                        tenants
+                                    </p>
+                                )}
                         </div>
                     </div>
                 )}
@@ -2589,31 +2641,38 @@ export default function AdminSubscription() {
             )}
 
             {/* Delete Modal */}
-            {showDeleteModal &&
-                planToDelete && (
-                    <ConfirmDeleteModal
-                        open={
-                            showDeleteModal
+            {/* Delete Subscription Modal */}
+            {tenantToDelete && (
+                <ConfirmDeleteModal
+                    open={!!tenantToDelete}
+                    onCancel={() => {
+                        if (!deletingTenant) {
+                            setTenantToDelete(null);
                         }
-                        onCancel={() => {
-                            setShowDeleteModal(
-                                false
-                            );
+                    }}
+                    onConfirm={handleDeleteSubscription}
+                    title="Delete Subscription"
+                    message={`Are you sure you want to permanently delete the subscription for "${tenantToDelete.companyName}"? This will remove the subscription record from DynamoDB and make the tenant inactive.`}
+                    itemName={tenantToDelete.companyName}
+                />
+            )}
 
-                            setPlanToDelete(
-                                null
-                            );
-                        }}
-                        onConfirm={
-                            handleConfirmDelete
+            {/* Delete Plan Modal */}
+            {planToDelete && (
+                <ConfirmDeleteModal
+                    open={showDeleteModal}
+                    onCancel={() => {
+                        if (!deleting) {
+                            setShowDeleteModal(false);
+                            setPlanToDelete(null);
                         }
-                        title="Delete Plan"
-                        message={`Are you sure you want to delete the plan "${planToDelete.plan_name}"? This action cannot be undone.`}
-                        itemName={
-                            planToDelete.plan_name
-                        }
-                    />
-                )}
+                    }}
+                    onConfirm={handleConfirmDelete}
+                    title="Delete Plan"
+                    message={`Are you sure you want to permanently delete the plan "${planToDelete.plan_name}"? This action cannot be undone.`}
+                    itemName={planToDelete.plan_name}
+                />
+            )}
         </div>
     );
 }

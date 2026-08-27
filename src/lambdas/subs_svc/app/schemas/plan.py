@@ -47,6 +47,7 @@ class PlanUpdate(BaseModel):
     plan_name: Optional[str] = None
     duration_days: Optional[int] = Field(None, gt=0)
     price: Optional[float] = Field(None, ge=0)
+    currency: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
