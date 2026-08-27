@@ -11,7 +11,7 @@ import {
 import Image from 'next/image';
 import { getTheme } from '@/lib/theme';
 
-
+// ── Brand Color ──
 const BRAND = '#ff5723';
 
 // ── Theme-based colors (matching checkout page) ──
