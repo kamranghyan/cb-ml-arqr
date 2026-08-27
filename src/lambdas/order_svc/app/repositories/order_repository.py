@@ -128,6 +128,33 @@ class OrderRepository:
         # ✅ Ensure addOns fields exist in the returned order
         return self._ensure_addons_fields(items[0])
 
+    def get_order_for_guest(
+        self,
+        order_id: str,
+        tenant_id: str,
+        guest_session_id: str,
+    ) -> Optional[dict]:
+        """
+        Fetch an order only if it belongs to the supplied guest session.
+
+        Guest access is scoped by:
+        - tenantId
+        - orderId
+        - guestSessionId
+        """
+        order = self.get_order(order_id, tenant_id)
+
+        if not order:
+            return None
+
+        if not guest_session_id:
+            return None
+
+        if order.get("guestSessionId") != guest_session_id:
+            return None
+
+        return order
+
     def list_orders(
         self,
         restaurant_id: str,

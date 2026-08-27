@@ -44,6 +44,7 @@ class StepFunctionsService:
                 for item in request.lineItems
             ],
             "guestConnectionId": request.guestConnectionId,
+            "guestSessionId": request.guestSessionId,
             "kitchenAccepted": False,
             "foodReady": False,
             "delivered": False,
@@ -89,6 +90,7 @@ class StepFunctionsService:
                 for item in line_items
             ],
             "guestConnectionId": order.get("guestConnectionId"),
+            "guestSessionId": order.get("guestSessionId"),
             "kitchenAccepted": update.kitchenAccepted,
             "foodReady": update.foodReady,
             "delivered": update.delivered,

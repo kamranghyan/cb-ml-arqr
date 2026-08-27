@@ -52,13 +52,15 @@ def _broadcast(
     """
     data = json.dumps(payload).encode()
     try:
-        resp = conn_table.scan(
-            FilterExpression="tenantId = :t",
+        # Using query() on GSI is much faster and cheaper at scale than scan()
+        resp = conn_table.query(
+            IndexName="tenantId-index",
+            KeyConditionExpression="tenantId = :t",
             ExpressionAttributeValues={":t": tenant_id},
             ProjectionExpression="connectionId, restaurantId",
         )
     except ClientError as e:
-        logger.error("Connection scan failed: %s", e)
+        logger.error("Connection query failed: %s", e)
         return
 
     sent = 0
@@ -67,6 +69,7 @@ def _broadcast(
         conn_id = item["connectionId"]
         if conn_id == exclude_conn:
             continue
+
 
         # Branch isolation: a sender on a branch only reaches that branch
         # (plus tenant-wide listeners that have no branch of their own).
@@ -110,12 +113,12 @@ def _send_to_dlq(connection_id: str, body: dict, reason: str) -> None:
                 "failureReason": reason,
                 "timestamp":    int(time.time()),
             }),
-            MessageGroupId=connection_id,   # FIFO queue ho to ordering maintain ho
+            # MessageGroupId removed because standard queues don't support it
         )
         logger.info("Sent to DLQ: connectionId=%s reason=%s", connection_id, reason)
     except ClientError as e:
-        # DLQ bhi fail ho gaya — yahan sirf log kar sakte hain
         logger.critical("DLQ send FAILED for %s: %s", connection_id, e)
+
 
 
 def lambda_handler(event: dict, context) -> dict:
@@ -132,10 +135,6 @@ def lambda_handler(event: dict, context) -> dict:
     action = (body.get("action") or "").lower()
 
     # ── Action routing ────────────────────────────────────
-    # KDS/admin clients send {action:"subscribe", channel:"orders"} on open.
-    # There is nothing to persist — the connection row (with its role) already
-    # exists from $connect, which is what the notifications lambda targets.
-    # Just acknowledge so the client knows the socket is live.
     if action == "subscribe":
         channel = body.get("channel", "orders")
         logger.info("subscribe: connectionId=%s channel=%s", connection_id, channel)
@@ -149,15 +148,61 @@ def lambda_handler(event: dict, context) -> dict:
 
     # KDS broadcasts a status change to every other screen on the same tenant.
     if action == "orderstatusupdate":
-        tenant_id, restaurant_id = _get_scope_for_connection(connection_id)
+        # ── 1. Status Validation Check (Change #4) ──
+        status = (body.get("status") or "").lower()
+        if status not in VALID_STATUSES:
+            logger.warning("Invalid status update attempted from %s: status=%r", connection_id, status)
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"type": "INVALID_STATUS", "reason": f"Status '{status}' is not supported."})
+            }
+
+        # Ensure your helper returns the role along with scope data
+        tenant_id, restaurant_id, role = _get_scope_for_connection(connection_id)
+        
+        # ── 2. Authentication Check ──
         if not tenant_id:
             logger.warning("orderStatusUpdate from unknown connection %s", connection_id)
-            return {"statusCode": 200, "body": json.dumps({"type": "IGNORED"})}
+            return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Unknown connection"})}
+            
+        # ── 3. Role Authorization Check ──
+        ALLOWED_ROLES = {"kitchen", "kds", "admin"}
+        if role not in ALLOWED_ROLES:
+            logger.warning("Unauthorized role %s attempted status update on connection %s", role, connection_id)
+            return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Insufficient role privileges"})}
+
+        # ── 4. Multi-Tenant / Cross-Branch Data Leak Check ──
+        order_id = body.get("orderId")
+        # Explicitly ensure order_id is present even in the broadcast path
+        if not order_id:
+            return {"statusCode": 400, "body": json.dumps({"type": "MISSING_ORDER_ID", "reason": "orderId parameter is required"})}
+        
+        try:
+            order_resp = table.get_item(Key={"orderId": order_id})
+            order_item = order_resp.get("Item")
+            
+            if not order_item:
+                logger.warning("Order %s not found for update by connection %s", order_id, connection_id)
+                return {"statusCode": 404, "body": json.dumps({"type": "NOT_FOUND", "reason": "Order does not exist"})}
+                
+            if order_item.get("tenantId") != tenant_id:
+                logger.critical("CROSS-TENANT ATTACK ATTEMPT! Connection %s tried modifying Order %s", connection_id, order_id)
+                return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Access denied"})}
+                
+            if role != "admin" and restaurant_id and order_item.get("restaurantId") != restaurant_id:
+                logger.warning("Cross-branch modification blocked for connection %s on Order %s", connection_id, order_id)
+                return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Branch mismatch"})}
+                
+        except ClientError as e:
+            logger.error("Failed to fetch order validation metadata: %s", e)
+            return {"statusCode": 500, "body": "Internal server validation failure"}
+
+        # Broadcast update safely now that identity, state constraints, and scopes are verified
         _broadcast(
             {
                 "type":    "ORDER_UPDATE",
-                "orderId": body.get("orderId"),
-                "status":  body.get("status"),
+                "orderId": order_id,
+                "status":  status,
                 "flags":   body.get("flags"),
             },
             tenant_id,
@@ -169,12 +214,20 @@ def lambda_handler(event: dict, context) -> dict:
     # ── Legacy status-update path (Step Functions task token) ─────────────────
     status     = body.get("status", "").lower()
     task_token = body.get("taskToken", "")
-    order_id   = body.get("orderId") or str(uuid.uuid4())
+    order_id   = body.get("orderId")
+
+    # ── 1. Order ID Missing Validation Check (Change #5) ──
+    # If the payload doesn't contain an order ID, fail fast instead of fabricating a fake record
+    if not order_id:
+        logger.warning("Rejected legacy update path from %s: missing orderId", connection_id)
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"type": "BAD_REQUEST", "reason": "orderId field is required."})
+        }
 
     if status not in VALID_STATUSES:
         logger.warning("Unhandled message from %s: action=%r status=%r",
                        connection_id, action, status)
-        # 200 so API Gateway does not close the socket over an unknown message.
         return {
             "statusCode": 200,
             "body": json.dumps({"type": "IGNORED", "reason": "unknown action/status"}),

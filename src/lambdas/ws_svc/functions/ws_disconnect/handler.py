@@ -2,19 +2,24 @@
 ws-disconnect-lambda
 Trigger  : API Gateway WebSocket $disconnect
 Memory   : 256 MB  |  Timeout : 5s
-Env Vars : REDIS_URL
+Env Vars : REDIS_URL, TABLE_CONN
 """
 
 import os
 import logging
 import redis
+import boto3
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Cold-start initialisation ──
 REDIS_URL    = os.environ["REDIS_URL"]
+TABLE_CONN   = os.environ["TABLE_CONN"]
+
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
+dynamodb     = boto3.resource("dynamodb")
+table        = dynamodb.Table(TABLE_CONN)
 
 
 def lambda_handler(event: dict, context) -> dict:
@@ -22,7 +27,6 @@ def lambda_handler(event: dict, context) -> dict:
     connection_id = request_ctx.get("connectionId", "")
 
     # ── Redis DEL — non-critical ────────────────────────────
-    # Agar Redis fail ho to sirf log karo, disconnect complete hoga
     try:
         deleted = redis_client.hdel("connections", connection_id)
         if deleted:
@@ -30,8 +34,16 @@ def lambda_handler(event: dict, context) -> dict:
         else:
             logger.info("Redis: connectionId=%s was not in hash (already gone)", connection_id)
     except redis.RedisError as e:
-        # Non-critical — log karke continue karo
         logger.error("Redis DEL failed for %s (non-critical): %s", connection_id, e)
+
+    # ── DynamoDB Clean-up — critical ────────────────────────
+    try:
+        table.delete_item(
+            Key={"connectionId": connection_id}
+        )
+        logger.info("DynamoDB: removed stale connectionId=%s", connection_id)
+    except Exception as e:
+        logger.error("DynamoDB delete failed for %s: %s", connection_id, e)
 
     logger.info("Disconnected: connectionId=%s", connection_id)
     return {"statusCode": 200, "body": "Disconnected"}

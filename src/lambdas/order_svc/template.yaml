@@ -53,7 +53,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime:       python3.12
+    Runtime:       python3.13 
     Architectures: [arm64]
     MemorySize:    512
     Timeout:       30
@@ -123,7 +123,7 @@ Resources:
       Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
       ContentUri: ../layers/shared_layer
       CompatibleRuntimes:
-        - python3.12
+        - python3.13
       CompatibleArchitectures:
         - arm64
       RetentionPolicy: Delete

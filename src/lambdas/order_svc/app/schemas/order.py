@@ -54,6 +54,7 @@ class CreateOrderBody(BaseModel):
     lineItems: list[LineItemBody] = Field(..., min_length=1)
     totalAmountMinorUnits: int = Field(..., gt=0)
     guestConnectionId: Optional[str] = None
+    guestSessionId: Optional[str] = None  # Added as requested
     orderType: OrderType = "dine_in"
     tableId: str = ""
     customerName: Optional[str] = None
@@ -93,7 +94,7 @@ class CreateOrderBody(BaseModel):
             raise ValueError(
                 f"totalAmountMinorUnits {self.totalAmountMinorUnits} "
                 f"!= items total({items_total}) "
-                f"+ delivery fee({self.deliveryFeeMinorUnits})"
+                f"+ delivery"
             )
         return self
 
