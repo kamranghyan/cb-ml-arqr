@@ -59,11 +59,30 @@ export default function TenantPayment() {
     const [subscription, setSubscription] =
         useState<SubscriptionData | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [mobileNo, setMobileNo] = useState('');
 
     // ─────────────────────────────────────────────
     // Subscription data
     // ─────────────────────────────────────────────
+    useEffect(() => {
+        try {
+            const storedUser = JSON.parse(
+                localStorage.getItem('menulay_user') || '{}'
+            );
 
+            const savedMobile =
+                storedUser?.mobileNo ||
+                storedUser?.mobile_no ||
+                storedUser?.phone ||
+                '';
+
+            if (savedMobile) {
+                setMobileNo(savedMobile);
+            }
+        } catch {
+            // Ignore invalid localStorage data
+        }
+    }, []);
     useEffect(() => {
         const plan = searchParams.get('plan');
         const name = searchParams.get('name');
@@ -436,6 +455,11 @@ export default function TenantPayment() {
                 );
             }
 
+            if (!mobileNo.trim()) {
+                throw new Error(
+                    'Mobile number is required.'
+                );
+            }
             // ─────────────────────────────────────
             // ORDER ID
             // ─────────────────────────────────────
@@ -462,10 +486,7 @@ export default function TenantPayment() {
                     user?.email || '',
 
                 mobileNo:
-                    user?.mobileNo ||
-                    user?.mobile_no ||
-                    user?.phone ||
-                    '',
+                    mobileNo.trim(),
             };
 
             console.log(
@@ -480,10 +501,7 @@ export default function TenantPayment() {
                     email:
                         user?.email || '',
                     mobileNo:
-                        user?.mobileNo ||
-                        user?.mobile_no ||
-                        user?.phone ||
-                        '',
+                        mobileNo.trim(),
                 }
             );
 
@@ -1054,7 +1072,65 @@ export default function TenantPayment() {
                             </div>
                         </div>
                     </div>
+                    <div
+                        style={{
+                            background: colors.card,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 16,
+                            padding: 24,
+                            marginBottom: 20,
+                        }}
+                    >
+                        <label
+                            htmlFor="mobileNo"
+                            style={{
+                                display: 'block',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: colors.text,
+                                marginBottom: 8,
+                            }}
+                        >
+                            Mobile Number
+                        </label>
 
+                        <input
+                            id="mobileNo"
+                            type="tel"
+                            value={mobileNo}
+                            onChange={(e) => {
+                                setMobileNo(e.target.value);
+                                if (error) {
+                                    setError('');
+                                }
+                            }}
+                            placeholder="03XXXXXXXXX"
+                            autoComplete="tel"
+                            disabled={processing}
+                            style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '13px 14px',
+                                borderRadius: 10,
+                                border: `1px solid ${colors.border}`,
+                                background: colors.card2,
+                                color: colors.text,
+                                fontSize: 14,
+                                outline: 'none',
+                                fontFamily: "'Poppins', sans-serif",
+                            }}
+                        />
+
+                        <p
+                            style={{
+                                margin: '8px 0 0',
+                                fontSize: 12,
+                                color: colors.subtle,
+                            }}
+                        >
+                            Enter your Easypaisa registered mobile number.
+                        </p>
+                    </div>
                     <div
                         style={{
                             display:
