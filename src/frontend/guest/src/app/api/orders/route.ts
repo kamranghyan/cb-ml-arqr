@@ -44,7 +44,13 @@ const UNKNOWN_RESTAURANT = NextResponse.json(
 export async function GET(req: NextRequest) {
   const restaurantId = req.nextUrl.searchParams.get('rid') ?? ''
   const tenantId     = await resolveTenant(restaurantId)
-  if (!tenantId) return UNKNOWN_RESTAURANT
+  if (!tenantId) {
+    console.error('❌ ORDER REJECTED: tenant resolution failed', {
+      restaurantId,
+    })
+
+    return UNKNOWN_RESTAURANT
+  }
 
   try {
     const res = await fetch(`${ORDERS_BASE}/orders?restaurantId=${restaurantId}`, {
@@ -65,11 +71,42 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
+    // Added debug logs from image
+    console.log('====================================')
+    console.log('📩 /api/orders RECEIVED BODY:')
+    console.log(JSON.stringify(body, null, 2))
+    console.log('👤 guestSessionId:', body?.guestSessionId)
+    console.log('====================================')
+    
+    const guestSessionId = body?.guestSessionId ?? ''
+
+    if (!guestSessionId) {
+      console.error('❌ ORDER REJECTED: missing guestSessionId', body)
+
+      return NextResponse.json(
+        { error: 'Guest session required.' },
+        { status: 400 },
+      )
+    }
+
     // The restaurant must come from the order itself (the cart fills it in
     // from the QR code). No fallback — a guest with no QR has no restaurant.
     const restaurantId: string = body?.restaurantId ?? ''
     const tenantId = await resolveTenant(restaurantId)
     if (!tenantId) return UNKNOWN_RESTAURANT
+
+    // Combine existing body properties with the validated session token
+    const orderBody = {
+      ...body,
+      guestSessionId,
+    }
+
+    console.log('🚀 POSTING ORDER TO ORDERS API', {
+      restaurantId,
+      tenantId,
+      guestSessionId,
+      orderBody,
+    })
 
     const res = await fetch(`${ORDERS_BASE}/orders`, {
       method: 'POST',
@@ -77,7 +114,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'X-Tenant-Id': tenantId,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(orderBody),
     })
     const text = await res.text()
     if (!res.ok) return NextResponse.json({ error: text }, { status: res.status })

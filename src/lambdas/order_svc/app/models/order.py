@@ -47,6 +47,7 @@ class OrderRequest(BaseModel):
     lineItems: List[LineItem] = Field(..., min_length=1)
     totalAmountMinorUnits: int = Field(..., gt=0)
     guestConnectionId: Optional[str] = None
+    guestSessionId: Optional[str] = None  # Added as requested
     orderType: str = "dine_in"
     deliveryAddress: Optional[str] = None
     contactPhone: Optional[str] = None
@@ -95,6 +96,7 @@ class OrderRecord(BaseModel):
     currencyCode: str
     stepFunctionsExecutionArn: str
     guestConnectionId: Optional[str] = None
+    guestSessionId: Optional[str] = None  # Added as requested
     orderType: str = "dine_in"
     deliveryAddress: Optional[str] = None
     contactPhone: Optional[str] = None
@@ -140,6 +142,7 @@ class OrderRecord(BaseModel):
             currencyCode=request.currencyCode,
             stepFunctionsExecutionArn=execution_arn,
             guestConnectionId=request.guestConnectionId,
+            guestSessionId=request.guestSessionId,  # Passed through from request
             orderType=request.orderType,
             deliveryAddress=request.deliveryAddress,
             contactPhone=request.contactPhone,

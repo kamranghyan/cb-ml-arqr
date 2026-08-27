@@ -90,6 +90,7 @@ async def create_order(
         ],
         totalAmountMinorUnits=body.totalAmountMinorUnits,
         guestConnectionId=body.guestConnectionId,
+        guestSessionId=body.guestSessionId,
         orderType=body.orderType,
         customerName=body.customerName,
         pickupTime=body.pickupTime,
@@ -166,6 +167,41 @@ async def list_orders(
     return {"orders": processed_orders, "count": len(processed_orders)}
 
 
+# ── GET /{orderId}/guest, for guest notifications ─────────────────────────────────────────────────────
+
+@router.get("/{orderId}/guest", summary="Get a guest's own order")
+async def get_guest_order(
+    orderId: str,
+    guestSessionId: Annotated[str, Query(min_length=1)],
+    tenantId: Annotated[str, Depends(get_tenant_id)],
+    repo: Annotated[OrderRepository, Depends(get_order_repo)],
+):
+    order = repo.get_order_for_guest(
+        order_id=orderId,
+        tenant_id=tenantId,
+        guest_session_id=guestSessionId,
+    )
+
+    if not order:
+        raise ResourceNotFoundError(
+            resource="Order",
+            identifier=orderId,
+        )
+
+    processed_order = clean_decimals(dict(order))
+
+    if "lineItems" in processed_order:
+        for item in processed_order["lineItems"]:
+            if "addOns" not in item:
+                item["addOns"] = []
+            if "addOnsTotalMinorUnits" not in item:
+                item["addOnsTotalMinorUnits"] = 0
+
+    return {
+        "order": processed_order,
+        "sfnStatus": None,
+    }
+
 # ── GET /orders/{orderId} ─────────────────────────────────────────────────────
 
 @router.get("/{orderId}", summary="Get a single order by ID")
@@ -227,9 +263,9 @@ async def update_order(
         "status":  new_status,
         "flags": {
             "kitchenAccepted": body.kitchenAccepted,
-            "foodReady":       body.foodReady,
-            "delivered":       body.delivered,
-            "cancelled":       body.cancelled,
+            "foodReady": body.foodReady,
+            "delivered": body.delivered,
+            "cancelled": body.cancelled,
         },
     }
     if execution_arn:

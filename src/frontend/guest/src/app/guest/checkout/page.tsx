@@ -23,6 +23,40 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   'delivery': 'Delivery'
 };
 
+
+const getGuestSessionId = async (restaurantId: string): Promise<string> => {
+  const existing = sessionStorage.getItem('guestSessionId');
+
+  if (existing) {
+    return existing;
+  }
+
+  const res = await fetch('/guest/session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      restaurantId,
+    }),
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new Error('Unable to create guest session.');
+  }
+
+  const data = await res.json();
+
+  if (!data?.guestSessionId) {
+    throw new Error('Guest session ID was not returned.');
+  }
+
+  sessionStorage.setItem('guestSessionId', data.guestSessionId);
+
+  return data.guestSessionId;
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { isDark } = useTheme();
@@ -166,6 +200,7 @@ export default function CheckoutPage() {
   };
 
   const placeOrder = async () => {
+    console.log('🔥 NEW CHECKOUT CODE RUNNING'); 
     console.log('═══════════════════════════════════════════════');
     console.log('🔄 PLACE ORDER STARTED');
     console.log('═══════════════════════════════════════════════');
@@ -182,6 +217,12 @@ export default function CheckoutPage() {
     try {
       const scope = getGuestScope();
       console.log('📋 Guest Scope:', scope);
+
+      const guestSessionId = await getGuestSessionId(scope.restaurantId);
+
+      if (!guestSessionId) {
+        throw new Error('Guest session ID is empty');
+      }
 
       // ── 1. Get table ID for dine-in ──
       let tableId = '';
@@ -243,6 +284,7 @@ export default function CheckoutPage() {
 
       // ── 3. Build payload ──
       const payload: any = {
+        guestSessionId: guestSessionId,
         restaurantId: scope.restaurantId,
         currencyCode: 'PKR',
         lineItems: lineItems,
@@ -253,6 +295,14 @@ export default function CheckoutPage() {
         contactPhone: phone || null,
         paymentMethod: paymentMethod,
       };
+
+      console.log('🔥📦 PAYLOAD BEFORE FETCH ->', {
+        ...payload,
+        guestSessionId: payload.guestSessionId,
+      });
+
+      console.log('🚨 SENDING guestSessionId:', payload.guestSessionId);
+      console.log('📦 FINAL ORDER PAYLOAD:', JSON.stringify(payload, null, 2));
 
       // ── 4. Add order-type specific fields ──
       if (orderType === 'dine_in') {

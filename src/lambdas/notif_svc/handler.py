@@ -1,7 +1,7 @@
 """
 notifications-lambda
-Trigger  : SQS (events from orders-lambda via EventBridge → SQS)
-Runtime  : Python 3.12
+Trigger  : SQS (events from orders-lambda → SQS)
+Runtime  : Python 3.13
 Memory   : 256 MB | Timeout: 60s
 
 NOTE: No Cognito JWT auth needed here — this Lambda is triggered
@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import boto3
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -96,27 +96,77 @@ def _extract_payload(body: dict) -> dict:
 
 
 def _process(payload: dict):
-    order_id  = payload["orderId"]
+    order_id = payload["orderId"]
     tenant_id = payload["tenantId"]
-    status    = payload.get("status", "UPDATED")
-    user_id   = payload.get("userId")
-    phone     = payload.get("phone")
-    email     = payload.get("email")
-    message   = payload.get("message") or _default_message(status, order_id)
+    status = payload.get("status", "UPDATED")
 
-    logger.info("Processing orderId=%s tenant=%s status=%s", order_id, tenant_id, status)
+    user_id = payload.get("userId")
+    guest_session_id = payload.get("guestSessionId")
 
-    # 1. SNS — raises on failure → SQS retry → DLQ
-    _publish_sns(order_id, tenant_id, status, message)
+    phone = payload.get("phone")
+    email = payload.get("email")
 
-    # 2. WebSocket — ephemeral, failure skipped
+    message = (
+        payload.get("message")
+        or _default_message(status, order_id)
+    )
+
+    logger.info(
+        "Notification target data: "
+        "userId=%s guestSessionId=%s phone=%s email=%s",
+        user_id,
+        guest_session_id,
+        phone,
+        email,
+    )
+
+    logger.info(
+        "Processing orderId=%s tenant=%s status=%s",
+        order_id,
+        tenant_id,
+        status,
+    )
+
+    # 1. SNS
+    _publish_sns(
+        order_id,
+        tenant_id,
+        status,
+        message,
+    )
+
+    # 2. WebSocket
     if user_id:
-        _push_websocket(user_id, order_id, status, message)
+        _push_websocket(
+            user_id,
+            order_id,
+            status,
+            message,
+        )
 
-    # 3. Pinpoint — best-effort, failure logged only
+    elif guest_session_id:
+        _push_guest_websocket(
+            guest_session_id,
+            order_id,
+            status,
+            message,
+        )
+
+    else:
+        logger.info(
+            "No WebSocket target for orderId=%s",
+            order_id,
+        )
+
+    # 3. External notification
     if phone or email:
-        _send_pinpoint(order_id, status, message, phone=phone, email=email)
-
+        _send_pinpoint(
+            order_id,
+            status,
+            message,
+            phone=phone,
+            email=email,
+        )
 
 # ── 1. SNS ────────────────────────────────────────────────────────────────────
 
@@ -167,17 +217,83 @@ def _push_websocket(user_id: str, order_id: str, status: str, message: str):
         except Exception as exc:
             logger.warning("WS push failed connId=%s: %s — skipping", conn_id, exc)
 
+def _push_guest_websocket(
+    guest_session_id: str,
+    order_id: str,
+    status: str,
+    message: str,
+):
+    connection_ids = _get_guest_connection_ids(guest_session_id)
+
+    if not connection_ids:
+        logger.info(
+            "No active WS connections for guestSessionId=%s",
+            guest_session_id,
+        )
+        return
+
+    ws_data = json.dumps({
+        "type": "ORDER_UPDATE",
+        "orderId": order_id,
+        "status": status,
+        "message": message,
+    }).encode()
+
+    for conn_id in connection_ids:
+        try:
+            apigw_mgmt.post_to_connection(
+                ConnectionId=conn_id,
+                Data=ws_data,
+            )
+            logger.info(
+                "WS pushed guest notification connId=%s guestSessionId=%s",
+                conn_id,
+                guest_session_id,
+            )
+
+        except apigw_mgmt.exceptions.GoneException:
+            logger.info(
+                "Stale WS connection %s — removing",
+                conn_id,
+            )
+            _remove_connection(conn_id)
+
+        except Exception as exc:
+            logger.warning(
+                "Guest WS push failed connId=%s: %s — skipping",
+                conn_id,
+                exc,
+            )
 
 def _get_connection_ids(user_id: str) -> list:
     try:
-        resp = connections_table.scan(
-            FilterExpression=Attr("userId").eq(user_id)
+        resp = connections_table.query(
+            IndexName="userId-index",
+            KeyConditionExpression=Key("userId").eq(user_id)
         )
         return [item["connectionId"] for item in resp.get("Items", [])]
     except Exception as exc:
         logger.warning("DDB connection scan failed: %s", exc)
         return []
 
+def _get_guest_connection_ids(guest_session_id: str) -> list:
+    try:
+        resp = connections_table.query(
+            IndexName="guestSessionId-index",
+            KeyConditionExpression=Key("guestSessionId").eq(guest_session_id),
+        )
+
+        return [
+            item["connectionId"]
+            for item in resp.get("Items", [])
+        ]
+
+    except Exception as exc:
+        logger.warning(
+            "DDB guest connection scan failed: %s",
+            exc,
+        )
+        return []
 
 def _remove_connection(conn_id: str):
     try:
