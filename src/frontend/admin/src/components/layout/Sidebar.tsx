@@ -44,17 +44,17 @@ export default function Sidebar() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -66,7 +66,19 @@ export default function Sidebar() {
     fetchMyTenant().then(setTenant).catch(() => setTenant(null));
   }, [role]);
 
-  const sections = visibleNav(user?.permissions ?? [], role);
+  const sections = visibleNav(user?.permissions ?? [], role).map(
+    ({ section, items }) => ({
+      section,
+      items:
+        role === 'tenant'
+          ? items
+          : items.filter(
+            (item) =>
+              item.href !== '/invoices' &&
+              item.href !== '/dashboard/invoices'
+          ),
+    })
+  ).filter(({ items }) => items.length > 0);
   const colors = getColors(isDark);
 
   function signOut() {
@@ -87,8 +99,8 @@ export default function Sidebar() {
       fontFamily: "'Poppins', sans-serif",
     }}>
       {/* Who and where */}
-      <div style={{ 
-        padding: '18px 18px 16px', 
+      <div style={{
+        padding: '18px 18px 16px',
         borderBottom: `1px solid ${colors.border}`,
         background: colors.bg,
       }}>
@@ -96,11 +108,11 @@ export default function Sidebar() {
           {role === 'admin' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Shield size={17} color={BRAND} />
-              <span style={{ 
-                fontSize: 15, 
-                fontWeight: 700, 
-                color: colors.text, 
-                fontFamily: "'Poppins', sans-serif" 
+              <span style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: colors.text,
+                fontFamily: "'Poppins', sans-serif"
               }}>
                 MenuLay
               </span>
@@ -108,11 +120,11 @@ export default function Sidebar() {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Building2 size={17} color={BRAND} />
-              <span style={{ 
-                fontSize: 15, 
-                fontWeight: 700, 
-                color: colors.text, 
-                fontFamily: "'Poppins', sans-serif" 
+              <span style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: colors.text,
+                fontFamily: "'Poppins', sans-serif"
               }}>
                 {tenant?.companyName ?? '…'}
               </span>
@@ -121,30 +133,30 @@ export default function Sidebar() {
         </div>
 
         {role === 'admin' ? (
-          <div style={{ 
-            fontSize: 12, 
+          <div style={{
+            fontSize: 12,
             color: colors.muted,
-            fontFamily: "'Poppins', sans-serif" 
+            fontFamily: "'Poppins', sans-serif"
           }}>
             Platform console
           </div>
         ) : (
           <>
             {tenant && (
-              <div style={{ 
-                fontSize: 12, 
+              <div style={{
+                fontSize: 12,
                 color: colors.muted,
-                fontFamily: "'Poppins', sans-serif" 
+                fontFamily: "'Poppins', sans-serif"
               }}>
                 <span style={{
-                  fontSize: 10, 
-                  fontWeight: 700, 
+                  fontSize: 10,
+                  fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: 0.5, 
-                  padding: '2px 8px', 
+                  letterSpacing: 0.5,
+                  padding: '2px 8px',
                   borderRadius: 4,
-                  background: colors.brandBg, 
-                  color: BRAND, 
+                  background: colors.brandBg,
+                  color: BRAND,
                   marginRight: 6,
                   fontFamily: "'Poppins', sans-serif",
                 }}>
@@ -155,12 +167,12 @@ export default function Sidebar() {
             )}
             {tenant && !tenant.isActive && (
               <div style={{
-                marginTop: 8, 
-                padding: '6px 10px', 
+                marginTop: 8,
+                padding: '6px 10px',
                 borderRadius: 6,
-                background: colors.dangerBg, 
-                color: BRAND, 
-                fontSize: 12, 
+                background: colors.dangerBg,
+                color: BRAND,
+                fontSize: 12,
                 fontWeight: 600,
                 fontFamily: "'Poppins', sans-serif",
               }}>
@@ -172,19 +184,19 @@ export default function Sidebar() {
       </div>
 
       {/* Menu — built from what this person may reach */}
-      <nav style={{ 
-        flex: 1, 
-        padding: '12px 10px', 
+      <nav style={{
+        flex: 1,
+        padding: '12px 10px',
         overflowY: 'auto',
         background: colors.bg,
       }}>
         {sections.map(({ section, items }) => (
           <div key={section} style={{ marginBottom: 14 }}>
             <p style={{
-              fontSize: 10, 
-              fontWeight: 700, 
+              fontSize: 10,
+              fontWeight: 700,
               letterSpacing: 1,
-              textTransform: 'uppercase', 
+              textTransform: 'uppercase',
               color: colors.subtle,
               margin: '0 0 6px 12px',
               fontFamily: "'Poppins', sans-serif",
@@ -195,17 +207,17 @@ export default function Sidebar() {
             {items.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
               return (
-                <Link 
-                  key={href} 
-                  href={href} 
+                <Link
+                  key={href}
+                  href={href}
                   style={{
-                    display: 'flex', 
-                    alignItems: 'center', 
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: 10,
-                    padding: '9px 12px', 
-                    borderRadius: 10, 
+                    padding: '9px 12px',
+                    borderRadius: 10,
                     marginBottom: 3,
-                    textDecoration: 'none', 
+                    textDecoration: 'none',
                     fontSize: 13.5,
                     fontWeight: active ? 700 : 500,
                     // 🔥 SELECTED: BRAND bg with white text (both themes)
@@ -225,12 +237,12 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <Icon 
-                    size={16} 
+                  <Icon
+                    size={16}
                     // 🔥 Selected icon: white, else muted
-                    color={active ? '#FFFFFF' : colors.muted} 
+                    color={active ? '#FFFFFF' : colors.muted}
                   />
-                  <span style={{ 
+                  <span style={{
                     // 🔥 Selected text: white, else muted
                     color: active ? '#FFFFFF' : colors.muted,
                     fontFamily: "'Poppins', sans-serif",
@@ -245,41 +257,41 @@ export default function Sidebar() {
       </nav>
 
       {/* Account */}
-      <div style={{ 
-        padding: 14, 
+      <div style={{
+        padding: 14,
         borderTop: `1px solid ${colors.border}`,
         background: colors.bg,
       }}>
-        <div style={{ 
-          fontSize: 13, 
-          fontWeight: 600, 
+        <div style={{
+          fontSize: 13,
+          fontWeight: 600,
           color: colors.text,
           fontFamily: "'Poppins', sans-serif",
         }}>
           {user?.displayName || user?.email}
         </div>
-        <div style={{ 
-          fontSize: 11, 
-          color: colors.subtle, 
+        <div style={{
+          fontSize: 11,
+          color: colors.subtle,
           marginBottom: 8,
           fontFamily: "'Poppins', sans-serif",
         }}>
           {role ? ROLE_LABEL[role] : ''}
         </div>
-        <button 
-          onClick={signOut} 
+        <button
+          onClick={signOut}
           style={{
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 8, 
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
             width: '100%',
-            marginBottom:'70px',
-            padding: '8px 12px', 
-            border: `1px solid ${colors.border}`, 
+            marginBottom: '70px',
+            padding: '8px 12px',
+            border: `1px solid ${colors.border}`,
             borderRadius: 8,
-            background: colors.card2, 
-            cursor: 'pointer', 
-            fontSize: 13, 
+            background: colors.card2,
+            cursor: 'pointer',
+            fontSize: 13,
             color: colors.text,
             fontFamily: "'Poppins', sans-serif",
             transition: 'all 0.2s ease',

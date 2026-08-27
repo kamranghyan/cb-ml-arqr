@@ -152,6 +152,13 @@ class SubscriptionService:
                 "message": "Subscription already active",
                 "tenant_id": tenant_id,
                 "plan_id": plan_id,
+                "payment_id": payment_id,
+                "subscriptionStartDate": (
+                    subscription.start_date.isoformat()
+                ),
+                "subscriptionEndDate": (
+                    subscription.end_date.isoformat()
+                ),
                 "expires_at": subscription.end_date.isoformat(),
             }
 
@@ -194,6 +201,12 @@ class SubscriptionService:
             "tenant_id": tenant_id,
             "plan_id": plan_id,
             "payment_id": payment_id,
+            "subscriptionStartDate": (
+                subscription.start_date.isoformat()
+            ),
+            "subscriptionEndDate": (
+                subscription.end_date.isoformat()
+            ),
             "expires_at": subscription.end_date.isoformat(),
         }
 
@@ -207,9 +220,6 @@ class SubscriptionService:
     ) -> SubscriptionResponse:
         """
         Get current subscription status for tenant.
-
-        Returns INACTIVE when the tenant exists but has no
-        subscription yet.
         """
 
         tenant = self.tenant_repo.get_tenant(tenant_id)
@@ -233,8 +243,8 @@ class SubscriptionService:
                 tenant_id=tenant_id,
                 plan_id="",
                 status="INACTIVE",
-                start_date=now,
-                end_date=now,
+                subscriptionStartDate=now,
+                subscriptionEndDate=now,
                 is_active=False,
                 days_remaining=0,
             )
@@ -280,7 +290,6 @@ class SubscriptionService:
         if subscription.status == "ACTIVE":
             now = _now()
 
-            # Make sure both datetimes are timezone-aware.
             end_date = subscription.end_date
 
             if end_date.tzinfo is None:
@@ -301,8 +310,8 @@ class SubscriptionService:
             tenant_id=subscription.tenant_id,
             plan_id=plan_id or subscription.plan_id,
             status=subscription.status,
-            start_date=subscription.start_date,
-            end_date=subscription.end_date,
+            subscriptionStartDate=subscription.start_date,
+            subscriptionEndDate=subscription.end_date,
             is_active=subscription.status == "ACTIVE",
             days_remaining=days_remaining,
         )
