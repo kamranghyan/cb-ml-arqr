@@ -22,28 +22,29 @@ import {
 } from '@/lib/cognito'
 
 type AuthState = {
-  user:        AuthUser | null
-  loading:     boolean
-  error:       string | null
+  user: AuthUser | null
+  loading: boolean
+  error: string | null
 }
 
 type LoginResult = {
-  success:   boolean
+  success: boolean
   challenge?: 'NEW_PASSWORD_REQUIRED'
-  session?:  string
-  redirect?: string // where to go after login
+  session?: string
+  redirect?: string
+  error?: string
 }
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
-    user:    null,
+    user: null,
     loading: true,
-    error:   null,
+    error: null,
   })
 
   // ── Load user on mount ───────────────────────────────────────────────────
   useEffect(() => {
-    const user   = loadUser()
+    const user = loadUser()
     const tokens = loadTokens()
     if (user && tokens && Date.now() < tokens.expiresAt) {
       setState({ user, loading: false, error: null })
@@ -88,8 +89,17 @@ export function useAuth() {
       return { success: true, redirect }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed'
-      setState(s => ({ ...s, loading: false, error: message }))
-      return { success: false }
+
+      setState(s => ({
+        ...s,
+        loading: false,
+        error: message,
+      }))
+
+      return {
+        success: false,
+        error: message,
+      }
     }
   }, [])
 
@@ -109,9 +119,20 @@ export function useAuth() {
       let redirect = '/kds'
       return { success: true, redirect }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to set password'
-      setState(s => ({ ...s, loading: false, error: message }))
-      return { success: false }
+      const message = err instanceof Error
+        ? err.message
+        : 'Failed to set password'
+
+      setState(s => ({
+        ...s,
+        loading: false,
+        error: message,
+      }))
+
+      return {
+        success: false,
+        error: message,
+      }
     }
   }, [])
 
@@ -183,14 +204,14 @@ export function useAuth() {
 
   return {
     // State
-    user:            state.user,
-    loading:         state.loading,
-    error:           state.error,
+    user: state.user,
+    loading: state.loading,
+    error: state.error,
     isAuthenticated: !!state.user,
     // Role checks
-    isAdmin:         isAdmin(state.user),
-    isTenant:        isTenant(state.user),
-    isKitchenStaff:  isKitchenStaff(state.user),
+    isAdmin: isAdmin(state.user),
+    isTenant: isTenant(state.user),
+    isKitchenStaff: isKitchenStaff(state.user),
     // Actions
     login,
     logout,

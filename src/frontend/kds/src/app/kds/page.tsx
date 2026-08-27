@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { Volume2, VolumeX, RefreshCw, Wifi, WifiOff, Radio, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { formatTimer, timerColorClass, timerBarColor, playNewOrderBeep } from '@/lib/utils';
 import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL, connectWebSocket, authHeaders } from '@/lib/orders-api';
@@ -33,7 +35,6 @@ export default function KitchenDisplayPage() {
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [audio, setAudio] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
   const [clock, setClock] = useState('');
   const [pollPct, setPollPct] = useState(0);
   const [apiState, setApiState] = useState<'loading' | 'live' | 'error'>('loading');
@@ -59,7 +60,25 @@ export default function KitchenDisplayPage() {
   useEffect(() => { const id = setInterval(() => { setOrders(prev => prev.map(o => o.status !== 'delivered' ? { ...o, elapsedSeconds: Math.min(o.elapsedSeconds + 1, o.maxSeconds + 300) } : o)); }, 1000); return () => clearInterval(id); }, []);
   useEffect(() => { const id = setInterval(() => { setPollPct(Math.min(100, ((Date.now() - pollStart.current) % POLL_INTERVAL) / POLL_INTERVAL * 100)); }, 200); return () => clearInterval(id); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 5000); };
+  const showToast = useCallback(
+    (
+      message: string,
+      type: 'success' | 'error' | 'warning' | 'info' = 'info'
+    ) => {
+      toast.dismiss();
+
+      toast[type](message, {
+        position: 'top-right',
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: isDark ? 'dark' : 'light',
+      });
+    },
+    [isDark]
+  );
   const addWsLog = (msg: string) => { const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); setWsLog(prev => [`[${time}] ${msg}`, ...prev.slice(0, 9)]); };
 
   const connectWs = useCallback(async () => {
@@ -134,7 +153,8 @@ export default function KitchenDisplayPage() {
 
               if (exists) {
                 showToast(
-                  `📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`
+                  `📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`,
+                  'info'
                 );
 
                 return prev.map(o =>
@@ -153,7 +173,8 @@ export default function KitchenDisplayPage() {
                 const newOrder = normaliseOrder(msg);
 
                 showToast(
-                  `🔔 WS: New order #${newOrder.id} — Table ${newOrder.table}`
+                  `🔔 WS: New order #${newOrder.id} — Table ${newOrder.table}`,
+                  'success'
                 );
 
                 if (audioRef.current) {
@@ -273,7 +294,8 @@ export default function KitchenDisplayPage() {
                 o.tableName ??
                 o.tableId ??
                 'N/A'
-              }`
+              }`,
+              'success'
             );
 
             if (audioRef.current) {
@@ -398,12 +420,67 @@ export default function KitchenDisplayPage() {
 
 
   const advanceOrder = async (orderId: string) => {
-    const order = orders.find(o => o.id === orderId); if (!order) return;
-    const next = STATUS_NEXT[order.status]; if (!next) return;
-    setAdvancing(orderId); setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: next } : o));
-    try { const apiId = (order as any)._apiId ?? orderId; await patchOrderStatus(apiId, next); wsSend({ action: 'orderStatusUpdate', orderId: apiId, status: next }); showToast(`Order #${orderId} → ${next.toUpperCase()}`); }
-    catch (err: any) { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: order.status } : o)); showToast(`⚠ Failed: ${err?.message}`); }
-    finally { setAdvancing(null); }
+    const order = orders.find(o => o.id === orderId);
+
+    if (!order) return;
+
+    const next = STATUS_NEXT[order.status];
+
+    if (!next) return;
+
+    const previousStatus = order.status;
+
+    setAdvancing(orderId);
+
+    // Optimistic UI update
+    setOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? {
+            ...o,
+            status: next,
+          }
+          : o
+      )
+    );
+
+    try {
+      const apiId = (order as any)._apiId ?? orderId;
+
+      await patchOrderStatus(apiId, next);
+
+      wsSend({
+        action: 'orderStatusUpdate',
+        orderId: apiId,
+        status: next,
+      });
+
+      showToast(
+        `Order #${orderId} → ${next.toUpperCase()}`,
+        'success'
+      );
+    } catch (err: any) {
+      // Rollback UI
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId
+            ? {
+              ...o,
+              status: previousStatus,
+            }
+            : o
+        )
+      );
+
+      showToast(
+        err?.message
+          ? `⚠ ${err.message}`
+          : '⚠ Failed to update order status',
+        'error'
+      );
+    } finally {
+      setAdvancing(null);
+    }
   };
 
   const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
@@ -479,44 +556,24 @@ export default function KitchenDisplayPage() {
       transition: 'background 0.25s'
     }}>
 
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          top: 80,
-          right: 20,
-          zIndex: 50,
-          background: D.card,
-          border: `1.5px solid ${TONE.orange.border}`,
-          borderRadius: 18,
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          boxShadow: '0 8px 24px rgba(255,87,35,0.15)',
-          maxWidth: 320,
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={isDark ? 'dark' : 'light'}
+        toastStyle={{
           fontFamily: "'Poppins', sans-serif",
-        }}>
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: 10,
-            background: TONE.orange.bg,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 16,
-            flexShrink: 0
-          }}>🔔</div>
-          <p style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: D.text,
-            margin: 0,
-            fontFamily: "'Poppins', sans-serif",
-          }}>{toast}</p>
-        </div>
-      )}
-
+          fontSize: 13,
+          fontWeight: 600,
+          borderRadius: 12,
+        }}
+      />
       {/* ── Header ── */}
       <header style={{
         display: 'flex',
@@ -1185,8 +1242,6 @@ export default function KitchenDisplayPage() {
         </div>
       )}
 
-      {/* ── Grid ── */}
-      // app/kds/page.tsx - Modified section
 
       {/* ── Grid ── */}
       {(apiState !== 'loading' || orders.length > 0) && (
@@ -1294,7 +1349,6 @@ export default function KitchenDisplayPage() {
                       margin: '1px 0 0',
                       fontFamily: "'Poppins', sans-serif",
                     }}>{order.placedAt}</p>
-                    //
                   </div>
                 </div>
                 <div style={{ height: 3, background: D.border }}>

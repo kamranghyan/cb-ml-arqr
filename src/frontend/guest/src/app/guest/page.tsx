@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, ChevronRight, Star, Plus, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTheme } from '@/hooks/useTheme';
 import {
   fetchMenuItems,
@@ -181,6 +182,7 @@ function GuestContent() {
         }
       } catch (err) {
         console.error('❌ Failed to fetch restaurant:', err);
+        toast.error('Failed to load restaurant information');
       }
     };
 
@@ -221,6 +223,7 @@ function GuestContent() {
         console.error('❌ Failed to fetch menu data:', err);
         setItems([]);
         setCategories([]);
+        toast.error('Failed to load menu. Please try again.');
       }
     };
 
@@ -965,6 +968,7 @@ function GuestContent() {
                   <button
                     onClick={e => {
                       e.preventDefault();
+
                       addItem({
                         menuItemId: item.id,
                         name: item.name,
@@ -974,6 +978,8 @@ function GuestContent() {
                         options: {},
                         imageUrl: (item as any).imageUrl || '',
                       });
+
+                      toast.success(`${item.name} added to cart`);
                     }}
                     style={{
                       width: 40,
