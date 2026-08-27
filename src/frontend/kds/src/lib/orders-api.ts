@@ -12,7 +12,7 @@ const PROXY = {
 };
 
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
-  ?? 'wss://opoa6rn0zf.execute-api.ap-south-1.amazonaws.com/dev';
+  ?? 'wss://x0ev8z7gwg.execute-api.ap-south-1.amazonaws.com/dev';
 
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID_KDS
 
@@ -219,15 +219,65 @@ export async function patchOrderStatus(apiOrderId: string, newStatus: KdsStatus)
 }
 
 // ── WebSocket connect ─────────────────────────────────────────────────────────
+
 export async function connectWebSocket(): Promise<WebSocket> {
+  // ───────────────────────────────────────────────────────────────────────────
+  // 1. Try Cognito first
+  //    KDS / admin / tenant users come through this path.
+  // ───────────────────────────────────────────────────────────────────────────
+
   try {
     const { getValidIdToken } = await import('@/lib/cognito');
+
     const token = await getValidIdToken();
+
     if (token) {
-      return new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
+      const url =
+        `${WS_URL}?token=${encodeURIComponent(token)}`;
+
+      console.log('[WS] Connecting as authenticated user');
+
+      return new WebSocket(url);
     }
-  } catch {
-    // No token — connect without auth
+  } catch (error) {
+    console.log(
+      '[WS] No valid Cognito token, checking guest session...',
+      error
+    );
   }
-  return new WebSocket(WS_URL);
+
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 2. Guest connection
+  //    Guest session is created by /guest/session and stored in sessionStorage.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  if (typeof window !== 'undefined') {
+    const guestSessionId =
+      sessionStorage.getItem('guestSessionId');
+
+    if (guestSessionId) {
+      const url =
+        `${WS_URL}?guestSessionId=${encodeURIComponent(guestSessionId)}`;
+
+      console.log(
+        '[WS] Connecting as guest:',
+        guestSessionId
+      );
+
+      return new WebSocket(url);
+    }
+  }
+
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 3. No authentication/session
+  //    Do NOT silently connect anymore.
+  //
+  //    Backend now rejects unauthenticated connections.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  throw new Error(
+    'Unable to connect WebSocket: no authentication or guest session found.'
+  );
 }

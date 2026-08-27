@@ -32,59 +32,8 @@ export default function ProfilePage() {
     setTableNum(sessionStorage.getItem('lm_table') ?? '');
   }, []);
 
-  // ── QR Scanner Logic ──────────────────────────────────────────────
-  useEffect(() => {
-    if (!showScanner) return;
-    startScanner();
-    return () => {
-      stopScanner();
-    };
-  }, [showScanner]);
 
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startScanner = async () => {
-    setScanning(true);
-    setScanError('');
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
-      const video = videoRef.current;
-      if (!video) {
-        stream.getTracks().forEach(track => track.stop());
-        return;
-      }
-
-      video.srcObject = stream;
-      video.setAttribute('playsinline', 'true');
-
-      await new Promise<void>((resolve) => {
-        if (video.readyState >= 1) {
-          resolve();
-        } else {
-          video.onloadedmetadata = () => resolve();
-        }
-      });
-
-      await video.play();
-      scanTimeoutRef.current = setTimeout(() => {
-        scanQRCode();
-      }, 500);
-
-    } catch (err) {
-      console.error('Camera error:', err);
-      setScanError('Unable to access camera. Please allow camera permissions.');
-      setScanning(false);
-    }
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -156,11 +105,6 @@ export default function ProfilePage() {
 
   const stopScanner = () => {
     setScanning(false);
-
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
 
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);

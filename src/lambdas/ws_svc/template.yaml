@@ -19,6 +19,12 @@ Parameters:
     Default: dev
     AllowedValues: [dev, staging, prod]
 
+  UserPoolId:
+    Type: String
+
+  ClientId:
+    Type: String
+
 Resources:
 
   # ── DynamoDB Tables ────────────────────
@@ -27,12 +33,34 @@ Resources:
     Properties:
       TableName: !Sub ConnectionTable-${Stage}
       BillingMode: PAY_PER_REQUEST
+
       AttributeDefinitions:
         - AttributeName: connectionId
           AttributeType: S
+        - AttributeName: guestSessionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+
       KeySchema:
         - AttributeName: connectionId
           KeyType: HASH
+
+      GlobalSecondaryIndexes:
+        - IndexName: guestSessionId-index
+          KeySchema:
+            - AttributeName: guestSessionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL 
+
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -201,6 +229,8 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                guestSessionId.$: "$.guestSessionId"
+                guestConnectionId.$: "$.guestConnectionId"
                 status: CANCELLED
                 message: Your order has been cancelled.
             Retry:
@@ -218,6 +248,8 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                guestSessionId.$: "$.guestSessionId"
+                guestConnectionId.$: "$.guestConnectionId"
                 status: DELIVERED
                 message: Your order has been delivered.
             Retry:
@@ -235,6 +267,8 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                guestSessionId.$: "$.guestSessionId"
+                guestConnectionId.$: "$.guestConnectionId"
                 status: READY
                 message: Your order is ready.
             Retry:
@@ -252,6 +286,8 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                guestSessionId.$: "$.guestSessionId"
+                guestConnectionId.$: "$.guestConnectionId"
                 status: PREPARING
                 message: Your order is being prepared.
             Retry:
@@ -269,6 +305,8 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                guestSessionId.$: "$.guestSessionId"
+                guestConnectionId.$: "$.guestConnectionId"
                 status: RECEIVED
                 message: Your order has been received.
             Retry:
@@ -297,7 +335,8 @@ Resources:
         Variables:
           REDIS_URL: redis://localhost:6379
           TABLE_CONN: !Ref ConnectionTable
-          JWT_SECRET: test-secret
+          USER_POOL_ID: !Ref UserPoolId
+          CLIENT_ID: !Ref ClientId
 
   WsConnectPermission:
     Type: AWS::Lambda::Permission
@@ -322,6 +361,7 @@ Resources:
       Environment:
         Variables:
           REDIS_URL: redis://localhost:6379
+          TABLE_CONN: !Ref ConnectionTable
 
   WsDisconnectPermission:
     Type: AWS::Lambda::Permission

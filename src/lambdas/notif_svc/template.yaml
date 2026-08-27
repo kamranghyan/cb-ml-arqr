@@ -123,10 +123,13 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:Query
                 - dynamodb:Scan
                 - dynamodb:DeleteItem
-              Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${WsConnectionsTableName}"
-
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${WsConnectionsTableName}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${WsConnectionsTableName}/index/*"
+                
         # SQS consume
         - SQSPollerPolicy:
             QueueName: !GetAtt NotificationsQueue.QueueName
