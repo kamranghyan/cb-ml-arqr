@@ -7,6 +7,7 @@ import {
   fetchTables, createTable, updateTable, deleteTable, type ApiTable,
 } from '@/lib/admin-api';
 import { getTheme } from '@/lib/theme';
+import { toast } from 'sonner';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -36,7 +37,6 @@ export default function TablesPage() {
   const [rows, setRows] = useState<ApiTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiTable }>({ open: false });
 
   // ── Theme listener ──
@@ -45,17 +45,17 @@ export default function TablesPage() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -65,8 +65,11 @@ export default function TablesPage() {
   const colors = getColors(isDark);
 
   const say = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 3500);
+    if (kind === 'err') {
+      toast.error(msg);
+    } else {
+      toast.success(msg);
+    }
   };
 
   const load = useCallback(async () => {
@@ -85,13 +88,20 @@ export default function TablesPage() {
   useEffect(() => { load(); }, [load]);
 
   async function onDelete(t: ApiTable) {
-    if (!confirm(`Delete table "${t.tableNumber}"? Its QR code will stop working.`)) return;
+    if (!confirm(`Delete table "${t.tableNumber}"? Its QR code will stop working.`)) {
+      return;
+    }
+
     try {
       await deleteTable(t.tableId, restaurantId);
-      say('Table deleted');
-      load();
+      say('Table deleted successfully.');
+      await load();
     } catch (e: any) {
-      say(e.message, 'err');
+      console.error('TABLE DELETE ERROR:', e);
+      say(
+        e?.message ?? 'Could not delete the table. Please try again.',
+        'err'
+      );
     }
   }
 
@@ -508,25 +518,6 @@ export default function TablesPage() {
         />
       )}
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          padding: '12px 18px',
-          borderRadius: 10,
-          background: toast.kind === 'ok' ? colors.green : colors.danger,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 14,
-          zIndex: 100,
-          fontFamily: "'Poppins', sans-serif",
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        }}>
-          {toast.msg}
-        </div>
-      )}
     </div>
   );
 }

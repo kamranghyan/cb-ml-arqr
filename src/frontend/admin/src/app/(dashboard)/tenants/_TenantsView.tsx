@@ -11,6 +11,7 @@ import {
   type ApiTenant, type PlanTier,
 } from '@/lib/auth-api';
 import { getTheme } from '@/lib/theme';
+import { toast } from 'sonner';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -32,13 +33,11 @@ const getColors = (isDark: boolean) => ({
   placeholder: isDark ? '#6B7280' : '#888888', // ✅ Light: dark gray
 });
 
-type Toast = { msg: string; kind: 'ok' | 'err' } | null;
 
 export default function TenantsView() {
   const [rows, setRows] = useState<ApiTenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<Toast>(null);
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiTenant }>({ open: false });
   const [isDark, setIsDark] = useState(false);
 
@@ -48,17 +47,17 @@ export default function TenantsView() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -66,11 +65,6 @@ export default function TenantsView() {
   }, []);
 
   const colors = getColors(isDark);
-
-  const showToast = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,25 +89,27 @@ export default function TenantsView() {
 
     try {
       await updateTenant(t.tenantId, { isActive: next });
-      showToast(next ? 'Tenant activated' : 'Tenant suspended');
-      load();
-    } catch (e: any) { showToast(e.message, 'err'); }
+      toast.success(next ? 'Tenant activated' : 'Tenant suspended'); load();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to update tenant');
+    }
   }
 
   async function onDelete(t: ApiTenant) {
     if (t.restaurantCount > 0) {
-      showToast(
-        `"${t.companyName}" still owns ${t.restaurantCount} restaurant(s). ` +
-        `They must be deleted first.`, 'err');
+      toast.error(
+        `"${t.companyName}" still owns ${t.restaurantCount} restaurant(s). They must be deleted first.`
+      );
       return;
     }
     if (!confirm(`Delete "${t.companyName}" and its owner login? This cannot be undone.`)) return;
 
     try {
       await deleteTenant(t.tenantId);
-      showToast('Tenant deleted');
-      load();
-    } catch (e: any) { showToast(e.message, 'err'); }
+      toast.success('Tenant deleted'); load();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to delete tenant');
+    }
   }
 
   return (
@@ -565,32 +561,11 @@ export default function TenantsView() {
           edit={modal.edit}
           onClose={() => setModal({ open: false })}
           onSaved={() => { setModal({ open: false }); load(); }}
-          showToast={showToast}
           colors={colors}
           isDark={isDark}
         />
       )}
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          padding: '12px 18px',
-          borderRadius: 10,
-          background: toast.kind === 'ok' ? colors.green : BRAND,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 14,
-          maxWidth: 420,
-          zIndex: 100,
-          fontFamily: "'Poppins', sans-serif",
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-        }}>
-          {toast.msg}
-        </div>
-      )}
     </div>
   );
 }
@@ -601,14 +576,12 @@ function TenantModal({
   edit,
   onClose,
   onSaved,
-  showToast,
   colors,
   isDark,
 }: {
   edit?: ApiTenant;
   onClose: () => void;
   onSaved: () => void;
-  showToast: (m: string, k?: 'ok' | 'err') => void;
   colors: ReturnType<typeof getColors>;
   isDark: boolean;
 }) {
@@ -625,13 +598,15 @@ function TenantModal({
 
   async function save() {
     setSaving(true);
+
     try {
       if (isEdit) {
         await updateTenant(edit!.tenantId, {
           companyName: f.companyName,
           planTier: f.planTier,
         });
-        showToast('Tenant updated');
+
+        toast.success('Tenant updated successfully');
       } else {
         await createTenant({
           companyName: f.companyName,
@@ -640,11 +615,13 @@ function TenantModal({
           name: f.name,
           planTier: f.planTier,
         });
-        showToast(`Tenant created — share the login with ${f.email}`);
+
+        toast.success(`Tenant created — share the login with ${f.email}`);
       }
+
       onSaved();
     } catch (e: any) {
-      showToast(e.message, 'err');
+      toast.error(e?.message ?? 'Failed to save tenant');
     } finally {
       setSaving(false);
     }

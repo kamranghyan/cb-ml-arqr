@@ -106,39 +106,141 @@ function guessEmoji(name: string): string {
   return '🍽️';
 }
 
-export function normaliseOrder(raw: ApiOrder): KdsOrder & { _apiId: string } {
-  const tableNum = (raw.tableId ?? 'T?').replace(/[^0-9]/g, '').padStart(2, '0') || '??';
+export function normaliseOrder(
+  raw: ApiOrder
+): KdsOrder & { _apiId: string } {
+  const tableNum =
+    (raw.tableId ?? 'T?').replace(/[^0-9]/g, '').padStart(2, '0') || '??';
+
   const placedAt = raw.placedAt
-    ? new Date(raw.placedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    ? new Date(raw.placedAt).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
     : '—';
 
-  // Fallback for lineItems key naming variants
-  const rawItems = raw.lineItems || (raw as any).items || (raw as any).line_items || [];
+  // Support all possible backend naming variants
+  const rawItems =
+    raw.lineItems ||
+    (raw as any).items ||
+    (raw as any).line_items ||
+    [];
 
-  // ✅ FIX: Extract items with add-ons
   const items = rawItems.map((li: any) => {
-    // ✅ Get add-ons from line item
     const addOns = li.addOns || li.addons || [];
-    
-    console.log(`📝 Item: ${li.name}, AddOns:`, addOns); // Debug log
 
     return {
       emoji: guessEmoji(li.name || 'Item'),
       name: li.name || 'Unknown Item',
       mods: '',
-      qty: li.quantity ?? li.qty ?? 1,
+      qty: Number(li.quantity ?? li.qty ?? 1),
       done: false,
-      // ✅ Add add-ons to the item
+
       addOns: addOns.map((addon: any) => ({
-        id: addon.addOnId || addon.id || `addon_${Date.now()}`,
-        name: addon.name || addon.addOnName || 'Add-on',
-        qty: addon.quantity || addon.qty || 1,
-        price: addon.priceMinorUnits ? addon.priceMinorUnits / 100 : (addon.price || 0),
+        id:
+          addon.addOnId ||
+          addon.id ||
+          `addon_${addon.name || 'unknown'}`,
+
+        name:
+          addon.name ||
+          addon.addOnName ||
+          'Add-on',
+
+        qty: Number(
+          addon.quantity ??
+          addon.qty ??
+          1
+        ),
+
+        price:
+          addon.priceMinorUnits != null
+            ? Number(addon.priceMinorUnits) / 100
+            : Number(addon.price ?? 0),
       })),
     };
   });
 
-  const shortId = (raw.orderId || 'UNKNOWN').slice(0, 6).toUpperCase();
+  /**
+   * Merge duplicate items inside the SAME order.
+   *
+   * Example:
+   * Burger x1
+   * Burger x1
+   * Burger x1
+   *
+   * becomes:
+   * Burger x3
+   *
+   * But:
+   * Burger + Cheese
+   * Burger + Bacon
+   *
+   * remain separate because their add-ons differ.
+   */
+  const mergeKdsItems = (items: any[]) => {
+    const merged = new Map<string, any>();
+
+    for (const item of items) {
+      const name = String(item.name ?? '')
+        .trim()
+        .toLowerCase();
+
+      const addons = Array.isArray(item.addOns)
+        ? item.addOns
+        : [];
+
+      /**
+       * Create a stable key for add-ons.
+       * Same item + same add-ons = same KDS item.
+       */
+      const addonKey = addons
+        .map((addon: any) => ({
+          id: String(addon.id ?? ''),
+          name: String(addon.name ?? '')
+            .trim()
+            .toLowerCase(),
+          qty: Number(addon.qty ?? 1),
+        }))
+        .sort(
+          (
+            a: { id: string; name: string; qty: number },
+            b: { id: string; name: string; qty: number },
+          ) => {
+          if (a.id !== b.id) {
+            return a.id.localeCompare(b.id);
+          }
+
+          return a.name.localeCompare(b.name);
+          },
+        );
+
+      const key = `${name}|${JSON.stringify(addonKey)}`;
+
+      const existing = merged.get(key);
+
+      if (existing) {
+        existing.qty += Number(item.qty ?? 1);
+      } else {
+        merged.set(key, {
+          ...item,
+          qty: Number(item.qty ?? 1),
+          addOns: addons,
+        });
+      }
+    }
+
+    return Array.from(merged.values());
+  };
+
+  // IMPORTANT:
+  // Actually use the merge function.
+  const mergedItems = mergeKdsItems(items);
+
+  const shortId = (raw.orderId || 'UNKNOWN')
+    .slice(0, 6)
+    .toUpperCase();
 
   return {
     id: `LM-${shortId}`,
@@ -147,11 +249,14 @@ export function normaliseOrder(raw: ApiOrder): KdsOrder & { _apiId: string } {
     status: toKdsStatus(raw.status, raw.flags),
     elapsedSeconds: 0,
     maxSeconds: 1500,
-    items,
+
+    // IMPORTANT: merged items, NOT original items
+    items: mergedItems,
+
     note: '',
     placedAt,
     _apiId: raw.orderId,
-  } as any;
+  } as KdsOrder & { _apiId: string };
 }
 
 

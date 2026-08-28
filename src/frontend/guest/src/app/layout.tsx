@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 // @ts-ignore: Allow side-effect CSS import without type declarations
 import './globals.css';
 import { Toaster } from 'sonner';
+import ThemeToaster from '@/components/ThemeToaster';
 
 export const metadata: Metadata = {
   title: 'Menulay — Digital Menu',
@@ -13,8 +14,8 @@ export const metadata: Metadata = {
     title: 'Menulay',
   },
   icons: {
-    icon: '/fav_logo.png',  
-    apple: '/fav_logo.png', 
+    icon: '/fav_logo.png',
+    apple: '/fav_logo.png',
   },
 };
 
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       </head>
       <body>{children}</body>
-      <Toaster position="top-center" richColors />
+      <ThemeToaster />
     </html>
   );
 }

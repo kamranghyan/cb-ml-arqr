@@ -11,6 +11,7 @@ import {
   fetchOrdersForRestaurant, derivedStatus, money, type SupportOrder,
 } from '@/lib/support-api';
 import { getTheme } from '@/lib/theme';
+import { toast } from 'sonner';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -32,20 +33,20 @@ const getColors = (isDark: boolean) => ({
 
 // ── Accent colors based on theme ──
 const getAccents = (isDark: boolean) => ({
-  green: { 
-    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4', 
-    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0', 
-    text: isDark ? '#4ade80' : '#16a34a' 
+  green: {
+    bg: isDark ? 'rgba(34,197,94,0.12)' : '#F0FFF4',
+    border: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
+    text: isDark ? '#4ade80' : '#16a34a'
   },
-  orange: { 
-    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB', 
-    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A', 
-    text: isDark ? '#fb923c' : '#d97706' 
+  orange: {
+    bg: isDark ? 'rgba(251,146,60,0.15)' : '#FFFBEB',
+    border: isDark ? 'rgba(251,146,60,0.3)' : '#FDE68A',
+    text: isDark ? '#fb923c' : '#d97706'
   },
-  danger: { 
-    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0', 
-    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0', 
-    text: isDark ? '#ff8a5c' : BRAND 
+  danger: {
+    bg: isDark ? 'rgba(255,87,35,0.12)' : '#FFF0F0',
+    border: isDark ? 'rgba(255,87,35,0.3)' : '#FFD0D0',
+    text: isDark ? '#ff8a5c' : BRAND
   },
 });
 
@@ -69,17 +70,17 @@ export default function AdminAnalytics() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -92,10 +93,13 @@ export default function AdminAnalytics() {
   const loadTenants = useCallback(async () => {
     setLoadT(true);
     setErrorT('');
+
     try {
       setTenants(await fetchTenants());
     } catch (e: any) {
-      setErrorT(e?.message ?? 'Could not load platform data');
+      const message = e?.message ?? 'Could not load platform data';
+      setErrorT(message);
+      toast.error(message);
     } finally {
       setLoadT(false);
     }

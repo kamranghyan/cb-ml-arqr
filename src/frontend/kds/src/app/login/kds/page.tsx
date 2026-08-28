@@ -4,7 +4,6 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
-import { toast, ToastContainer } from 'react-toastify'
 import {
   AlertCircle,
   Eye,
@@ -14,7 +13,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react'
-import 'react-toastify/dist/ReactToastify.css'
+import { toast } from 'sonner'
 
 const BRAND = '#ff5723'
 
@@ -221,17 +220,6 @@ function KdsLoginContent() {
         transition: 'background 0.25s',
       }}
     >
-      <ToastContainer
-        aria-label="Notifications"
-        position="top-right"
-        autoClose={4000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        draggable
-        theme={isDark ? 'dark' : 'light'}
-      />
 
       {/* Theme Toggle */}
       <button

@@ -1,7 +1,12 @@
-// src/hooks/useTheme.ts
 'use client';
+
 import { useState, useEffect } from 'react';
-import { getTheme, toggleTheme, initTheme, type Theme } from '@/lib/theme';
+import {
+  getTheme,
+  toggleTheme,
+  initTheme,
+  type Theme,
+} from '@/lib/theme';
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>('light');
@@ -9,6 +14,17 @@ export function useTheme() {
   useEffect(() => {
     initTheme();
     setThemeState(getTheme());
+
+    const handleThemeChange = (event: Event) => {
+      const customEvent = event as CustomEvent<Theme>;
+      setThemeState(customEvent.detail || getTheme());
+    };
+
+    window.addEventListener('themeChange', handleThemeChange);
+
+    return () => {
+      window.removeEventListener('themeChange', handleThemeChange);
+    };
   }, []);
 
   const toggle = () => {
@@ -16,5 +32,9 @@ export function useTheme() {
     setThemeState(next);
   };
 
-  return { theme, toggle, isDark: theme === 'dark' };
+  return {
+    theme,
+    toggle,
+    isDark: theme === 'dark',
+  };
 }

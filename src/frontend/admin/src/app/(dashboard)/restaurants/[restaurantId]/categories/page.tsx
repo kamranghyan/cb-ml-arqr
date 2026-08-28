@@ -14,6 +14,7 @@ import {
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 import Image from 'next/image';
 import { getTheme } from '@/lib/theme';
+import { toast } from 'sonner';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -53,7 +54,6 @@ export default function CategoriesPage() {
     category?: ApiCategory;
   }>({ open: false });
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [modal, setModal] = useState<{
     open: boolean;
     edit?: ApiCategory;
@@ -66,17 +66,17 @@ export default function CategoriesPage() {
       const theme = getTheme();
       setIsDark(theme === 'dark');
     };
-    
+
     updateTheme();
-    
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'admin_theme') updateTheme();
     };
     window.addEventListener('storage', handleStorage);
-    
+
     const handleThemeToggle = () => updateTheme();
     window.addEventListener('themeChange', handleThemeToggle);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeChange', handleThemeToggle);
@@ -86,8 +86,11 @@ export default function CategoriesPage() {
   const colors = getColors(isDark);
 
   const say = (msg: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 3500);
+    if (kind === 'err') {
+      toast.error(msg);
+    } else {
+      toast.success(msg);
+    }
   };
 
   const load = useCallback(async () => {
@@ -97,7 +100,7 @@ export default function CategoriesPage() {
     try {
       setRows(await fetchCategories(restaurantId));
     } catch (e: any) {
-      setError(e?.message ?? 'Could not load categories');
+      say(e?.message ?? 'Could not load categories. Please try again.', 'err');
     } finally {
       setLoading(false);
     }
@@ -615,28 +618,6 @@ export default function CategoriesPage() {
         />
       )}
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            padding: '12px 18px',
-            borderRadius: 10,
-            background: toast.kind === 'ok' ? colors.success : colors.danger,
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: 14,
-            zIndex: 100,
-            fontFamily: "'Poppins', sans-serif",
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       {/* ── Confirm Delete Modal ── */}
       <ConfirmDeleteModal
         open={deleteModal.open}
@@ -763,7 +744,7 @@ function CategoryModal({
           restaurantId,
           imageFile
         );
-        say('Category updated');
+        say('Category updated successfully.');
       } else {
         await createCategory(
           {
@@ -774,12 +755,15 @@ function CategoryModal({
           restaurantId,
           imageFile
         );
-        say('Category created');
+        say('Category created successfully.');
       }
       onSaved();
     } catch (e: any) {
       console.error('CATEGORY SAVE ERROR:', e);
-      say(e?.message ?? 'Something went wrong', 'err');
+      say(
+        e?.message ?? 'Could not save the category. Please try again.',
+        'err'
+      );
     } finally {
       setSaving(false);
     }

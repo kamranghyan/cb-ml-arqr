@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { fetchTenants, type ApiTenant, type PlanTier } from '@/lib/auth-api';
 import { getTheme } from '@/lib/theme';
+import { toast } from 'sonner';
 
 const BRAND = '#ff5723';
 
@@ -99,7 +100,7 @@ export default function AdminDashboard() {
     try {
       setTenants(await fetchTenants());
     } catch (e: any) {
-      setError(e?.message ?? 'Could not load platform data');
+      toast.error(e?.message ?? 'Could not load platform data.');
     } finally {
       setLoading(false);
     }
@@ -130,7 +131,7 @@ export default function AdminDashboard() {
         throw new Error(data?.error || data?.detail || 'Failed to create plan');
       }
 
-      setPlanSuccess(`Plan "${planData.plan_name}" created successfully!`);
+      toast.success(`Plan "${planData.plan_name}" created successfully.`);
       setShowPlanModal(false);
       // Reset form
       setPlanData({
@@ -142,7 +143,7 @@ export default function AdminDashboard() {
         description: 'Perfect for small businesses',
       });
     } catch (e: any) {
-      setPlanError(e?.message || 'Failed to create plan');
+      toast.error(e?.message || 'Failed to create plan.');
     } finally {
       setCreatingPlan(false);
     }
@@ -516,7 +517,7 @@ export default function AdminDashboard() {
           padding: 20,
           backdropFilter: 'blur(4px)',
         }}
-        onClick={() => setShowPlanModal(false)}
+          onClick={() => setShowPlanModal(false)}
         >
           <div style={{
             background: colors.card,
@@ -527,7 +528,7 @@ export default function AdminDashboard() {
             maxHeight: '90vh',
             overflowY: 'auto',
           }}
-          onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div style={{
               display: 'flex',

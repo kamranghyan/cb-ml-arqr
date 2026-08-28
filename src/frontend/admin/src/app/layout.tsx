@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 // @ts-ignore: Allow side-effect CSS import without type declarations
 import './globals.css';
-import { Toaster } from 'sonner';
+import ThemeToaster from '@/components/ThemeToaster';
 
 export const metadata: Metadata = {
   title: 'Menulay — Digital Menu',
@@ -47,7 +47,8 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  const theme = localStorage.getItem('admin_theme') || 'light';
+                  const theme =
+                    localStorage.getItem('admin_theme') || 'light';
 
                   document.documentElement.setAttribute(
                     'data-theme',
@@ -77,13 +78,8 @@ export default function RootLayout({
       <body>
         {children}
 
-        {/* Global Toast Provider */}
-        <Toaster
-          position="top-right"
-          richColors
-          closeButton
-          duration={3000}
-        />
+        {/* Global Theme-Aware Toast Provider */}
+        <ThemeToaster />
       </body>
     </html>
   );
