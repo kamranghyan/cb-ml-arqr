@@ -28,8 +28,7 @@ export function connectWebSocket(): WebSocket {
     );
   }
 
-  const url =
-    `${WS_URL}?guestSessionId=${encodeURIComponent(guestSessionId)}`;
+  const url = `${WS_URL}?guestSessionId=${encodeURIComponent(guestSessionId)}`;
 
   console.log('[Guest WS] Connecting:', guestSessionId);
 
