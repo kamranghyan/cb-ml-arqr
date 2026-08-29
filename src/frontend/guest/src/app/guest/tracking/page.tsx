@@ -12,6 +12,7 @@ import BottomNav from '@/components/guest/BottomNav';
 import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
+import OrderFeedbackShareModal from '@/components/guest/OrderFeedbackShareModal';
 
 const BRAND = '#ff5723';
 
@@ -123,7 +124,10 @@ export default function TrackingPage() {
     setSessionTid(sessionStorage.getItem('lm_tid') ?? '');
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
   }, []);
-
+  const [redirectParams, setRedirectParams] = useState({
+    restaurantId: '',
+    tableId: '',
+  });
   const loadOrders = async (silent = false) => {
     if (!silent && !isFirstLoad.current) {
       console.log('⏭️ Skipping duplicate load call');
@@ -250,6 +254,8 @@ export default function TrackingPage() {
     const remaining = Math.max(0, totalPrep - (currentStep * 5));
     return `Ready in approx. ${remaining}-${remaining + 5} minutes`;
   };
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [receivedOrderId, setReceivedOrderId] = useState<string>();
 
   const cancelOrder = async () => {
     if (!latest) return;
@@ -292,26 +298,28 @@ export default function TrackingPage() {
     }
   };
 
-  // ✅ Handle "Received" button click - show completion overlay
   const handleOrderReceived = () => {
     setShowCompleteOverlay(true);
 
-    // Auto-redirect after 3 seconds with dynamic query params
     redirectTimerRef.current = setTimeout(() => {
       setShowCompleteOverlay(false);
       setIsOrderCompleted(true);
 
-      // ✅ Get restaurantId and tableId from session storage
       const restaurantId = sessionStorage.getItem('lm_rid') || '';
       const tableId = sessionStorage.getItem('lm_tid') || '';
 
-      // Clear session storage
+      setRedirectParams({
+        restaurantId,
+        tableId,
+      });
+
+      const completedOrderId = latest?.orderId ?? (latest as any)?._apiId ?? '';
+      setReceivedOrderId(completedOrderId);
+      setShowFeedbackModal(true);
+
       sessionStorage.removeItem('lm_rid');
       sessionStorage.removeItem('lm_tid');
       sessionStorage.removeItem('lm_table');
-
-      // ✅ Redirect to /guest with dynamic query parameters
-      router.push(`/guest?rid=${restaurantId}&tid=${tableId}`);
     }, 3000);
   };
 
@@ -955,7 +963,17 @@ export default function TrackingPage() {
           </button>
         </div>
       )}
+      <OrderFeedbackShareModal
+        open={showFeedbackModal}
+        onClose={() => {
+          setShowFeedbackModal(false);
 
+          router.push(
+            `/guest?rid=${redirectParams.restaurantId}&tid=${redirectParams.tableId}`
+          );
+        }}
+        orderId={receivedOrderId}
+      />
       {/* Cancel button */}
       {latest && !isCancelled && !isAtDeliveredStep && (
         <div style={{
