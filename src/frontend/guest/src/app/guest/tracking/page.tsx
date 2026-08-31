@@ -13,6 +13,7 @@ import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import OrderFeedbackShareModal from '@/components/guest/OrderFeedbackShareModal';
+import { connectWebSocket } from '@/lib/orders';
 
 const BRAND = '#ff5723';
 
@@ -73,7 +74,6 @@ function formatRs(minor?: number) {
   return 'Rs ' + (minor / 100).toLocaleString('en-PK');
 }
 
-const POLL_MS = 30000;
 
 export default function TrackingPage() {
   const router = useRouter();
@@ -95,9 +95,9 @@ export default function TrackingPage() {
   const [isOrderCompleted, setIsOrderCompleted] = useState(false);
 
   const isMounted = useRef(true);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstLoad = useRef(true);
   const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Load menu images only once
   useEffect(() => {
@@ -114,6 +114,8 @@ export default function TrackingPage() {
     loadMenuImages();
   }, []);
 
+
+
   // Session check only once
   useEffect(() => {
     const hasSession = sessionStorage.getItem('lm_rid') || sessionStorage.getItem('lm_tid');
@@ -123,21 +125,22 @@ export default function TrackingPage() {
     }
     setSessionTid(sessionStorage.getItem('lm_tid') ?? '');
     setSessionTable(sessionStorage.getItem('lm_table') ?? '');
+    sessionStorage.getItem('guestSessionId')
+    console.log(
+      'guestSessionId:',
+      sessionStorage.getItem('guestSessionId')
+    );
   }, []);
+
+
   const [redirectParams, setRedirectParams] = useState({
     restaurantId: '',
     tableId: '',
   });
-  const loadOrders = async (silent = false) => {
-    if (!silent && !isFirstLoad.current) {
-      console.log('⏭️ Skipping duplicate load call');
-      return;
-    }
 
-    if (!silent) {
-      setLoading(true);
-      isFirstLoad.current = false;
-    }
+  const loadOrders = async () => {
+    setLoading(true);
+    isFirstLoad.current = false;
 
     try {
       const { restaurantId } = getGuestScope();
@@ -192,19 +195,132 @@ export default function TrackingPage() {
 
   useEffect(() => {
     loadOrders();
-    intervalRef.current = setInterval(() => {
-      loadOrders(true);
-    }, POLL_MS);
+
     return () => {
       isMounted.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+
       if (redirectTimerRef.current) {
         clearTimeout(redirectTimerRef.current);
         redirectTimerRef.current = null;
       }
+    };
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────
+  // Guest Orders WebSocket
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+
+    try {
+      ws = connectWebSocket();
+      if (!ws) {
+        console.error('❌ [Guest WS] Failed to create websocket connection');
+        return;
+      }
+
+      wsRef.current = ws;
+      const socket = ws;
+
+      socket.onopen = () => {
+        console.log('🟢 [Guest WS] Connected successfully');
+      };
+
+      socket.onmessage = (event) => {
+        console.log('📩 [Guest WS] Message received:', event.data);
+
+        try {
+          const data = JSON.parse(event.data);
+
+          console.log('📦 [Guest WS] Parsed update:', data);
+
+          /*
+           * Expected examples:
+           *
+           * {
+           *   orderId: "...",
+           *   status: "PREPARING"
+           * }
+           *
+           * OR
+           *
+           * {
+           *   type: "ORDER_STATUS_UPDATED",
+           *   orderId: "...",
+           *   status: "READY"
+           * }
+           */
+
+          const updatedOrderId =
+            data?.orderId ??
+            data?.order?.orderId ??
+            data?.order?.id;
+
+          const updatedStatus =
+            data?.status ??
+            data?.order?.status;
+
+          if (!updatedOrderId || !updatedStatus) {
+            console.log(
+              'ℹ️ [Guest WS] Message does not contain order status update'
+            );
+            return;
+          }
+
+          setOrders((prevOrders) =>
+            prevOrders.map((order) => {
+              if (order.orderId !== updatedOrderId) {
+                return order;
+              }
+
+              console.log(
+                `🔄 [Guest WS] Order ${updatedOrderId} status: ${order.status} → ${updatedStatus}`
+              );
+
+              return {
+                ...order,
+                status: updatedStatus,
+              };
+            })
+          );
+        } catch (error) {
+          console.error(
+            '❌ [Guest WS] Failed to parse message:',
+            error
+          );
+        }
+      };
+
+      socket.onerror = (error) => {
+        console.error('❌ [Guest WS] Connection error:', error);
+      };
+
+      socket.onclose = (event) => {
+        console.log(
+          '🔴 [Guest WS] Disconnected',
+          {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+          }
+        );
+      };
+    } catch (error) {
+      console.error(
+        '❌ [Guest WS] Failed to connect:',
+        error
+      );
+    }
+
+    return () => {
+      if (ws) {
+        console.log('🔌 [Guest WS] Closing connection');
+
+        ws.close();
+        ws = null;
+      }
+
+      wsRef.current = null;
     };
   }, []);
 
@@ -237,11 +353,8 @@ export default function TrackingPage() {
     const menuItem = menuItems.find(item => item.id === itemId);
     return (menuItem as any)?.imageUrl ?? '';
   };
-
   const currentStep = latest ? getStepIndex(latest.status) : 0;
   const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
-
-  // ✅ Check if order is at DELIVERED/Enjoy step
   const isAtDeliveredStep = latest ? getStepIndex(latest.status) === 3 : false;
   const isOrderAlreadyCompleted = latest ? ['COMPLETED', 'DONE'].includes((latest.status ?? '').toUpperCase()) : false;
 
@@ -910,7 +1023,9 @@ export default function TrackingPage() {
                 fontSize: 11,
                 color: D.sub,
                 marginBottom: 16,
-              }}>Updated {lastSync} · Auto-refresh every 30s</p>
+              }}>
+                Updated {lastSync} · Live updates enabled
+              </p>
             )}
           </>
         )}

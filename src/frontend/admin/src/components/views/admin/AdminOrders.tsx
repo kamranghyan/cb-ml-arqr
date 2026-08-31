@@ -14,6 +14,10 @@ import {
   type SupportOrder,
 } from '@/lib/support-api';
 import { getTheme } from '@/lib/theme';
+import {
+  connectTenantWebSocket,
+  parseTenantOrderEvent,
+} from '@/lib/tenant-api';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -104,7 +108,6 @@ export default function AdminOrders() {
   const [error, setError] = useState('');
   const [lastAt, setLastAt] = useState<Date | null>(null);
   const [isDark, setIsDark] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Theme listener ──
   useEffect(() => {
@@ -130,6 +133,15 @@ export default function AdminOrders() {
     };
   }, []);
 
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+
+  // Prevent duplicate/overlapping API requests.
+  const requestInProgress = useRef(false);
+  const refreshQueued = useRef(false);
+
   const colors = getColors(isDark);
   const accents = getAccents(isDark);
 
@@ -139,6 +151,15 @@ export default function AdminOrders() {
         setOrders([]);
         return;
       }
+
+      // If a request is already running, remember to refresh again once it
+      // finishes rather than firing a second, overlapping request.
+      if (requestInProgress.current) {
+        refreshQueued.current = true;
+        return;
+      }
+
+      requestInProgress.current = true;
 
       if (!quiet) setLoading(true);
 
@@ -156,7 +177,14 @@ export default function AdminOrders() {
       } catch (e: any) {
         setError(e?.message ?? 'Could not load orders');
       } finally {
-        setLoading(false);
+        requestInProgress.current = false;
+
+        if (!quiet) setLoading(false);
+
+        if (refreshQueued.current) {
+          refreshQueued.current = false;
+          void load(true);
+        }
       }
     },
     [scope.tenantId, scope.restaurantId]
@@ -166,23 +194,94 @@ export default function AdminOrders() {
     load();
   }, [load]);
 
-  // Auto refresh
+  // ── Real-time order updates ──────────────────────────────────────────
+  // One WebSocket connection lives for the whole session. Since a platform
+  // admin's own JWT has no tenantId, the connection starts unscoped and
+  // re-subscribes to whichever tenant/branch is picked in ScopePicker —
+  // that's what lets it receive broadcasts for that tenant.
   useEffect(() => {
-    if (timer.current) clearInterval(timer.current);
+    let cancelled = false;
+    let socket: WebSocket | null = null;
 
-    if (scope.restaurantId) {
-      timer.current = setInterval(() => load(true), REFRESH_MS);
-    }
+    const connect = async () => {
+      try {
+        socket = await connectTenantWebSocket();
+
+        if (cancelled) {
+          socket.close();
+          return;
+        }
+
+        wsRef.current = socket;
+
+        socket.onopen = () => {
+          console.log('[Admin WS] Connected');
+          setWsConnected(true);
+
+          const { tenantId, restaurantId } = scopeRef.current;
+          if (tenantId && restaurantId) {
+            socket?.send(JSON.stringify({
+              action: 'subscribe',
+              channel: 'orders',
+              tenantId,
+              restaurantId,
+            }));
+          }
+        };
+
+        socket.onmessage = async (event) => {
+          const data = parseTenantOrderEvent(event.data);
+          if (!data) return;
+
+          console.log('[Admin WS] Order event, refreshing…');
+          await load(true);
+        };
+
+        socket.onerror = (error) => {
+          console.error('[Admin WS] Error:', error);
+          setWsConnected(false);
+        };
+
+        socket.onclose = () => {
+          console.log('[Admin WS] Closed');
+          setWsConnected(false);
+          wsRef.current = null;
+        };
+      } catch (error) {
+        console.error('[Admin WS] Connection failed:', error);
+        setWsConnected(false);
+      }
+    };
+
+    connect();
 
     return () => {
-      if (timer.current) clearInterval(timer.current);
+      cancelled = true;
+      if (socket) socket.close();
+      wsRef.current = null;
+      setWsConnected(false);
     };
-  }, [scope.restaurantId, load]);
+  }, [load]);
+
+  // Re-scope the live connection whenever the admin picks a different
+  // tenant/branch, so broadcasts for the newly-selected scope arrive too.
+  useEffect(() => {
+    if (!scope.tenantId || !scope.restaurantId) return;
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+
+    wsRef.current.send(JSON.stringify({
+      action: 'subscribe',
+      channel: 'orders',
+      tenantId: scope.tenantId,
+      restaurantId: scope.restaurantId,
+    }));
+  }, [scope.tenantId, scope.restaurantId]);
 
   const live = orders.filter(isLive);
 
   const byStatus = (s: string) =>
     live.filter((o) => derivedStatus(o) === s);
+
 
   return (
     <div
@@ -486,6 +585,62 @@ function OrderCard({
   const addOnsTotal = getAddOnsTotal(order);
   const grandTotal = getGrandTotal(order);
 
+  const groupedItems = Object.values(
+    (order.lineItems ?? []).reduce<
+      Record<
+        string,
+        {
+          item: (typeof order.lineItems)[number];
+          quantity: number;
+          addOns: Array<{
+            addOnId?: string;
+            name?: string;
+            quantity?: number;
+            priceMinorUnits?: number;
+          }>;
+        }
+      >
+    >((groups, li) => {
+      const key = li.itemId ?? li.name;
+
+      if (!groups[key]) {
+        const addOns = (
+          li as typeof li & {
+            addOns?: Array<{
+              addOnId?: string;
+              name?: string;
+              quantity?: number;
+              priceMinorUnits?: number;
+            }>;
+          }
+        ).addOns ?? [];
+
+        groups[key] = {
+          item: li,
+          quantity: li.quantity,
+          addOns: [...addOns],
+        };
+      } else {
+        groups[key].quantity += li.quantity;
+
+        const addOns = (
+          li as typeof li & {
+            addOns?: Array<{
+              addOnId?: string;
+              name?: string;
+              quantity?: number;
+              priceMinorUnits?: number;
+            }>;
+          }
+        ).addOns ?? [];
+
+        groups[key].addOns.push(...addOns);
+      }
+
+      return groups;
+    }, {})
+  );
+
   return (
     <div
       style={{
@@ -573,21 +728,10 @@ function OrderCard({
           flex: 1,
         }}
       >
-        {(order.lineItems ?? []).map((li, i) => {
-          const addOns = (
-            li as typeof li & {
-              addOns?: Array<{
-                addOnId?: string;
-                name?: string;
-                quantity?: number;
-                priceMinorUnits?: number;
-              }>;
-            }
-          ).addOns ?? [];
-
+        {groupedItems.map(({ item, quantity, addOns }, i) => {
           return (
             <div
-              key={i}
+              key={item.itemId ?? `${item.name}-${i}`}
               style={{
                 marginBottom: 8,
                 fontFamily: "'Poppins', sans-serif",
@@ -610,9 +754,9 @@ function OrderCard({
                   }}
                 >
                   <strong style={{ color: BRAND }}>
-                    {li.quantity}×
+                    {quantity}×
                   </strong>{' '}
-                  {li.name}
+                  {item.name}
                 </span>
 
                 <span
@@ -622,13 +766,13 @@ function OrderCard({
                   }}
                 >
                   {money(
-                    li.unitPriceMinorUnits * li.quantity,
+                    item.unitPriceMinorUnits * quantity,
                     currency
                   )}
                 </span>
               </div>
 
-              {/* Add-ons under item */}
+              {/* Add-ons */}
               {addOns.length > 0 && (
                 <div
                   style={{
@@ -663,7 +807,7 @@ function OrderCard({
                       >
                         {money(
                           (addon.priceMinorUnits ?? 0) *
-                            (addon.quantity ?? 1),
+                          (addon.quantity ?? 1),
                           currency
                         )}
                       </span>

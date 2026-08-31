@@ -17,19 +17,68 @@ import {
 
 export type { SupportOrder, OrderStatus, OrderType }
 export { derivedStatus, isLive, orderTypeOf }
+export interface TenantOrderEvent {
+  type?: string
+  eventType?: string
+  action?: string
+  order?: SupportOrder
+  data?: SupportOrder
+  orderId?: string
+  restaurantId?: string
+  status?: string
+  [key: string]: unknown
+}
+
+export function parseTenantOrderEvent(
+  raw: string,
+): TenantOrderEvent | null {
+  try {
+    const parsed = JSON.parse(raw)
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    return parsed as TenantOrderEvent
+  } catch {
+    console.error('[Tenant WS] Invalid JSON message:', raw)
+    return null
+  }
+}
 
 export interface Branch {
   restaurantId: string
-  name:         string
+  name: string
   currencyCode: string
-  isActive:     boolean
-  address?:     { city?: string; country?: string }
+  isActive: boolean
+  address?: { city?: string; country?: string }
 }
 
 /** An order plus which branch it came from — needed once branches are mixed. */
 export interface BranchOrder extends SupportOrder {
   branchName: string
-  currency:   string
+  currency: string
+}
+
+// tenant-api.ts
+
+export const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ??
+  'wss://x0ev8z7gwg.execute-api.ap-south-1.amazonaws.com/dev'
+
+export async function connectTenantWebSocket(): Promise<WebSocket> {
+  const token = await getValidIdToken()
+
+  if (!token) {
+    throw new Error('No authentication token found.')
+  }
+
+  const url =
+    `${WS_URL}?token=${encodeURIComponent(token)}`
+
+  console.log('[Tenant WS] Connecting')
+
+  return new WebSocket(url)
 }
 
 // ── Fetch helper ──────────────────────────────────────────────────────
@@ -80,7 +129,7 @@ async function ordersForBranch(
     return (data.orders ?? []).map(o => ({
       ...o,
       branchName: branch.name,
-      currency:   branch.currencyCode || 'PKR',
+      currency: branch.currencyCode || 'PKR',
     }))
   } catch {
     // One branch failing should not blank the whole view.

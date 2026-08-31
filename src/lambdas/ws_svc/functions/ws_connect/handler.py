@@ -488,7 +488,6 @@ def lambda_handler(event: dict, context) -> dict:
                 "connectionType": "guest",
                 "guestSessionId": guest_session_id,
                 "email": "",
-                "tenantId": "",
                 "restaurantId": "",
                 "groups": [],
                 "role": "guest",

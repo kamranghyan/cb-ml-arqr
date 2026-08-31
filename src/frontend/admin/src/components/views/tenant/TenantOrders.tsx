@@ -12,11 +12,13 @@ import BranchPicker from '@/components/BranchPicker';
 import {
   fetchMyBranches,
   fetchOrders,
+  connectTenantWebSocket,
+  parseTenantOrderEvent,
   isLive,
   derivedStatus,
   type Branch,
   type BranchOrder,
-} from '@/lib/tenant-api';
+} from '@/lib/tenant-api'
 import {
   money,
   timeAgo,
@@ -64,7 +66,7 @@ const getAccents = (isDark: boolean) => ({
   },
 });
 
-const REFRESH_MS = 15000;
+
 
 // ── Calculate Items Total (without add-ons) ──
 const getItemsTotal = (order: BranchOrder): number => {
@@ -107,11 +109,12 @@ export default function TenantOrders() {
   const [error, setError] = useState('');
   const [lastAt, setLastAt] = useState<Date | null>(null);
   const [isDark, setIsDark] = useState(false);
-
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Prevent duplicate API requests when one request is already running.
   const requestInProgress = useRef(false);
+  const refreshQueued = useRef(false);
 
   // ── Theme listener ──
   useEffect(() => {
@@ -138,6 +141,7 @@ export default function TenantOrders() {
       window.removeEventListener('themeChange', handleThemeToggle);
     };
   }, []);
+
 
   const colors = getColors(isDark);
   const accents = getAccents(isDark);
@@ -175,8 +179,12 @@ export default function TenantOrders() {
     async (quiet = false) => {
       if (branches.length === 0) return;
 
-      // Prevent duplicate API calls.
-      if (requestInProgress.current) return;
+      // If a request is already running, remember that
+      // another refresh is needed after it finishes.
+      if (requestInProgress.current) {
+        refreshQueued.current = true;
+        return;
+      }
 
       requestInProgress.current = true;
 
@@ -205,10 +213,89 @@ export default function TenantOrders() {
         if (!quiet) {
           setLoadO(false);
         }
+
+        // If a WebSocket event arrived while the request
+        // was running, immediately fetch again.
+        if (refreshQueued.current) {
+          refreshQueued.current = false;
+
+          // Do not show the full loading state for a WS refresh.
+          void load(true);
+        }
       }
     },
     [branches, branchId]
   );
+
+  // ── Real-time order updates ────────────────────────────────────────
+  useEffect(() => {
+    if (branches.length === 0) return;
+
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+
+    const connect = async () => {
+      try {
+        socket = await connectTenantWebSocket();
+
+        if (cancelled) {
+          socket.close();
+          return;
+        }
+
+        wsRef.current = socket;
+
+        socket.onopen = () => {
+          console.log('[Tenant WS] Connected');
+          setWsConnected(true);
+        };
+
+        socket.onmessage = async (event) => {
+          console.log('[Tenant WS] RAW MESSAGE:', event.data);
+
+          const data = parseTenantOrderEvent(event.data);
+
+          console.log('[Tenant WS] PARSED EVENT:', data);
+
+          if (!data) {
+            console.warn('[Tenant WS] Could not parse event');
+            return;
+          }
+
+          console.log('[Tenant WS] Refreshing orders...');
+
+          await load(true);
+        };
+
+        socket.onerror = (error) => {
+          console.error('[Tenant WS] Error:', error);
+          setWsConnected(false);
+        };
+
+        socket.onclose = () => {
+          console.log('[Tenant WS] Closed');
+          setWsConnected(false);
+          wsRef.current = null;
+        };
+      } catch (error) {
+        console.error('[Tenant WS] Connection failed:', error);
+        setWsConnected(false);
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+
+      if (socket) {
+        socket.close();
+      }
+
+      wsRef.current = null;
+      setWsConnected(false);
+    };
+  }, [branches, load]);
 
   // ── Initial load / branch change ──
   useEffect(() => {
@@ -217,26 +304,6 @@ export default function TenantOrders() {
     }
   }, [branches, branchId, load]);
 
-  // ── Auto refresh ──
-  useEffect(() => {
-    if (timer.current) {
-      clearInterval(timer.current);
-      timer.current = null;
-    }
-
-    if (branches.length > 0) {
-      timer.current = setInterval(() => {
-        load(true);
-      }, REFRESH_MS);
-    }
-
-    return () => {
-      if (timer.current) {
-        clearInterval(timer.current);
-        timer.current = null;
-      }
-    };
-  }, [branches.length, load]);
 
   const live = orders.filter(isLive);
 
@@ -384,9 +451,9 @@ export default function TenantOrders() {
                 style={
                   loadingO
                     ? {
-                        animation:
-                          'spin 1s linear infinite',
-                      }
+                      animation:
+                        'spin 1s linear infinite',
+                    }
                     : {}
                 }
               />

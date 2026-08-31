@@ -24,7 +24,6 @@ const STRIP_COLOR: Record<KdsStatus, string> = {
   new: '#ff5723', preparing: '#3b82f6', ready: '#22c55e', delivered: '#a855f7',
 };
 const BRAND = '#ff5723';
-const POLL_INTERVAL = 15000;
 
 export default function KitchenDisplayPage() {
   const router = useRouter();
@@ -35,18 +34,15 @@ export default function KitchenDisplayPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [audio, setAudio] = useState(true);
   const [clock, setClock] = useState('');
-  const [pollPct, setPollPct] = useState(0);
   const [apiState, setApiState] = useState<'loading' | 'live' | 'error'>('loading');
   const [apiError, setApiError] = useState('');
   const [wsState, setWsState] = useState<WsState>('disconnected');
   const [wsLog, setWsLog] = useState<string[]>([]);
   const [advancing, setAdvancing] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const pollStart = useRef(Date.now());
   const prevIds = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const wsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef(audio);
 
   useEffect(() => {
@@ -56,7 +52,6 @@ export default function KitchenDisplayPage() {
   async function handleLogout() { setLoggingOut(true); await logout(); router.push('/login/kds'); }
 
   useEffect(() => { const id = setInterval(() => { setOrders(prev => prev.map(o => o.status !== 'delivered' ? { ...o, elapsedSeconds: Math.min(o.elapsedSeconds + 1, o.maxSeconds + 300) } : o)); }, 1000); return () => clearInterval(id); }, []);
-  useEffect(() => { const id = setInterval(() => { setPollPct(Math.min(100, ((Date.now() - pollStart.current) % POLL_INTERVAL) / POLL_INTERVAL * 100)); }, 200); return () => clearInterval(id); }, []);
 
   const showToast = useCallback(
     (
@@ -108,12 +103,6 @@ export default function KitchenDisplayPage() {
       ws.onopen = () => {
         setWsState('connected');
         addWsLog('✓ Connected');
-
-        // Stop REST fallback polling when WS is live
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
 
         ws.send(
           JSON.stringify({
@@ -244,12 +233,7 @@ export default function KitchenDisplayPage() {
         addWsLog(
           `✗ Disconnected (code ${e.code})`
         );
-
         wsRef.current = null;
-
-        // Start REST fallback
-        startPolling();
-
         // Retry WS connection
         if (wsRetryRef.current) {
           clearTimeout(wsRetryRef.current);
@@ -266,10 +250,6 @@ export default function KitchenDisplayPage() {
         `✗ WebSocket connection failed: ${err?.message ?? 'Unknown error'
         }`
       );
-
-      // If WS cannot connect, use REST fallback
-      startPolling();
-
       if (wsRetryRef.current) {
         clearTimeout(wsRetryRef.current);
       }
@@ -279,10 +259,25 @@ export default function KitchenDisplayPage() {
       }, 5000);
     }
   }, []);
-  const wsSend = (p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } };
+  
+  const wsSend = useCallback((p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } }, []);
+
+  const loadOrdersAbortRef = useRef<AbortController | null>(null);
+  const loadOrdersInFlightRef = useRef(false);
 
   const loadOrders = useCallback(
     async (silent = false) => {
+      // Guard: if a fetch is already in flight, cancel it and start fresh
+      // rather than letting two requests race — otherwise an in-flight
+      // request that resolves late could overwrite newer state.
+      if (loadOrdersInFlightRef.current) {
+        loadOrdersAbortRef.current?.abort();
+      }
+
+      const controller = new AbortController();
+      loadOrdersAbortRef.current = controller;
+      loadOrdersInFlightRef.current = true;
+
       if (!silent) {
         setApiState('loading');
       }
@@ -299,6 +294,7 @@ export default function KitchenDisplayPage() {
         const res = await fetch('/api/orders', {
           cache: 'no-store',
           headers: await authHeaders(),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -387,8 +383,13 @@ export default function KitchenDisplayPage() {
 
         setApiState('live');
         setApiError('');
-        pollStart.current = Date.now();
       } catch (err: any) {
+        // Aborted requests are expected when a newer load supersedes this
+        // one — not a real error, so don't surface it to the user.
+        if (err?.name === 'AbortError') {
+          return;
+        }
+
         console.error(
           '❌ KDS API ERROR:',
           err
@@ -399,6 +400,10 @@ export default function KitchenDisplayPage() {
         );
 
         setApiState('error');
+      } finally {
+        if (loadOrdersAbortRef.current === controller) {
+          loadOrdersInFlightRef.current = false;
+        }
       }
     },
     [user]
@@ -415,48 +420,13 @@ export default function KitchenDisplayPage() {
         clearTimeout(wsRetryRef.current);
         wsRetryRef.current = null;
       }
-
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
+      loadOrdersAbortRef.current?.abort();
     };
   }, [loadOrders, connectWs]);
-  const startPolling = useCallback(() => {
-    // Don't create duplicate intervals
-    if (pollRef.current) {
-      return;
-    }
-
-    addWsLog(
-      'REST fallback polling started'
-    );
-
-    // Immediately refresh once
-    loadOrders(true);
-
-    pollRef.current = setInterval(() => {
-      // If WS became connected, stop polling
-      if (
-        wsRef.current?.readyState === WebSocket.OPEN
-      ) {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-
-        return;
-      }
-
-      loadOrders(true);
-    }, POLL_INTERVAL);
-  }, [loadOrders]);
-
 
   const advanceOrder = async (orderId: string) => {
     const order = orders.find(o => o.id === orderId);
@@ -1059,11 +1029,6 @@ export default function KitchenDisplayPage() {
           </div>
         </div>
       )}
-
-      {/* ── Poll bar ── */}
-      <div style={{ height: 3, background: D.border, flexShrink: 0 }}>
-        <div style={{ height: '100%', background: BRAND, transition: 'width 0.2s', width: `${pollPct}%` }} />
-      </div>
 
       {/* ── API error ── */}
       {apiState === 'error' && (

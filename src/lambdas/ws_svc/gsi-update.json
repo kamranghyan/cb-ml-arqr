@@ -1,0 +1,11 @@
+[
+  {
+    "Create": {
+      "IndexName": "tenantId-index",
+      "KeySchema": [
+        { "AttributeName": "tenantId", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
+  }
+]

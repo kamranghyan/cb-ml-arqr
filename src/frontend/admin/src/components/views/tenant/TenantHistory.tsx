@@ -115,8 +115,18 @@ const getGrandTotal = (order: BranchOrder): number => {
 };
 
 const getItemNames = (order: BranchOrder): string => {
-  return (order.lineItems || [])
-    .map((li) => `${li.quantity}× ${li.name}`)
+  const grouped = new Map<string, number>();
+
+  (order.lineItems || []).forEach((li) => {
+    const name = li.name.trim();
+    grouped.set(
+      name,
+      (grouped.get(name) || 0) + li.quantity
+    );
+  });
+
+  return Array.from(grouped.entries())
+    .map(([name, quantity]) => `${quantity}× ${name}`)
     .join(', ');
 };
 

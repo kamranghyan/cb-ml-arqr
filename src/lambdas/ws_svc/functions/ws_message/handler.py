@@ -1,33 +1,29 @@
-"""
-ws-message-lambda
-Trigger  : API Gateway WebSocket $default
-Memory   : 512 MB  |  Timeout : 10s
-Env Vars : TABLE_ORDER, STEP_ARN, DLQ_URL
-"""
-
 import os
 import json
 import uuid
 import time
 import logging
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Cold-start initialisation ──
-TABLE_ORDER = os.environ["TABLE_ORDER"]
-STEP_ARN    = os.environ["STEP_ARN"]
-DLQ_URL     = os.environ["DLQ_URL"]
-TABLE_CONN  = os.environ["TABLE_CONN"]
-WS_ENDPOINT = os.environ["WS_ENDPOINT"]  # https://{apiId}.execute-api.{region}.amazonaws.com/{stage}
+TABLE_ORDER       = os.environ["TABLE_ORDER"]
+STEP_ARN          = os.environ["STEP_ARN"]
+DLQ_URL           = os.environ["DLQ_URL"]
+TABLE_CONN        = os.environ["TABLE_CONN"]
+WS_ENDPOINT       = os.environ["WS_ENDPOINT"]
+TABLE_REAL_ORDERS = os.environ["TABLE_REAL_ORDERS"]
 
-VALID_STATUSES = {"pending", "confirmed", "processing", "cancelled", "delivered"}
+VALID_STATUSES = {"new", "preparing", "ready", "delivered", "cancelled"}
 
-dynamodb   = boto3.resource("dynamodb")
-table      = dynamodb.Table(TABLE_ORDER)
-conn_table = dynamodb.Table(TABLE_CONN)
+dynamodb    = boto3.resource("dynamodb")
+table       = dynamodb.Table(TABLE_ORDER)
+real_orders = dynamodb.Table(TABLE_REAL_ORDERS)
+conn_table  = dynamodb.Table(TABLE_CONN)
 sfn        = boto3.client("stepfunctions")
 sqs        = boto3.client("sqs")
 apigw_mgmt = boto3.client("apigatewaymanagementapi", endpoint_url=WS_ENDPOINT)
@@ -93,13 +89,13 @@ def _broadcast(
         tenant_id, restaurant_id or "-", sent, skipped_branch)
 
 
-def _get_scope_for_connection(conn_id: str) -> tuple[str, str]:
-    """Returns (tenantId, restaurantId) for a connection; blanks if unknown."""
+def _get_scope_for_connection(conn_id: str) -> tuple[str, str, str]:
+    """Returns (tenantId, restaurantId, role) for a connection; blanks if unknown."""
     try:
         item = conn_table.get_item(Key={"connectionId": conn_id}).get("Item") or {}
-        return item.get("tenantId", ""), item.get("restaurantId", "")
+        return item.get("tenantId", ""), item.get("restaurantId", ""), item.get("role", "")
     except ClientError:
-        return "", ""
+        return "", "", ""
 
 
 def _send_to_dlq(connection_id: str, body: dict, reason: str) -> None:
@@ -178,21 +174,22 @@ def lambda_handler(event: dict, context) -> dict:
             return {"statusCode": 400, "body": json.dumps({"type": "MISSING_ORDER_ID", "reason": "orderId parameter is required"})}
         
         try:
-            order_resp = table.get_item(Key={"orderId": order_id})
-            order_item = order_resp.get("Item")
-            
+            order_resp = real_orders.query(
+                KeyConditionExpression=Key("PK").eq(f"TENANT#{tenant_id}#ORDER#{order_id}"),
+                Limit=1,
+                ScanIndexForward=False,
+            )
+            items = order_resp.get("Items", [])
+            order_item = items[0] if items else None
+
             if not order_item:
                 logger.warning("Order %s not found for update by connection %s", order_id, connection_id)
                 return {"statusCode": 404, "body": json.dumps({"type": "NOT_FOUND", "reason": "Order does not exist"})}
-                
-            if order_item.get("tenantId") != tenant_id:
-                logger.critical("CROSS-TENANT ATTACK ATTEMPT! Connection %s tried modifying Order %s", connection_id, order_id)
-                return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Access denied"})}
-                
+
             if role != "admin" and restaurant_id and order_item.get("restaurantId") != restaurant_id:
                 logger.warning("Cross-branch modification blocked for connection %s on Order %s", connection_id, order_id)
                 return {"statusCode": 403, "body": json.dumps({"type": "UNAUTHORIZED", "reason": "Branch mismatch"})}
-                
+
         except ClientError as e:
             logger.error("Failed to fetch order validation metadata: %s", e)
             return {"statusCode": 500, "body": "Internal server validation failure"}

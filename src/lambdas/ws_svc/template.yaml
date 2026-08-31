@@ -4,7 +4,7 @@ Description: WebSocket API with 3 Lambda functions - Connect, Disconnect, Messag
 
 Globals:
   Function:
-    Runtime: python3.13
+    Runtime: python3.12
     Architectures:
       - x86_64
     Layers:
@@ -23,6 +23,17 @@ Parameters:
     Type: String
 
   ClientId:
+    Type: String
+
+  # ARN of the DynamoDB Stream on the ORDER-SERVICE's real Orders table
+  # (not the ws-order-subscriptions table above). Get this from that
+  # stack's output / console once Streams (NEW_IMAGE) is enabled on it.
+  OrdersTableStreamArn:
+    Type: String
+
+  # Name of the order-service's real Orders table (for cross-tenant order
+  # lookups in ws-message-lambda) — same table whose stream ARN is above.
+  RealOrdersTableName:
     Type: String
 
 Resources:
@@ -100,9 +111,9 @@ Resources:
       Description: redis, PyJWT, boto3
       ContentUri: layer/
       CompatibleRuntimes:
-        - python3.13
+        - python3.12
     Metadata:
-      BuildMethod: python3.13
+      BuildMethod: python3.12
 
   # ── IAM Role ───────────────────────────
   LambdaExecutionRole:
@@ -132,7 +143,10 @@ Resources:
                   - dynamodb:Scan
                 Resource:
                   - !GetAtt ConnectionTable.Arn
+                  - !Sub "${ConnectionTable.Arn}/index/*"
                   - !GetAtt OrderTable.Arn
+                  - !Sub "${OrderTable.Arn}/index/*"
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${RealOrdersTableName}
         - PolicyName: SQSAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -156,6 +170,17 @@ Resources:
               - Effect: Allow
                 Action: execute-api:ManageConnections
                 Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+        - PolicyName: ReadOrdersStream
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !Ref OrdersTableStreamArn
 
   # ── Step Functions ─────────────────────
   StepFunctionsRole:
@@ -386,6 +411,7 @@ Resources:
       Environment:
         Variables:
           TABLE_ORDER: !Ref OrderTable
+          TABLE_REAL_ORDERS: !Ref RealOrdersTableName
           DLQ_URL: !Ref OrderDLQ
           STEP_ARN: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:order-state-machine-${Stage}
           TABLE_CONN: !Ref ConnectionTable
@@ -398,6 +424,38 @@ Resources:
       FunctionName: !Ref WsMessageFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  # ════════════════════════════════════════
+  # LAMBDA 4 — ws-order-created
+  # Fires on new-order INSERT from the Orders table stream and pushes
+  # ORDER_CREATED to every KDS screen on that tenant/branch. This is what
+  # makes guest-placed orders show up on KDS instantly, with no refresh
+  # and no FE polling.
+  # ════════════════════════════════════════
+  WsOrderCreatedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ws-order-created-lambda-${Stage}
+      CodeUri: functions/ws_order_created/
+      Handler: handler.lambda_handler
+      MemorySize: 512
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          TABLE_CONN: !Ref ConnectionTable
+          WS_ENDPOINT: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+      Events:
+        OrdersStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Ref OrdersTableStreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT"]}'
 
   # ════════════════════════════════════════
   # API GATEWAY WEBSOCKET

@@ -1,9 +1,5 @@
 version = 0.1
 
-# ─────────────────────────────────────────────────────────────
-# Default profile — used by plain `sam deploy`
-# Region pinned to ap-south-1 (Mumbai) to match the rest of MenuLay.
-# ─────────────────────────────────────────────────────────────
 [default.global.parameters]
 stack_name = "ws-project"
 region     = "ap-south-1"
@@ -19,12 +15,9 @@ confirm_changeset   = true
 resolve_s3          = true
 s3_prefix           = "ws-project"
 disable_rollback    = false
-parameter_overrides = "Stage=\"dev\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
+parameter_overrides = "Stage=\"dev\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\" OrdersTableStreamArn=\"arn:aws:dynamodb:ap-south-1:990016797093:table/OrderTable-dev/stream/2026-08-30T00:36:03.063\""
 image_repositories  = []
 
-# ─────────────────────────────────────────────────────────────
-# `sam deploy --config-env dev`    (used by `make deploy-dev`)
-# ─────────────────────────────────────────────────────────────
 [dev.global.parameters]
 stack_name = "ws-project-dev"
 region     = "ap-south-1"
@@ -43,9 +36,6 @@ disable_rollback    = false
 parameter_overrides = "Stage=\"dev\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
 image_repositories  = []
 
-# ─────────────────────────────────────────────────────────────
-# `sam deploy --config-env staging`
-# ─────────────────────────────────────────────────────────────
 [staging.global.parameters]
 stack_name = "ws-project-staging"
 region     = "ap-south-1"
@@ -59,9 +49,6 @@ s3_prefix           = "ws-project-staging"
 parameter_overrides = "Stage=\"staging\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
 image_repositories  = []
 
-# ─────────────────────────────────────────────────────────────
-# `sam deploy --config-env prod`    (used by `make deploy-prod`)
-# ─────────────────────────────────────────────────────────────
 [prod.global.parameters]
 stack_name = "ws-project-prod"
 region     = "ap-south-1"

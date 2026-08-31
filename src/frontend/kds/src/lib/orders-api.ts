@@ -260,32 +260,9 @@ export function normaliseOrder(
 }
 
 
-export async function fetchOrders(): Promise<(KdsOrder & { _apiId: string })[]> {
-  const headers = await authHeaders();
-  console.log('[KDS] Fetching orders with headers:', Object.keys(headers));
-
-  const res = await fetch(PROXY.list(), {
-    cache: 'no-store',
-    headers,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    if (res.status === 403) {
-      throw new Error(
-        'This kitchen account is not linked to a restaurant. ' +
-        'Ask your manager to re-create it for a specific branch.'
-      );
-    }
-    throw new Error(`Orders API ${res.status}: ${text}`);
-  }
-
-  const data: ApiOrdersResponse = await res.json();
-  console.log('[KDS] Raw orders response:', data);
-
-  const rawOrders = data.orders || (Array.isArray(data) ? data : []);
-  return rawOrders.map(normaliseOrder);
-}
+// NOTE: order fetching + normalisation lives in page.tsx's loadOrders(),
+// which layers new-order detection on top of the same fetch. Keeping a
+// second, unused copy here risked the two drifting out of sync.
 
 // ── GET — public ───────────────────────────────────────────────────────────────
 /**
