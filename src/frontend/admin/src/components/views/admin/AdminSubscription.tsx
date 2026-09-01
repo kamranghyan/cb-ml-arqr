@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     CreditCard,
@@ -312,7 +312,12 @@ export default function AdminSubscription() {
     // Load Everything
     // ─────────────────────────────────────────────
 
+    const loadAllDataInFlight = useRef(false);
+
     const loadAllData = useCallback(async () => {
+        if (loadAllDataInFlight.current) return;
+        loadAllDataInFlight.current = true;
+
         setLoading(true);
         setError('');
 
@@ -327,6 +332,7 @@ export default function AdminSubscription() {
                 'Failed to load data'
             );
         } finally {
+            loadAllDataInFlight.current = false;
             setLoading(false);
         }
     }, [

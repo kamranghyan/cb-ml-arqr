@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     CreditCard,
@@ -164,7 +164,12 @@ export default function TenantSubscription() {
     // LOAD SUBSCRIPTION DATA
     // --------------------------------------------------
 
+    const loadDataInFlight = useRef(false);
+
     const loadData = useCallback(async () => {
+        if (loadDataInFlight.current) return;
+        loadDataInFlight.current = true;
+
         setLoading(true);
         setError('');
 
@@ -267,6 +272,7 @@ export default function TenantSubscription() {
             setPlans([]);
             setSubscription(null);
         } finally {
+            loadDataInFlight.current = false;
             setLoading(false);
         }
     }, [router]);

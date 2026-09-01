@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   Building2, Store, TrendingUp, Loader2, AlertCircle,
@@ -94,7 +94,12 @@ export default function AdminDashboard() {
   const colors = getColors(isDark);
   const accents = getAccents(isDark);
 
+  const loadInFlight = useRef(false);
+
   const load = useCallback(async () => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+
     setLoading(true);
     setError('');
     try {
@@ -102,6 +107,7 @@ export default function AdminDashboard() {
     } catch (e: any) {
       toast.error(e?.message ?? 'Could not load platform data.');
     } finally {
+      loadInFlight.current = false;
       setLoading(false);
     }
   }, []);

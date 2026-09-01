@@ -136,7 +136,11 @@ export default function BranchQrPage() {
   const printRef = useRef<HTMLDivElement>(null);
 
   // Load real tables from the backend (created in Settings → Tables).
+  const loadTablesInFlight = useRef(false);
   const loadTables = useCallback(async () => {
+    if (loadTablesInFlight.current) return;
+    loadTablesInFlight.current = true;
+
     setLoading(true);
     setLoadError('');
     try {
@@ -145,6 +149,7 @@ export default function BranchQrPage() {
     } catch (e: any) {
       setLoadError(e?.message ?? 'Failed to load tables');
     } finally {
+      loadTablesInFlight.current = false;
       setLoading(false);
     }
   }, [restaurantId]);

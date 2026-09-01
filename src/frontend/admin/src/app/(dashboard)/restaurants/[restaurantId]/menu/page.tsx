@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, RefreshCw, Bell, Plus, Edit2, Trash2,
   X, CloudUpload, Loader2, AlertCircle, CheckCircle,
@@ -335,7 +335,11 @@ export default function BranchMenuPage() {
     setSizes(prev => prev.filter((_, i) => i !== index));
   };
 
+  const loadItemsInFlight = useRef(false);
   const loadItems = useCallback(async () => {
+    if (loadItemsInFlight.current) return;
+    loadItemsInFlight.current = true;
+
     setLoadState("loading");
     setLoadError('');
 
@@ -382,6 +386,8 @@ export default function BranchMenuPage() {
       console.error('Full error:', err);
       setLoadError(err?.message ?? 'Failed to load menu items.');
       setLoadState('error');
+    } finally {
+      loadItemsInFlight.current = false;
     }
   }, [restaurantId]);
 
