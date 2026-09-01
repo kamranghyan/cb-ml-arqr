@@ -1,3 +1,10 @@
+"""
+ws-message-lambda
+Trigger  : API Gateway WebSocket $default
+Memory   : 512 MB  |  Timeout : 10s
+Env Vars : TABLE_ORDER, STEP_ARN, DLQ_URL, TABLE_REAL_ORDERS
+"""
+
 import os
 import json
 import uuid
@@ -11,19 +18,19 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Cold-start initialisation ──
-TABLE_ORDER       = os.environ["TABLE_ORDER"]
-STEP_ARN          = os.environ["STEP_ARN"]
-DLQ_URL           = os.environ["DLQ_URL"]
-TABLE_CONN        = os.environ["TABLE_CONN"]
-WS_ENDPOINT       = os.environ["WS_ENDPOINT"]
-TABLE_REAL_ORDERS = os.environ["TABLE_REAL_ORDERS"]
+TABLE_ORDER      = os.environ["TABLE_ORDER"]
+STEP_ARN         = os.environ["STEP_ARN"]
+DLQ_URL          = os.environ["DLQ_URL"]
+TABLE_CONN       = os.environ["TABLE_CONN"]
+WS_ENDPOINT      = os.environ["WS_ENDPOINT"]  # https://{apiId}.execute-api.{region}.amazonaws.com/{stage}
+TABLE_REAL_ORDERS = os.environ["TABLE_REAL_ORDERS"]  # the order-service's actual Orders table (PK=TENANT#..#ORDER#.., SK=STATUS#..)
 
 VALID_STATUSES = {"new", "preparing", "ready", "delivered", "cancelled"}
 
-dynamodb    = boto3.resource("dynamodb")
-table       = dynamodb.Table(TABLE_ORDER)
-real_orders = dynamodb.Table(TABLE_REAL_ORDERS)
-conn_table  = dynamodb.Table(TABLE_CONN)
+dynamodb        = boto3.resource("dynamodb")
+table           = dynamodb.Table(TABLE_ORDER)
+real_orders     = dynamodb.Table(TABLE_REAL_ORDERS)
+conn_table      = dynamodb.Table(TABLE_CONN)
 sfn        = boto3.client("stepfunctions")
 sqs        = boto3.client("sqs")
 apigw_mgmt = boto3.client("apigatewaymanagementapi", endpoint_url=WS_ENDPOINT)
@@ -134,6 +141,39 @@ def lambda_handler(event: dict, context) -> dict:
     if action == "subscribe":
         channel = body.get("channel", "orders")
         logger.info("subscribe: connectionId=%s channel=%s", connection_id, channel)
+
+        # Platform admins have no tenantId of their own in their JWT, so their
+        # connection is stored with an empty tenantId at $connect. To receive
+        # broadcasts for whichever tenant/branch they're browsing in the
+        # console, they can re-scope their connection here.
+        requested_tenant_id = body.get("tenantId")
+        requested_restaurant_id = body.get("restaurantId", "")
+
+        if requested_tenant_id:
+            _, _, role = _get_scope_for_connection(connection_id)
+
+            if role == "admin":
+                try:
+                    conn_table.update_item(
+                        Key={"connectionId": connection_id},
+                        UpdateExpression="SET tenantId = :t, restaurantId = :r",
+                        ExpressionAttributeValues={
+                            ":t": requested_tenant_id,
+                            ":r": requested_restaurant_id,
+                        },
+                    )
+                    logger.info(
+                        "Admin connection %s re-scoped to tenant=%s restaurant=%s",
+                        connection_id, requested_tenant_id, requested_restaurant_id or "-",
+                    )
+                except ClientError as e:
+                    logger.error("Failed to re-scope admin connection %s: %s", connection_id, e)
+            else:
+                logger.warning(
+                    "Non-admin connection %s attempted to subscribe to tenant=%s — ignored",
+                    connection_id, requested_tenant_id,
+                )
+
         return {
             "statusCode": 200,
             "body": json.dumps({"type": "SUBSCRIBED", "channel": channel}),
@@ -185,6 +225,9 @@ def lambda_handler(event: dict, context) -> dict:
             if not order_item:
                 logger.warning("Order %s not found for update by connection %s", order_id, connection_id)
                 return {"statusCode": 404, "body": json.dumps({"type": "NOT_FOUND", "reason": "Order does not exist"})}
+
+            # PK already encodes tenant_id, so a match here already proves tenant
+            # ownership — no separate tenantId comparison needed.
 
             if role != "admin" and restaurant_id and order_item.get("restaurantId") != restaurant_id:
                 logger.warning("Cross-branch modification blocked for connection %s on Order %s", connection_id, order_id)

@@ -386,29 +386,27 @@ def lambda_handler(event: dict, context) -> dict:
 
         ttl = int(time.time()) + 3600
 
-        table.put_item(
-            Item={
-                "connectionId": connection_id,
+        item = {
+            "connectionId": connection_id,
+            "connectionType": "user",
+            "userId": user_id,
+            "email": email,
+            "restaurantId": restaurant_id,
+            "groups": groups,
+            "role": role,
+            "connectedAt": int(time.time()),
+            "ttl": ttl,
+        }
 
-                "connectionType": "user",
+        # tenantId is a GSI key (tenantId-index) — DynamoDB rejects empty
+        # strings for indexed key attributes, so omit it entirely for
+        # platform admins (whose JWT has no tenant_id claim) rather than
+        # writing "". Their connection is scoped later via the "subscribe"
+        # action instead, once they pick a tenant/branch in the console.
+        if tenant_id:
+            item["tenantId"] = tenant_id
 
-                "userId": user_id,
-
-                "email": email,
-
-                "tenantId": tenant_id,
-
-                "restaurantId": restaurant_id,
-
-                "groups": groups,
-
-                "role": role,
-
-                "connectedAt": int(time.time()),
-
-                "ttl": ttl,
-            }
-        )
+        table.put_item(Item=item)
 
 
         # Redis
