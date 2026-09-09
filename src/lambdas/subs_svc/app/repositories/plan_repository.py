@@ -69,6 +69,7 @@ class PlanRepository:
             currency=item.get("currency", "USD"),
             description=item.get("description"),
             is_active=item.get("isActive", True),
+            whats_included=list(item.get("whatsIncluded", [])),
             created_at=datetime.fromisoformat(item["createdAt"]),
             updated_at=datetime.fromisoformat(item["updatedAt"])
         )
@@ -88,6 +89,7 @@ class PlanRepository:
                 price=float(item["price"]),  # Convert Decimal back to float for domain model
                 currency=item.get("currency", "USD"),
                 description=item.get("description"),
+                whats_included=list(item.get("whatsIncluded", [])),
                 is_active=item.get("isActive", True),
                 created_at=datetime.fromisoformat(item["createdAt"]),
                 updated_at=datetime.fromisoformat(item["updatedAt"])

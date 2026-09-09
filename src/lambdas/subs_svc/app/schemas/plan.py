@@ -50,6 +50,7 @@ class PlanUpdate(BaseModel):
     price: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None
     description: Optional[str] = None
+    whats_included: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
 

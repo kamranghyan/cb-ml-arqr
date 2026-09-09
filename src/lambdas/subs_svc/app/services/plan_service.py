@@ -31,7 +31,7 @@ Admin Controls
 
 Notes
 -----
-• Plan deletion is soft - never hard delete (data integrity)
+• Plan deletion is hard delete (data integrity)
 • Plan prices used by Payment SVC for billing
 """
 
@@ -99,6 +99,8 @@ class PlanService:
             update_data["price"] = updates.price
         if updates.description is not None:
             update_data["description"] = updates.description
+        if updates.whats_included is not None:
+            update_data["whatsIncluded"] = updates.whats_included
         if updates.is_active is not None:
             update_data["isActive"] = updates.is_active
         if updates.currency is not None:
