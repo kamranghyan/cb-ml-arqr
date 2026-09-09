@@ -25,7 +25,7 @@ Notes
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -37,6 +37,7 @@ class Plan(BaseModel):
     currency: str = "USD"
     description: Optional[str] = None
     is_active: bool = True
+    whats_included: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     

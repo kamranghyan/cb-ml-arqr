@@ -22,7 +22,7 @@ Notes
 • Pydantic automatically validates data types and constraints
 """
 
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -33,7 +33,8 @@ class PlanCreate(BaseModel):
     price: float = Field(..., ge=0)
     currency: str = "USD"
     description: Optional[str] = None
-    
+    whats_included: List[str] = Field(default_factory=list)
+
     @field_validator('plan_id')
     @classmethod
     def validate_plan_id(cls, v: str) -> str:
@@ -60,6 +61,6 @@ class PlanResponse(BaseModel):
     currency: str
     description: Optional[str] = None
     is_active: bool
-    
+    whats_included: List[str] = Field(default_factory=list)
     class Config:
         from_attributes = True

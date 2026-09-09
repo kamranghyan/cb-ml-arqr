@@ -63,6 +63,7 @@ class PlanService:
             price=plan_data.price,
             currency=plan_data.currency,
             description=plan_data.description,
+            whats_included=plan_data.whats_included,
             is_active=True
         )
         
@@ -130,5 +131,6 @@ class PlanService:
             price=plan.price,
             currency=plan.currency,
             description=plan.description,
-            is_active=plan.is_active
+            is_active=plan.is_active,
+            whats_included=plan.whats_included
         )

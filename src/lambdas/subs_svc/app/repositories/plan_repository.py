@@ -47,7 +47,8 @@ class PlanRepository:
             "description": plan.description,
             "isActive": plan.is_active,
             "createdAt": plan.created_at.isoformat(),
-            "updatedAt": plan.updated_at.isoformat()
+            "updatedAt": plan.updated_at.isoformat(),
+            "whatsIncluded": plan.whats_included,
         }
         self.table.put_item(Item=item)
         return plan
