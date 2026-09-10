@@ -1009,7 +1009,7 @@ export default function TenantHistory() {
 
               const addOnsTotal =
                 getAddOnsTotal(o);
-
+//
               const grandTotal =
                 getGrandTotal(o);
 
