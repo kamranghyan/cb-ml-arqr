@@ -187,19 +187,9 @@ class OrderRepository:
 
     # ── Update ────────────────────────────────────────────────────────────────
 
-    def update_status(
-        self,
-        order_id: str,
-        tenant_id: str,
-        status: str,
-        cancellation_reason: Optional[str] = None,
-    ) -> None:
+    def update_status(self, order_id: str, tenant_id: str, status: str) -> None:
         """
         Update the status and updatedAt fields for an order.
-
-        If cancellation_reason is given (non-empty), it is also persisted
-        on the order item as `cancellationReason` — this is how a guest's
-        reason for cancelling ends up in DynamoDB.
 
         Raises
         ------
@@ -212,27 +202,14 @@ class OrderRepository:
 
         updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        update_expression = "SET #st = :s, updatedAt = :u"
-        expression_attr_names = {"#st": "status"}
-        expression_attr_values = {":s": status, ":u": updated_at}
-
-        if cancellation_reason:
-            update_expression += ", cancellationReason = :cr"
-            expression_attr_values[":cr"] = cancellation_reason
-
         try:
             self._table.update_item(
                 Key={"PK": order["PK"], "SK": order["SK"]},
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attr_names,
-                ExpressionAttributeValues=expression_attr_values,
+                UpdateExpression="SET #st = :s, updatedAt = :u",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={":s": status, ":u": updated_at},
             )
-            _log.info(
-                "order.status.updated",
-                order_id=order_id,
-                status=status,
-                has_cancellation_reason=bool(cancellation_reason),
-            )
+            _log.info("order.status.updated", order_id=order_id, status=status)
         except ClientError as exc:
             _log.error(
                 "order.status.update.failed",

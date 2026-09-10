@@ -185,6 +185,7 @@ export default function AdminSubscription() {
         price: 9.99,
         currency: 'USD',
         description: 'Perfect for businesses',
+        whats_included: '',
     });
 
     const [submitting, setSubmitting] = useState(false);
@@ -451,6 +452,7 @@ export default function AdminSubscription() {
                 currency: 'USD',
                 description:
                     'Perfect for businesses',
+                whats_included: '',
             });
 
             await loadPlans();
@@ -530,6 +532,11 @@ export default function AdminSubscription() {
             currency: plan.currency,
             description:
                 plan.description || '',
+            whats_included: (
+                (plan as Plan & {
+                    whats_included?: string[];
+                }).whats_included || []
+            ).join('\n'),
         });
 
         setShowModal(true);
@@ -839,19 +846,19 @@ export default function AdminSubscription() {
     // Stats
     // ─────────────────────────────────────────────
 
-   const activeSubscriptions =
-    tenants.filter(
-        (tenant) =>
-            tenant.subscriptionStatus === 'ACTIVE' &&
-            tenant.isActive === true
-    ).length;
+    const activeSubscriptions =
+        tenants.filter(
+            (tenant) =>
+                tenant.subscriptionStatus === 'ACTIVE' &&
+                tenant.isActive === true
+        ).length;
 
-const pendingSubscriptions =
-    tenants.filter(
-        (tenant) =>
-            tenant.subscriptionStatus === 'INACTIVE' ||
-            tenant.isActive === false
-    ).length;
+    const pendingSubscriptions =
+        tenants.filter(
+            (tenant) =>
+                tenant.subscriptionStatus === 'INACTIVE' ||
+                tenant.isActive === false
+        ).length;
 
     const totalTenants =
         tenants.length;
@@ -1017,6 +1024,8 @@ const pendingSubscriptions =
                                     'USD',
                                 description:
                                     'Perfect for businesses',
+                                whats_included:
+                                    '',
                             });
 
                             setShowModal(
@@ -1571,62 +1580,83 @@ const pendingSubscriptions =
                                                 </button> */}
                                             </div>
                                         </div>
+                                        <div className='flex'>
+                                            
+                                            <p
+                                                style={{
+                                                    fontSize: 14,
+                                                    color:
+                                                        colors.muted,
+                                                    margin:
+                                                        '4px 0 10px',
+                                                    lineHeight:
+                                                        1.4,
+                                                    minHeight:
+                                                        36,
+                                                }}
+                                            >
+                                                
+                                                {plan.description ||
+                                                    'No description'}
+                                                {(plan as Plan & { whats_included?: string[] }).whats_included &&
+                                                    (plan as Plan & { whats_included?: string[] }).whats_included!.length > 0 && (
+                                                    
+                                                    <ul style={{
+                                                        margin: '8px 0 0',
+                                                        // paddingLeft: 18,
+                                                        fontSize: 12,
+                                                        color: colors.muted,
+                                                    }}>
+                                                        <p className='text-white mb-1 text-[14px]'>What's Included:</p>
+                                                        {(plan as Plan & { whats_included?: string[] }).whats_included!.map((item, idx) => (
+                                                            <li key={idx} style={{ marginBottom: 2 }}>{item}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </p>
 
-                                        <p
-                                            style={{
-                                                fontSize: 13,
-                                                color:
-                                                    colors.muted,
-                                                margin:
-                                                    '4px 0 10px',
-                                                lineHeight:
-                                                    1.4,
-                                                minHeight:
-                                                    36,
-                                            }}
-                                        >
-                                            {plan.description ||
-                                                'No description'}
-                                        </p>
+                                            <p
+                                                style={{
+                                                    fontSize: 20,
+                                                    fontWeight: 800,
+                                                    color:
+                                                        colors.text,
+                                                    margin: 0,
+                                                    textAlign: 'right',
+                                                }}
+                                            >
+                                                {formatPrice(
+                                                    plan.price,
+                                                    plan.currency
+                                                )}
+                                                <span
+                                                    style={{
+                                                        display:
+                                                            'inline-block',
+                                                        marginTop: 8,
+                                                        height: "fit-content",
+                                                        padding:
+                                                            '2px 10px',
+                                                        borderRadius:
+                                                            12,
+                                                        fontSize: 10,
+                                                        fontWeight: 700,
+                                                        color:
+                                                            accents
+                                                                .green
+                                                                .text,
+                                                        background:
+                                                            accents
+                                                                .green
+                                                                .bg,
+                                                    }}
+                                                >
+                                                    Active
+                                                </span>
+                                            </p>
 
-                                        <p
-                                            style={{
-                                                fontSize: 20,
-                                                fontWeight: 800,
-                                                color:
-                                                    colors.text,
-                                                margin: 0,
-                                            }}
-                                        >
-                                            {formatPrice(
-                                                plan.price,
-                                                plan.currency
-                                            )}
-                                        </p>
 
-                                        <span
-                                            style={{
-                                                display:
-                                                    'inline-block',
-                                                marginTop: 8,
-                                                padding:
-                                                    '2px 10px',
-                                                borderRadius:
-                                                    12,
-                                                fontSize: 10,
-                                                fontWeight: 700,
-                                                color:
-                                                    accents
-                                                        .green
-                                                        .text,
-                                                background:
-                                                    accents
-                                                        .green
-                                                        .bg,
-                                            }}
-                                        >
-                                            Active
-                                        </span>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -2534,6 +2564,31 @@ const pendingSubscriptions =
                                             'vertical',
                                         fontFamily:
                                             "'Poppins', sans-serif",
+                                    }}
+                                />
+                            </div>
+
+                            {/* What's Included */}
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 4 }}>
+                                    What's Included (one per line)
+                                </label>
+                                <textarea
+                                    value={formData.whats_included}
+                                    onChange={(e) => setFormData({ ...formData, whats_included: e.target.value })}
+                                    rows={4}
+                                    placeholder={'Unlimited access\nPriority support\nNo ads'}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 8,
+                                        border: `1.5px solid ${colors.border}`,
+                                        background: colors.card2,
+                                        color: colors.text,
+                                        fontSize: 14,
+                                        outline: 'none',
+                                        resize: 'vertical',
+                                        fontFamily: "'Poppins', sans-serif",
                                     }}
                                 />
                             </div>

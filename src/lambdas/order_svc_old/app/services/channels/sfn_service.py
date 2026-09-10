@@ -95,7 +95,6 @@ class StepFunctionsService:
             "foodReady": update.foodReady,
             "delivered": update.delivered,
             "cancelled": update.cancelled,
-            "cancellationReason": update.cancellationReason,
             "orderType": order.get("orderType", "dine_in"),
             "customerName": order.get("customerName"),
             "pickupTime": order.get("pickupTime"),

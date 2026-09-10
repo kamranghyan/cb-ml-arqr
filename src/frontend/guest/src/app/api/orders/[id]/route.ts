@@ -46,7 +46,7 @@ export async function GET(
 ) {
   const { id: orderId } = await params
   const restaurantId = req.nextUrl.searchParams.get('rid') ?? ''
-  const tenantId     = await resolveTenant(restaurantId)
+  const tenantId = await resolveTenant(restaurantId)
   if (!tenantId) return UNKNOWN_RESTAURANT
 
   try {
@@ -81,15 +81,13 @@ export async function PATCH(
     const tenantId = await resolveTenant(restaurantId)
     if (!tenantId) return UNKNOWN_RESTAURANT
 
-    let auth = req.headers.get('authorization') ?? ''
-    if (auth && !auth.startsWith('Bearer ')) auth = `Bearer ${auth}`
-
-    const res = await fetch(`${ORDERS_BASE}/orders/${orderId}`, {
+    // Guest cancel goes through the guest-only endpoint — no staff auth,
+    // ownership is verified server-side via guestSessionId instead.
+    const res = await fetch(`${ORDERS_BASE}/orders/${orderId}/guest`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         'X-Tenant-Id': tenantId,
-        ...(auth ? { Authorization: auth } : {}),
       },
       body: JSON.stringify(body),
     })

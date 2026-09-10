@@ -104,18 +104,3 @@ class UpdateOrderBody(BaseModel):
     foodReady: bool = False
     delivered: bool = False
     cancelled: bool = False
-    cancellationReason: Optional[str] = None
-
-
-class GuestCancelOrderBody(BaseModel):
-    """Body for the guest self-cancel endpoint. No Cognito auth — ownership
-    is proven by guestSessionId matching the order instead."""
-    guestSessionId: str = Field(..., min_length=1)
-    cancellationReason: str = Field(..., min_length=1)
-
-
-class GuestCancelOrderBody(BaseModel):
-    """Body for a guest cancelling their own order — no staff auth involved.
-    Ownership is proven by guestSessionId matching the order record."""
-    guestSessionId: str = Field(..., min_length=1)
-    cancellationReason: str = Field(..., min_length=1)

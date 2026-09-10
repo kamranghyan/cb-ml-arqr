@@ -39,8 +39,8 @@ interface Subscription {
     tenant_id: string;
     plan_id: string;
     status: string;
-    start_date: string;
-    end_date: string;
+    subscriptionStartDate: string;
+    subscriptionEndDate: string;
     is_active: boolean;
     days_remaining: number | null;
 }
@@ -68,6 +68,21 @@ const getAccents = (isDark: boolean) => ({
         text: isDark ? '#f87171' : '#dc2626',
     },
 });
+
+const formatExpiryDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+        return '—';
+    }
+
+    return new Intl.DateTimeFormat('en-US', {
+        day: 'numeric',
+        month: 'long',
+        timeZone: 'UTC',
+        year: 'numeric',
+    }).format(date);
+};
 
 export default function TenantSubscription() {
     const router = useRouter();
@@ -1157,9 +1172,9 @@ export default function TenantSubscription() {
                                                             '5px 0',
                                                     }}
                                                 >
-                                                    {new Date(
-                                                        subscription.end_date
-                                                    ).toLocaleDateString()}
+                                                    {formatExpiryDate(
+                                                        subscription.subscriptionEndDate
+                                                    )}
                                                 </p>
                                             </div>
                                         </>

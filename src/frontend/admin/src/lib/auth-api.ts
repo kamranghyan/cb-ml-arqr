@@ -23,6 +23,7 @@ export interface Plan {
   price: number;
   currency: string;
   description: string | null;
+  whats_included: string[];
   is_active: boolean;
 }
 

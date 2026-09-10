@@ -88,6 +88,7 @@ export default function TrackingPage() {
   const [showCancel, setShowCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [prepTime, setPrepTime] = useState('20-30 mins');
 
   // ✅ New states for order completion
@@ -373,12 +374,24 @@ export default function TrackingPage() {
   const cancelOrder = async () => {
     if (!latest) return;
 
+    const reason = cancelReason.trim();
+
+    if (!reason) {
+      setCancelError('Please enter a reason for cancelling your order.');
+      return;
+    }
+
     setCancelling(true);
     setCancelError('');
 
     try {
       const apiId = (latest as any)._apiId ?? latest.orderId;
       const { restaurantId: rid } = getGuestScope();
+      const guestSessionId = sessionStorage.getItem('guestSessionId') ?? '';
+
+      if (!guestSessionId) {
+        throw new Error('Guest session not found. Please rescan the QR code.');
+      }
 
       const res = await fetch(`/api/orders/${apiId}?rid=${rid}`, {
         method: 'PATCH',
@@ -388,7 +401,9 @@ export default function TrackingPage() {
         body: JSON.stringify({
           restaurantId: getGuestScope().restaurantId,
           orderId: apiId,
+          guestSessionId,
           cancelled: true,
+          cancellationReason: reason,
         }),
       });
 
@@ -400,6 +415,8 @@ export default function TrackingPage() {
       toast.success('Order cancelled successfully');
 
       setShowCancel(false);
+      setCancelReason('');
+      setCancelError('');
 
       router.push('/guest');
     } catch (err: any) {
@@ -603,6 +620,47 @@ export default function TrackingPage() {
               margin: '0 0 24px',
               textAlign: 'center',
             }}>This action cannot be undone. Please contact staff if needed.</p>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => {
+                setCancelReason(e.target.value);
+
+                if (cancelError) {
+                  setCancelError('');
+                }
+              }}
+              placeholder="Please tell us why you want to cancel your order..."
+              disabled={cancelling}
+              rows={4}
+              maxLength={500}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                resize: 'none',
+                borderRadius: 14,
+                border: `1.5px solid ${D.border}`,
+                background: D.card2,
+                color: D.text,
+                padding: '13px 14px',
+                fontSize: 13,
+                fontFamily: "'Poppins', sans-serif",
+                outline: 'none',
+                marginBottom: 6,
+              }}
+            />
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              marginBottom: 16,
+            }}>
+              <span style={{
+                fontSize: 10,
+                color: D.sub,
+              }}>
+                {cancelReason.length}/500
+              </span>
+            </div>
             {cancelError && (
               <p style={{
                 fontSize: 12,
@@ -613,7 +671,11 @@ export default function TrackingPage() {
             )}
             <div style={{ display: 'flex', gap: 12 }}>
               <button
-                onClick={() => { setShowCancel(false); setCancelError(''); }}
+                onClick={() => {
+                  setShowCancel(false);
+                  setCancelError('');
+                  setCancelReason('');
+                }}
                 disabled={cancelling}
                 style={{
                   flex: 1,
@@ -633,7 +695,7 @@ export default function TrackingPage() {
               </button>
               <button
                 onClick={cancelOrder}
-                disabled={cancelling}
+                disabled={cancelling || !cancelReason.trim()}
                 style={{
                   flex: 1,
                   height: 48,
@@ -643,19 +705,35 @@ export default function TrackingPage() {
                   color: '#fff',
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                  cursor: cancelling || !cancelReason.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  opacity: cancelling ? 0.7 : 1,
+                  opacity: cancelling || !cancelReason.trim() ? 0.5 : 1,
                   transition: 'all 0.2s ease',
                   outline: 'none',
                 }}
               >
                 {cancelling
-                  ? <><div style={{ width: 16, height: 16, border: '2.5px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Cancelling…</>
-                  : 'Cancel Order'}
+                  ? (
+                    <>
+                      <div
+                        style={{
+                          width: 16,
+                          height: 16,
+                          border: '2.5px solid #fff',
+                          borderTopColor: 'transparent',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite',
+                        }}
+                      />
+                      Cancelling…
+                    </>
+                  )
+                  : 'Submit Cancellation'}
               </button>
             </div>
           </div>

@@ -38,7 +38,7 @@ from app.models.order import (
     clean_decimals,
 )
 from app.repositories.order_repository import DuplicateOrderError, OrderRepository
-from app.schemas.order import CreateOrderBody, UpdateOrderBody, GuestCancelOrderBody
+from app.schemas.order import CreateOrderBody, UpdateOrderBody
 from app.services.channels.cart_service import CartService
 from app.services.channels.sfn_service import StepFunctionsService
 from app.services.menu_validator import MenuValidationError, validate_menu_items
@@ -202,72 +202,6 @@ async def get_guest_order(
         "sfnStatus": None,
     }
 
-
-# ── PATCH /{orderId}/guest — guest cancels their own order ────────────────────
-
-@router.patch("/{orderId}/guest", summary="Guest cancels their own order")
-async def guest_cancel_order(
-    orderId: str,
-    body: GuestCancelOrderBody,
-    tenantId: Annotated[str, Depends(get_tenant_id)],
-    repo: Annotated[OrderRepository, Depends(get_order_repo)],
-    sfn: Annotated[StepFunctionsService, Depends(get_sfn_service)],
-):
-    """
-    Lets a guest cancel their own order — no Cognito auth, since guests
-    never have a staff token. Ownership is proven by guestSessionId
-    matching the order (same check used by GET /{orderId}/guest), so a
-    guest can never cancel someone else's order. This can only cancel —
-    it cannot kitchen-accept, mark ready, or deliver.
-    """
-    order = repo.get_order_for_guest(
-        order_id=orderId,
-        tenant_id=tenantId,
-        guest_session_id=body.guestSessionId,
-    )
-
-    if not order:
-        raise ResourceNotFoundError(resource="Order", identifier=orderId)
-
-    current_status = (order.get("status") or "").upper()
-    if current_status in {"CANCELLED", "DELIVERED", "COMPLETED"}:
-        raise BadRequestError(
-            f"Order cannot be cancelled from status {current_status}."
-        )
-
-    update = OrderStatusUpdate(
-        tenantId=tenantId,
-        cancelled=True,
-        cancellationReason=body.cancellationReason,
-    )
-    new_status = update.derived_status  # "CANCELLED"
-
-    repo.update_status(
-        orderId,
-        tenantId,
-        new_status,
-        cancellation_reason=body.cancellationReason,
-    )
-    log.info(
-        "order.guest_cancelled",
-        order_id=orderId,
-        guest_session_id=body.guestSessionId,
-    )
-
-    exec_name = f"{orderId}-{int(datetime.now(timezone.utc).timestamp())}"
-    execution_arn = sfn.start_status_update(orderId, order, update, exec_name)
-
-    data = {
-        "orderId": orderId,
-        "status": new_status,
-        "cancellationReason": body.cancellationReason,
-    }
-    if execution_arn:
-        data["executionArn"] = execution_arn
-
-    return data
-
-
 # ── GET /orders/{orderId} ─────────────────────────────────────────────────────
 
 @router.get("/{orderId}", summary="Get a single order by ID")
@@ -312,17 +246,11 @@ async def update_order(
         foodReady=body.foodReady,
         delivered=body.delivered,
         cancelled=body.cancelled,
-        cancellationReason=body.cancellationReason,
     )
     new_status = update.derived_status
 
     try:
-        repo.update_status(
-            orderId,
-            tenantId,
-            new_status,
-            cancellation_reason=update.cancellationReason if update.cancelled else None,
-        )
+        repo.update_status(orderId, tenantId, new_status)
         log.info("order.status.updated", order_id=orderId, status=new_status)
     except Exception as exc:
         log.warning("order.status.update.failed", order_id=orderId, exc_message=str(exc))
@@ -339,69 +267,6 @@ async def update_order(
             "delivered": body.delivered,
             "cancelled": body.cancelled,
         },
-    }
-    if body.cancelled:
-        data["cancellationReason"] = body.cancellationReason
-    if execution_arn:
-        data["executionArn"] = execution_arn
-
-    return data
-
-
-# ── PATCH /orders/{orderId}/guest — guest cancels their own order ─────────────
-#
-# No staff auth here. Ownership is proven by guestSessionId matching the
-# order record (same check used by GET /{orderId}/guest). This endpoint can
-# ONLY cancel — it cannot accept/ready/deliver, so a guest can never move
-# their own order to any state but CANCELLED.
-
-@router.patch("/{orderId}/guest", summary="Guest cancels their own order")
-async def guest_cancel_order(
-    orderId: str,
-    body:    GuestCancelOrderBody,
-    tenantId: Annotated[str,                 Depends(get_tenant_id)],
-    repo:    Annotated[OrderRepository,      Depends(get_order_repo)],
-    sfn:     Annotated[StepFunctionsService, Depends(get_sfn_service)],
-):
-    order = repo.get_order_for_guest(
-        order_id=orderId,
-        tenant_id=tenantId,
-        guest_session_id=body.guestSessionId,
-    )
-    if not order:
-        raise ResourceNotFoundError(resource="Order", identifier=orderId)
-
-    current_status = (order.get("status") or "").upper()
-    if current_status in {"CANCELLED", "DELIVERED", "COMPLETED", "TIMED_OUT"}:
-        raise BadRequestError(
-            f"Order cannot be cancelled from status {current_status}."
-        )
-
-    update = OrderStatusUpdate(
-        tenantId=tenantId,
-        cancelled=True,
-        cancellationReason=body.cancellationReason,
-    )
-    new_status = update.derived_status
-
-    try:
-        repo.update_status(
-            orderId,
-            tenantId,
-            new_status,
-            cancellation_reason=body.cancellationReason,
-        )
-        log.info("order.status.updated", order_id=orderId, status=new_status)
-    except Exception as exc:
-        log.warning("order.status.update.failed", order_id=orderId, exc_message=str(exc))
-
-    exec_name = f"{orderId}-{int(datetime.now(timezone.utc).timestamp())}"
-    execution_arn = sfn.start_status_update(orderId, order, update, exec_name)
-
-    data = {
-        "orderId": orderId,
-        "status": new_status,
-        "cancellationReason": body.cancellationReason,
     }
     if execution_arn:
         data["executionArn"] = execution_arn

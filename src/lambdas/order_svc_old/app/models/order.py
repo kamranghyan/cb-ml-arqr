@@ -73,7 +73,6 @@ class OrderStatusUpdate(BaseModel):
     foodReady: bool = False
     delivered: bool = False
     cancelled: bool = False
-    cancellationReason: Optional[str] = None
 
     @property
     def derived_status(self) -> str:
