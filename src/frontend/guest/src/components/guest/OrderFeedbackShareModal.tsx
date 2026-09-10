@@ -18,17 +18,20 @@ interface OrderFeedbackShareModalProps {
     open: boolean;
     onClose: () => void;
     orderId?: string;
+    restaurantId?: string;
 }
 
 export default function OrderFeedbackShareModal({
     open,
     onClose,
     orderId,
+    restaurantId,
 }: OrderFeedbackShareModalProps) {
     const [rating, setRating] = useState(0);
     const [feedback, setFeedback] = useState('');
     const [copied, setCopied] = useState(false);
-
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
     const { isDark } = useTheme();
 
     /*
@@ -123,16 +126,46 @@ export default function OrderFeedbackShareModal({
         );
     };
 
-    const handleSubmit = () => {
-        // TODO:
-        // Connect this to your feedback API when available.
-        console.log({
-            orderId,
-            rating,
-            feedback,
-        });
+    const handleSubmit = async () => {
+        if (!orderId) {
+            onClose();
+            return;
+        }
 
-        onClose();
+        const guestSessionId = sessionStorage.getItem('guestSessionId') ?? '';
+
+        if (!guestSessionId) {
+            setSubmitError('Session expired — feedback not saved.');
+            onClose();
+            return;
+        }
+
+        setSubmitting(true);
+        setSubmitError('');
+
+        try {
+            const res = await fetch(`/api/orders/${orderId}/feedback?rid=${restaurantId ?? ''}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    guestSessionId,
+                    restaurantId,
+                    rating,
+                    feedbackText: feedback.trim() || undefined,
+                }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error ?? 'Failed to submit feedback');
+            }
+        } catch (err) {
+            console.error('Feedback submit failed:', err);
+            // Feedback save fail hui to bhi guest ko block nahi karna — modal close ho jaye
+        } finally {
+            setSubmitting(false);
+            onClose();
+        }
     };
 
     const isSubmitDisabled = !rating && !feedback.trim();

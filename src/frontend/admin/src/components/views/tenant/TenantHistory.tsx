@@ -1822,14 +1822,14 @@ export default function TenantHistory() {
                         >
                           <tr>
                             {[
-                              'Placed',
-                              ...(showBranch
+                              'Placed', ...(showBranch
                                 ? ['Restaurant']
                                 : []),
                               'Type',
                               'Items',
                               'Add-Ons',
                               'Total',
+                              'Rating',
                               'Status',
                               'Print',
                             ].map((header) => (
@@ -2144,7 +2144,36 @@ export default function TenantHistory() {
                                     o.currency
                                   )}
                                 </td>
-
+                                <td
+                                  style={{
+                                    padding: '11px 12px',
+                                    textAlign: 'center',
+                                  }}
+                                >
+                                  {typeof o.rating === 'number' ? (
+                                    <div
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 3,
+                                      }}
+                                      title={o.feedbackText || undefined}
+                                    >
+                                      <span style={{ color: '#FFB300', fontSize: 13 }}>★</span>
+                                      <span
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 700,
+                                          color: colors.text,
+                                        }}
+                                      >
+                                        {o.rating}/5
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: colors.subtle, fontSize: 12 }}>—</span>
+                                  )}
+                                </td>
                                 <td
                                   style={{
                                     padding:

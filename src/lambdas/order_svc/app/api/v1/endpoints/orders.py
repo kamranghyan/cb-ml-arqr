@@ -18,7 +18,7 @@ from shared.aws_clients import get_dynamodb_client
 from shared.cognito_auth import UserContext
 from shared.exceptions import BadRequestError, ResourceNotFoundError
 from shared.structured_logger import get_logger
-
+from app.schemas.order import CreateOrderBody, UpdateOrderBody, GuestCancelOrderBody, GuestFeedbackBody
 from app.core.config import get_settings
 from app.core.dependencies import (
     get_order_repo,
@@ -266,6 +266,46 @@ async def guest_cancel_order(
         data["executionArn"] = execution_arn
 
     return data
+# ── POST /{orderId}/feedback — guest leaves a rating/feedback ────────────────
+#
+# No staff auth here, same pattern as the guest cancel endpoint. Ownership is
+# proven by guestSessionId matching the order record.
+
+@router.post("/{orderId}/feedback", summary="Guest leaves a rating/feedback on their own order")
+async def guest_add_feedback(
+    orderId: str,
+    body: GuestFeedbackBody,
+    tenantId: Annotated[str, Depends(get_tenant_id)],
+    repo: Annotated[OrderRepository, Depends(get_order_repo)],
+):
+    order = repo.get_order_for_guest(
+        order_id=orderId,
+        tenant_id=tenantId,
+        guest_session_id=body.guestSessionId,
+    )
+
+    if not order:
+        raise ResourceNotFoundError(resource="Order", identifier=orderId)
+
+    repo.add_feedback(
+        order_id=orderId,
+        tenant_id=tenantId,
+        rating=body.rating,
+        feedback_text=body.feedbackText,
+    )
+
+    log.info(
+        "order.guest_feedback",
+        order_id=orderId,
+        guest_session_id=body.guestSessionId,
+        rating=body.rating,
+    )
+
+    return {
+        "orderId": orderId,
+        "rating": body.rating,
+        "feedbackText": body.feedbackText,
+    }
 
 
 # ── GET /orders/{orderId} ─────────────────────────────────────────────────────

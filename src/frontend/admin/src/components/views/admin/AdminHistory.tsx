@@ -583,7 +583,7 @@ export default function AdminHistory() {
                     <table style={{
                       width: '100%',
                       borderCollapse: 'collapse',
-                      minWidth: 700,
+                      minWidth: 780,
                     }}>
                       <thead style={{ background: colors.card2 }}>
                         <tr>
@@ -642,6 +642,17 @@ export default function AdminHistory() {
                             whiteSpace: 'nowrap',
                             fontFamily: "'Poppins', sans-serif",
                           }}>Total</th>
+                          <th style={{
+                            padding: '10px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                            color: colors.subtle,
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            fontFamily: "'Poppins', sans-serif",
+                          }}>Rating</th>
                           <th style={{
                             padding: '10px 12px',
                             fontSize: 11,
@@ -751,6 +762,37 @@ export default function AdminHistory() {
                                 fontFamily: "'Poppins', sans-serif",
                               }}>
                                 {money(o.totalAmountMinorUnits, scope.currency)}
+                              </td>
+
+                              {/* ── Rating ── */}
+                              <td style={{
+                                padding: '11px 12px',
+                                textAlign: 'center',
+                                fontFamily: "'Poppins', sans-serif",
+                              }}>
+                                {typeof o.rating === 'number' ? (
+                                  <div
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                    }}
+                                    title={o.feedbackText || undefined}
+                                  >
+                                    <span style={{ color: '#FFB300', fontSize: 13 }}>★</span>
+                                    <span
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        color: colors.text,
+                                      }}
+                                    >
+                                      {o.rating}/5
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span style={{ color: colors.subtle, fontSize: 12 }}>—</span>
+                                )}
                               </td>
 
                               {/* ── Status ── */}

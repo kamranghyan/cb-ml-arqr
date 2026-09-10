@@ -242,6 +242,59 @@ class OrderRepository:
             )
             raise
 
+        # ── Feedback ──────────────────────────────────────────────────────────────
+
+    def add_feedback(
+        self,
+        order_id: str,
+        tenant_id: str,
+        rating: int,
+        feedback_text: Optional[str] = None,
+    ) -> None:
+        """
+        Attach a guest's rating/feedback to their order record.
+
+        Stored directly on the order item (alongside its lineItems) so a
+        later pass can attribute the rating to each item in the order for
+        per-item rating aggregation on the restaurant dashboard.
+        """
+        order = self.get_order(order_id, tenant_id)
+        if not order:
+            raise ResourceNotFoundError(resource="Order", identifier=order_id)
+
+        submitted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        update_expression = "SET rating = :r, feedbackSubmittedAt = :fa"
+        expression_attr_values: Dict[str, Any] = {
+            ":r": rating,
+            ":fa": submitted_at,
+        }
+
+        if feedback_text:
+            update_expression += ", feedbackText = :ft"
+            expression_attr_values[":ft"] = feedback_text
+
+        try:
+            self._table.update_item(
+                Key={"PK": order["PK"], "SK": order["SK"]},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attr_values,
+            )
+            _log.info(
+                "order.feedback.added",
+                order_id=order_id,
+                rating=rating,
+                has_feedback_text=bool(feedback_text),
+            )
+        except ClientError as exc:
+            _log.error(
+                "order.feedback.add.failed",
+                order_id=order_id,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise
+
+
     # ── Update order with addOns (if needed) ────────────────────────────────
 
     def update_order_with_addons(self, order_id: str, tenant_id: str, line_items: List[Dict]) -> None:

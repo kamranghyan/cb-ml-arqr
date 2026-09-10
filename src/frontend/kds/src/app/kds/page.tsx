@@ -11,17 +11,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from 'sonner';
 
-type Filter = 'all' | 'new' | 'preparing' | 'ready' | 'delivered';
+type Filter = 'all' | 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 type WsState = 'connecting' | 'connected' | 'disconnected' | 'error';
 type KdsOrderItemWithImage = KdsOrder['items'][number] & { imageUrl?: string };
 
 const STATUS_NEXT: Record<KdsStatus, KdsStatus | null> = {
-  new: 'preparing', preparing: 'ready', ready: 'delivered', delivered: null,
+  new: 'preparing', preparing: 'ready', ready: 'delivered', delivered: null, cancelled: null,
 };
-const STATUS_ORDER: Record<KdsStatus, number> = { new: 0, preparing: 1, ready: 2, delivered: 3 };
-const STATUS_RANK: Record<string, number> = { new: 0, preparing: 1, ready: 2, delivered: 3 };
+const STATUS_ORDER: Record<KdsStatus, number> = { new: 0, preparing: 1, ready: 2, delivered: 3, cancelled: 4 };
+const STATUS_RANK: Record<string, number> = { new: 0, preparing: 1, ready: 2, delivered: 3, cancelled: 4 };
 const STRIP_COLOR: Record<KdsStatus, string> = {
-  new: '#ff5723', preparing: '#3b82f6', ready: '#22c55e', delivered: '#a855f7',
+  new: '#ff5723', preparing: '#3b82f6', ready: '#22c55e', delivered: '#a855f7', cancelled: '#ef4444',
 };
 const BRAND = '#ff5723';
 
@@ -52,7 +52,9 @@ export default function KitchenDisplayPage() {
   async function handleLogout() { setLoggingOut(true); await logout(); router.push('/login/kds'); }
 
   useEffect(() => { const id = setInterval(() => { setOrders(prev => prev.map(o => o.status !== 'delivered' ? { ...o, elapsedSeconds: Math.min(o.elapsedSeconds + 1, o.maxSeconds + 300) } : o)); }, 1000); return () => clearInterval(id); }, []);
-
+  const acknowledgeCancellation = (orderId: string) => {
+    setAcknowledgedCancellations(prev => new Set(prev).add(orderId));
+  };
   const showToast = useCallback(
     (
       message: string,
@@ -82,7 +84,28 @@ export default function KitchenDisplayPage() {
     []
   );
   const addWsLog = (msg: string) => { const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); setWsLog(prev => [`[${time}] ${msg}`, ...prev.slice(0, 9)]); };
+  const notifyOrderCancelled = useCallback(async (orderId: string, displayId: string) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, {
+        cache: 'no-store',
+        headers: await authHeaders(),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
 
+      const data = await res.json();
+      const order = data.order ?? data;
+
+      const table = String(order.tableId ?? '')
+        .replace(/[^0-9]/g, '')
+        .padStart(2, '0') || '??';
+
+      const reason = order.cancellationReason || 'No reason given';
+
+      showToast(`❌ Table ${table} cancelled Order #${displayId} — ${reason}`, 'error');
+    } catch {
+      showToast(`❌ Order #${displayId} was cancelled`, 'error');
+    }
+  }, [showToast]);
   const connectWs = useCallback(async () => {
     // Already connected/connecting
     if (
@@ -192,27 +215,20 @@ export default function KitchenDisplayPage() {
           // STATUS UPDATE
           // ─────────────────────────────
           if (status || flags) {
-            const kdsStatus = toKdsStatus(
-              status ?? '',
-              flags
-            );
+            const kdsStatus = toKdsStatus(status ?? '', flags);
 
-            setOrders(prev =>
-              prev.map(o =>
-                (o as any)._apiId === String(orderId) ||
-                  o.id === displayId
-                  ? {
-                    ...o,
-                    status: kdsStatus,
-                  }
-                  : o
-              )
-            );
+            // Reload from REST so we always get the full order (incl. cancellationReason)
+            // rather than trying to patch partial WS fields locally.
+            loadOrders(true);
 
-            showToast(
-              `📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`,
-              'info'
-            );
+            if (kdsStatus === 'cancelled') {
+              notifyOrderCancelled(String(orderId), displayId);
+            } else {
+              showToast(
+                `📡 WS: Order #${displayId} → ${kdsStatus.toUpperCase()}`,
+                'info'
+              );
+            }
           }
 
         } catch {
@@ -259,7 +275,7 @@ export default function KitchenDisplayPage() {
       }, 5000);
     }
   }, []);
-  
+
   const wsSend = useCallback((p: object) => { if (wsRef.current?.readyState === WebSocket.OPEN) { const m = JSON.stringify(p); wsRef.current.send(m); addWsLog(`→ ${m.slice(0, 80)}`); } }, []);
 
   const loadOrdersAbortRef = useRef<AbortController | null>(null);
@@ -491,13 +507,17 @@ export default function KitchenDisplayPage() {
       setAdvancing(null);
     }
   };
-
+  const [acknowledgedCancellations, setAcknowledgedCancellations] = useState<Set<string>>(new Set());
   const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
 
-  // ✅ Remove tableId filter from KDS - show ALL orders
   const filtered = orders.filter(o => {
-    if (filter === 'all') return o.status !== 'delivered';
+    if (filter === 'all') {
+      if (o.status === 'delivered') return false;
+      if (o.status === 'cancelled' && acknowledgedCancellations.has(o.id)) return false;
+      return true;
+    }
     if (filter === 'delivered') return o.status === 'delivered';
+    if (filter === 'cancelled') return o.status === 'cancelled';
     return o.status === filter;
   }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.elapsedSeconds - a.elapsedSeconds);
 
@@ -548,6 +568,7 @@ export default function KitchenDisplayPage() {
     preparing: [{ label: '🔔 Mark Ready', bg: TONE.green.bg, color: TONE.green.text, border: TONE.green.border }],
     ready: [{ label: '✓ Delivered', bg: TONE.purple.bg, color: TONE.purple.text, border: TONE.purple.border }],
     delivered: [{ label: '✓ Completed', bg: TONE.gray.bg, color: TONE.gray.text, border: TONE.gray.border }],
+    cancelled: [{ label: '✗ Cancelled', bg: TONE.danger.bg, color: TONE.danger.text, border: TONE.danger.border }],
   };
 
   const apiColor = apiState === 'live' ? TONE.green : apiState === 'error' ? TONE.danger : TONE.amber;
@@ -1169,6 +1190,23 @@ export default function KitchenDisplayPage() {
         >
           ✓ Done
         </button>
+        <button
+          onClick={() => setFilter('cancelled')}
+          style={{
+            padding: '4px 12px',
+            borderRadius: 16,
+            border: `1.5px solid ${filter === 'cancelled' ? '#ef4444' : D.border}`,
+            background: filter === 'cancelled' ? TONE.danger.bg : D.card,
+            color: filter === 'cancelled' ? TONE.danger.text : D.muted,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: "'Poppins', sans-serif",
+            outline: 'none',
+          }}
+        >
+          ❌ Cancelled
+        </button>
       </div>
 
       {/* ── WS log ── */}
@@ -1533,6 +1571,7 @@ export default function KitchenDisplayPage() {
                     );
                   })}
                 </div>
+
                 {order.note && (
                   <div style={{
                     margin: '0 10px 6px',
@@ -1557,51 +1596,79 @@ export default function KitchenDisplayPage() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6, padding: '8px 10px 10px', borderTop: `1px solid ${D.border}` }}>
-                  {BTN_CFG[order.status].map((btn, i) => (
+                  {order.status === 'cancelled' ? (
                     <button
-                      key={btn.label}
-                      onClick={() => i === 0 && advanceOrder(order.id)}
-                      disabled={order.status === 'delivered' || isAdvancing}
+                      onClick={() => filter === 'all' && acknowledgeCancellation(order.id)}
+                      disabled={filter !== 'all'}
                       style={{
                         flex: 1,
                         height: 32,
                         borderRadius: 8,
-                        border: `1.5px solid ${btn.border}`,
-                        background: btn.bg,
-                        color: btn.color,
+                        border: `1.5px solid ${TONE.danger.border}`,
+                        background: TONE.danger.bg,
+                        color: TONE.danger.text,
                         fontSize: 10,
                         fontWeight: 700,
-                        cursor: order.status === 'delivered' ? 'default' : 'pointer',
+                        cursor: filter === 'all' ? 'pointer' : 'default',
+                        opacity: filter === 'all' ? 1 : 0.5,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 4,
                         transition: 'all 0.2s',
-                        opacity: (order.status === 'delivered' || isAdvancing) ? 0.5 : 1,
                         fontFamily: "'Poppins', sans-serif",
                         outline: 'none',
                       }}
-                      onFocus={(e) => {
-                        if (order.status !== 'delivered' && !isAdvancing) {
-                          e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
-                        }
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
                     >
-                      {isAdvancing && i === 0 ?
-                        <div style={{
-                          width: 12,
-                          height: 12,
-                          border: `2px solid ${btn.color}`,
-                          borderTopColor: 'transparent',
-                          borderRadius: '50%',
-                          animation: 'spin 0.8s linear infinite'
-                        }} /> : btn.label
-                      }
+                      ✗ Cancelled
                     </button>
-                  ))}
+                  ) : (
+                    BTN_CFG[order.status].map((btn, i) => (
+                      <button
+                        key={btn.label}
+                        onClick={() => i === 0 && advanceOrder(order.id)}
+                        disabled={order.status === 'delivered' || isAdvancing}
+                        style={{
+                          flex: 1,
+                          height: 32,
+                          borderRadius: 8,
+                          border: `1.5px solid ${btn.border}`,
+                          background: btn.bg,
+                          color: btn.color,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: order.status === 'delivered' ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4,
+                          transition: 'all 0.2s',
+                          opacity: (order.status === 'delivered' || isAdvancing) ? 0.5 : 1,
+                          fontFamily: "'Poppins', sans-serif",
+                          outline: 'none',
+                        }}
+                        onFocus={(e) => {
+                          if (order.status !== 'delivered' && !isAdvancing) {
+                            e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,87,35,0.15)'}`;
+                          }
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        {isAdvancing && i === 0 ?
+                          <div style={{
+                            width: 12,
+                            height: 12,
+                            border: `2px solid ${btn.color}`,
+                            borderTopColor: 'transparent',
+                            borderRadius: '50%',
+                            animation: 'spin 0.8s linear infinite'
+                          }} /> : btn.label
+                        }
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             );

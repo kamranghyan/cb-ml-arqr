@@ -64,6 +64,8 @@ export interface SupportOrder {
   foodReady?:            boolean
   delivered?:            boolean
   cancelled?:            boolean
+  rating?:               number    
+  feedbackText?:         string
 }
 
 // ── Fetch helper ──────────────────────────────────────────────────────

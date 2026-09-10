@@ -110,8 +110,9 @@ export interface KdsOrder {
   placedAt: string;
   elapsedSeconds: number;
   maxSeconds: number;
+  cancellationReason?: string;
 }
-export type KdsStatus = 'new' | 'preparing' | 'ready' | 'delivered';
+export type KdsStatus = 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 
 export interface KdsOrder {
   id: string;

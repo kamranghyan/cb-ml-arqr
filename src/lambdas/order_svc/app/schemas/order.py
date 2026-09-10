@@ -113,7 +113,14 @@ class GuestCancelOrderBody(BaseModel):
     guestSessionId: str = Field(..., min_length=1)
     cancellationReason: str = Field(..., min_length=1)
 
-
+class GuestFeedbackBody(BaseModel):
+    """Body for a guest leaving a rating/feedback on their own order — no
+    staff auth. Ownership is proven by guestSessionId matching the order
+    record, same pattern as GuestCancelOrderBody."""
+    guestSessionId: str = Field(..., min_length=1)
+    rating: int = Field(..., ge=1, le=5)
+    feedbackText: Optional[str] = Field(default=None, max_length=1000)
+    
 class GuestCancelOrderBody(BaseModel):
     """Body for a guest cancelling their own order — no staff auth involved.
     Ownership is proven by guestSessionId matching the order record."""

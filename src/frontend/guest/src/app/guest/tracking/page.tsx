@@ -418,7 +418,8 @@ export default function TrackingPage() {
       setCancelReason('');
       setCancelError('');
 
-      router.push('/guest');
+      const tableId = sessionStorage.getItem('lm_tid') || sessionTid || '';
+      router.push(`/guest?rid=${rid}&tid=${tableId}`);
     } catch (err: any) {
       const message = err?.message ?? 'Failed to cancel order';
 
@@ -1166,6 +1167,7 @@ export default function TrackingPage() {
           );
         }}
         orderId={receivedOrderId}
+        restaurantId={redirectParams.restaurantId}
       />
       {/* Cancel button */}
       {latest && !isCancelled && !isAtDeliveredStep && (

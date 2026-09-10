@@ -27,6 +27,7 @@ interface ApiLineItem {
 interface ApiOrder {
   orderId: string;
   status: string;
+  cancellationReason?: string;
   tableId?: string;
   tenantId?: string;
   restaurantId?: string;
@@ -71,18 +72,23 @@ export function toFlagPayload(orderId: string, status: KdsStatus) {
 }
 
 export function toKdsStatus(apiStatus: string, flags?: ApiOrder['flags']): KdsStatus {
+  const s = (apiStatus ?? '').toUpperCase();
+
+  // Cancellation always wins, regardless of flags shape
+  if (s === 'CANCELLED' || s === 'TIMED_OUT') return 'cancelled';
+  if (flags?.cancelled) return 'cancelled';
+
   if (flags) {
-    if (flags.cancelled) return 'new';
     if (flags.delivered) return 'delivered';
     if (flags.foodReady) return 'ready';
     if (flags.kitchenAccepted) return 'preparing';
     return 'new';
   }
-  const s = (apiStatus ?? '').toUpperCase();
+
   if (s === 'RECEIVED' || s === 'PENDING' || s === 'NEW') return 'new';
   if (s === 'PREPARING' || s === 'IN_PROGRESS') return 'preparing';
   if (s === 'READY' || s === 'READY_TO_SERVE') return 'ready';
-  if (s === 'DELIVERED' || s === 'COMPLETED' || s === 'TIMED_OUT' || s === 'CANCELLED') return 'delivered';
+  if (s === 'DELIVERED' || s === 'COMPLETED') return 'delivered';
   return 'new';
 }
 
@@ -136,7 +142,6 @@ export function normaliseOrder(
       mods: '',
       qty: Number(li.quantity ?? li.qty ?? 1),
       done: false,
-
       addOns: addOns.map((addon: any) => ({
         id:
           addon.addOnId ||
@@ -255,6 +260,7 @@ export function normaliseOrder(
 
     note: '',
     placedAt,
+    cancellationReason: raw.cancellationReason,
     _apiId: raw.orderId,
   } as KdsOrder & { _apiId: string };
 }
