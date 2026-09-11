@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     restaurant_tables_table: str = Field(
         "DiningTable-dev", alias="DINING_TABLE"
     )
+    order_table: str = Field("OrderTable-dev", alias="ORDER_TABLE")
 
     # ── S3 ────────────────────────────────────────────────────────────
     s3_bucket: str = Field("menu-assets", alias="S3_BUCKET")

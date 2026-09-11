@@ -273,6 +273,10 @@ def get_category_service() -> CategoryService:
 def get_item_service() -> MenuItemService:
     return MenuItemService(cache=_cache, s3_svc=_s3_svc)
 
+@lru_cache
+def get_rating_service():
+    from app.services.rating_service import RatingService
+    return RatingService()
 
 @lru_cache
 def get_addon_service() -> AddOnService:

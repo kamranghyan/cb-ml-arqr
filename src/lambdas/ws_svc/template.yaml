@@ -52,6 +52,8 @@ Resources:
           AttributeType: S
         - AttributeName: userId
           AttributeType: S
+        - AttributeName: restaurantId 
+          AttributeType: S
 
       KeySchema:
         - AttributeName: connectionId
@@ -61,6 +63,13 @@ Resources:
         - IndexName: guestSessionId-index
           KeySchema:
             - AttributeName: guestSessionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
               KeyType: HASH
           Projection:
             ProjectionType: ALL
@@ -254,8 +263,10 @@ Resources:
               MessageBody:
                 orderId.$: "$.orderId"
                 tenantId.$: "$.tenantId"
+                restaurantId.$: "$.restaurantId"
                 guestSessionId.$: "$.guestSessionId"
                 guestConnectionId.$: "$.guestConnectionId"
+                cancellationReason.$: "$.cancellationReason"
                 status: CANCELLED
                 message: Your order has been cancelled.
             Retry:

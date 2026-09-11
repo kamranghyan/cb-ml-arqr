@@ -49,6 +49,7 @@ Globals:
         ITEM_TABLE:              !Sub "ItemTable-${Environment}"
         ADDON_TABLE:             !Sub "AddOnTable-${Environment}"
         DINING_TABLE:            !Sub "DiningTable-${Environment}"
+        ORDER_TABLE:             !Sub "OrderTable-${Environment}"
         TENANT_TABLE:            !Sub "TenantTable-${Environment}"
         S3_BUCKET:               !Ref AssetBucketName
         ASSET_BUCKET_NAME:       !Ref AssetBucketName
@@ -123,6 +124,14 @@ Resources:
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/DiningTable-${Environment}/index/*"
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}"
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}/index/*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/OrderTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/OrderTable-${Environment}/index/*"
             - Effect: Allow
               Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
               Resource: !Sub "arn:aws:s3:::${AssetBucketName}/*"

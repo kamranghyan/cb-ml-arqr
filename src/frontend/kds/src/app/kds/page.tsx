@@ -53,8 +53,17 @@ export default function KitchenDisplayPage() {
 
   useEffect(() => { const id = setInterval(() => { setOrders(prev => prev.map(o => o.status !== 'delivered' ? { ...o, elapsedSeconds: Math.min(o.elapsedSeconds + 1, o.maxSeconds + 300) } : o)); }, 1000); return () => clearInterval(id); }, []);
   const acknowledgeCancellation = (orderId: string) => {
-    setAcknowledgedCancellations(prev => new Set(prev).add(orderId));
+    setAcknowledgedCancellations(prev => {
+      const next = new Set(prev).add(orderId);
+      try {
+        localStorage.setItem('kds_acknowledged_cancellations', JSON.stringify(Array.from(next)));
+      } catch {
+        // storage full or unavailable — non-critical
+      }
+      return next;
+    });
   };
+
   const showToast = useCallback(
     (
       message: string,
@@ -106,6 +115,8 @@ export default function KitchenDisplayPage() {
       showToast(`❌ Order #${displayId} was cancelled`, 'error');
     }
   }, [showToast]);
+  const isUnmountingRef = useRef(false);
+
   const connectWs = useCallback(async () => {
     // Already connected/connecting
     if (
@@ -217,9 +228,17 @@ export default function KitchenDisplayPage() {
           if (status || flags) {
             const kdsStatus = toKdsStatus(status ?? '', flags);
 
-            // Reload from REST so we always get the full order (incl. cancellationReason)
-            // rather than trying to patch partial WS fields locally.
-            loadOrders(true);
+            // Reload from REST so we always get the full order (incl.
+            // cancellationReason) rather than trying to patch partial WS
+            // fields locally. IMPORTANT: connectWs is memoized with an
+            // empty dependency array (so the WS connection itself stays
+            // stable across renders) — that means this closure was built
+            // once, on the first render, and would otherwise always call
+            // the *original* loadOrders (captured before auth/user had
+            // loaded). We call the latest version via a ref instead, so
+            // this always uses the current loadOrders (with the real
+            // restaurantId), not a stale one.
+            loadOrdersRef.current(true);
 
             if (kdsStatus === 'cancelled') {
               notifyOrderCancelled(String(orderId), displayId);
@@ -245,16 +264,16 @@ export default function KitchenDisplayPage() {
 
       ws.onclose = e => {
         setWsState('disconnected');
-
-        addWsLog(
-          `✗ Disconnected (code ${e.code})`
-        );
+        addWsLog(`✗ Disconnected (code ${e.code})`);
         wsRef.current = null;
-        // Retry WS connection
+
+        // Don't auto-reconnect if this close was caused by our own cleanup
+        // (unmount, or effect re-running) — only reconnect on unexpected drops.
+        if (isUnmountingRef.current) return;
+
         if (wsRetryRef.current) {
           clearTimeout(wsRetryRef.current);
         }
-
         wsRetryRef.current = setTimeout(() => {
           connectWs();
         }, 5000);
@@ -300,10 +319,15 @@ export default function KitchenDisplayPage() {
 
       try {
         if (!user?.restaurantId) {
-          setApiState('error');
-          setApiError(
-            'No restaurant assigned to this account'
-          );
+          // Silent/background polls (and WS-triggered reloads) shouldn't
+          // blow away a working UI over a transient auth-state hiccup —
+          // only surface the error on an explicit (non-silent) load.
+          if (!silent) {
+            setApiState('error');
+            setApiError(
+              'No restaurant assigned to this account'
+            );
+          }
           return;
         }
 
@@ -422,16 +446,33 @@ export default function KitchenDisplayPage() {
         }
       }
     },
-    [user]
+    [user?.restaurantId]
   );
+
+  // connectWs is memoized once (empty deps) so the WS connection stays
+  // stable across renders — but that means any closure inside it (like
+  // the onmessage handler above) can only ever see the *first* loadOrders
+  // it was built with. Keep a ref pointed at the latest loadOrders so
+  // connectWs's onmessage handler can always call the current version
+  // (the one with the real restaurantId, once auth has loaded).
+  const loadOrdersRef = useRef(loadOrders);
   useEffect(() => {
+    loadOrdersRef.current = loadOrders;
+  }, [loadOrders]);
+
+  useEffect(() => {
+    isUnmountingRef.current = false;
+
     // Initial REST load
     loadOrders();
 
-    // Try WebSocket
+    // WebSocket is the only live-update channel — no REST polling
+    // fallback. ws.onclose already schedules a reconnect on unexpected
+    // drops, so a dropped connection recovers on its own.
     connectWs();
 
     return () => {
+      isUnmountingRef.current = true;
       if (wsRetryRef.current) {
         clearTimeout(wsRetryRef.current);
         wsRetryRef.current = null;
@@ -507,8 +548,15 @@ export default function KitchenDisplayPage() {
       setAdvancing(null);
     }
   };
-  const [acknowledgedCancellations, setAcknowledgedCancellations] = useState<Set<string>>(new Set());
-  const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
+  const [acknowledgedCancellations, setAcknowledgedCancellations] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const saved = localStorage.getItem('kds_acknowledged_cancellations');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }); const toggleDish = (orderId: string, idx: number) => { setOrders(prev => prev.map(o => { if (o.id !== orderId) return o; const items = o.items.map((it, i) => i === idx ? { ...it, done: !it.done } : it); return { ...o, items }; })); };
 
   const filtered = orders.filter(o => {
     if (filter === 'all') {
@@ -1571,7 +1619,29 @@ export default function KitchenDisplayPage() {
                     );
                   })}
                 </div>
-
+                {order.status === 'cancelled' && (
+                  <div style={{
+                    margin: '0 10px 6px',
+                    padding: '8px 10px',
+                    background: TONE.danger.bg,
+                    border: `1px solid ${TONE.danger.border}`,
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 6,
+                    fontFamily: "'Poppins', sans-serif",
+                  }}>
+                    <span style={{ color: TONE.danger.text, fontSize: 12 }}>❌</span>
+                    <div>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: TONE.danger.text, margin: 0, textTransform: 'uppercase' }}>
+                        Order Cancelled
+                      </p>
+                      <p style={{ fontSize: 10, color: TONE.danger.text, margin: '2px 0 0', lineHeight: 1.4 }}>
+                        {order.cancellationReason || 'No reason provided.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {order.note && (
                   <div style={{
                     margin: '0 10px 6px',

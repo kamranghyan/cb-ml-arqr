@@ -34,6 +34,7 @@ from app.core.dependencies import (
     get_category_service,
     get_menu_tenant,
     get_s3_repo,
+    get_rating_service,
     restaurant_write_scope,
 )
 
@@ -47,6 +48,7 @@ from app.services.menu_item_service import (
     MenuItemNotFoundError,
     MenuItemService,
 )
+from app.services.rating_service import RatingService
 
 from app.utils.request_helpers import (
     build_gateway_event,
@@ -79,6 +81,10 @@ async def list_items(
         MenuItemService,
         Depends(get_item_service),
     ],
+    rating_svc: Annotated[
+        RatingService,
+        Depends(get_rating_service),
+    ],
     cursor: Optional[str] = Query(None),
     categoryId: Optional[str] = Query(None),
 ):
@@ -89,14 +95,29 @@ async def list_items(
         category_id=categoryId,
     )
 
+    ratings_by_item = rating_svc.get_item_ratings(restaurantId)
+
+    item_dicts = []
+    for item in items:
+        item_dict = item.to_dict()
+        rating_info = ratings_by_item.get(item_dict.get("itemId"))
+        item_dict["averageRating"] = (
+            rating_info["averageRating"] if rating_info else None
+        )
+        item_dict["maxRating"] = (
+            rating_info["maxRating"] if rating_info else None
+        )
+        item_dict["ratingCount"] = (
+            rating_info["ratingCount"] if rating_info else 0
+        )
+        item_dicts.append(item_dict)
+
     return PaginatedResponse(
-        items=[
-            item.to_dict()
-            for item in items
-        ],
+        items=item_dicts,
         count=len(items),
         lastEvaluatedKey=next_cursor,
     ).to_dict()
+
 
 
 # ============================================================================

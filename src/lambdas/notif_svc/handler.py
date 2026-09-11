@@ -158,6 +158,22 @@ def _process(payload: dict):
             order_id,
         )
 
+    # 2b. WebSocket — kitchen/KDS side (NEW)
+    # Independent of the customer push above — kitchen needs to know about
+    # guest-initiated changes (like cancellations) it never triggered.
+    restaurant_id = payload.get("restaurantId")
+    if restaurant_id:
+        _push_kitchen_websocket(
+            restaurant_id,
+            order_id,
+            status,
+            message,
+            cancellation_reason=payload.get("cancellationReason"),
+        )
+    else:
+        logger.info("No restaurantId in payload — skipping kitchen push for orderId=%s", order_id)
+
+
     # 3. External notification
     if phone or email:
         _send_pinpoint(
@@ -294,6 +310,59 @@ def _get_guest_connection_ids(guest_session_id: str) -> list:
             exc,
         )
         return []
+
+def _get_kitchen_connection_ids(restaurant_id: str) -> list:
+    """All staff (kitchen/admin/tenant) WS connections for a restaurant —
+    this is how KDS learns about a guest-initiated status change (like a
+    cancellation) that it never triggered itself."""
+    try:
+        resp = connections_table.query(
+            IndexName="restaurantId-index",
+            KeyConditionExpression=Key("restaurantId").eq(restaurant_id),
+        )
+        return [
+            item["connectionId"]
+            for item in resp.get("Items", [])
+            if item.get("role") in ("kitchen", "admin", "tenant")
+        ]
+    except Exception as exc:
+        logger.warning("DDB kitchen connection query failed: %s", exc)
+        return []
+
+
+def _push_kitchen_websocket(
+    restaurant_id: str,
+    order_id: str,
+    status: str,
+    message: str,
+    cancellation_reason: str = None,
+):
+    connection_ids = _get_kitchen_connection_ids(restaurant_id)
+    if not connection_ids:
+        logger.info("No active kitchen WS connections for restaurantId=%s", restaurant_id)
+        return
+
+    ws_payload = {
+        "type": "ORDER_UPDATE",
+        "orderId": order_id,
+        "status": status,
+        "message": message,
+    }
+    if cancellation_reason:
+        ws_payload["cancellationReason"] = cancellation_reason
+
+    ws_data = json.dumps(ws_payload).encode()
+
+    for conn_id in connection_ids:
+        try:
+            apigw_mgmt.post_to_connection(ConnectionId=conn_id, Data=ws_data)
+            logger.info("WS pushed to kitchen connId=%s restaurantId=%s", conn_id, restaurant_id)
+        except apigw_mgmt.exceptions.GoneException:
+            logger.info("Stale WS connection %s — removing", conn_id)
+            _remove_connection(conn_id)
+        except Exception as exc:
+            logger.warning("Kitchen WS push failed connId=%s: %s — skipping", conn_id, exc)
+
 
 def _remove_connection(conn_id: str):
     try:

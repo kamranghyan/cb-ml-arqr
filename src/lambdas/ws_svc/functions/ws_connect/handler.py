@@ -481,18 +481,17 @@ def lambda_handler(event: dict, context) -> dict:
         ttl = int(time.time()) + 3600
 
         table.put_item(
-            Item={
-                "connectionId": connection_id,
-                "connectionType": "guest",
-                "guestSessionId": guest_session_id,
-                "email": "",
-                "restaurantId": "",
-                "groups": [],
-                "role": "guest",
-                "connectedAt": int(time.time()),
-                "ttl": ttl,
-            }
-        )
+          Item={
+            "connectionId": connection_id,
+            "connectionType": "guest",
+            "guestSessionId": guest_session_id,
+            "email": "",
+            "groups": [],
+            "role": "guest",
+            "connectedAt": int(time.time()),
+            "ttl": ttl,
+          }
+       )
 
 
         # Redis

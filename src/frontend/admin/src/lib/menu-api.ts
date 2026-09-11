@@ -56,6 +56,9 @@ export interface ApiMenuItem {
   allergens?: string[]
   prepTime?: string
   calories?: number
+  averageRating?: number | null
+  maxRating?: number | null
+  ratingCount?: number
   rating?: number
   reviewCount?: number
   subtitle?: string
@@ -1101,103 +1104,49 @@ export function extractCategoriesFromItems(
 
 // ── Normalise raw API response ────────────────────────────────────────────────
 
-export function normaliseItem(
-  item: any
-): ApiMenuItem {
+export function normaliseItem(item: any): ApiMenuItem {
   return {
     ...item,
 
-    id:
-      item.id ??
-      item.itemId,
+    id: item.id ?? item.itemId,
 
-    categoryId:
-      item.categoryId ??
-      item.category?.id ??
-      '',
+    categoryId: item.categoryId ?? item.category?.id ?? '',
 
-    categoryName:
-      item.categoryName ??
-      item.category?.name ??
-      '',
+    categoryName: item.categoryName ?? item.category?.name ?? '',
 
-    category:
-      item.category ??
-      item.categoryName ??
-      item.category?.name ??
-      '',
+    category: item.category ?? item.categoryName ?? item.category?.name ?? '',
 
-    name:
-      item.name ??
-      '',
+    name: item.name ?? '',
 
-    description:
-      item.description ??
-      '',
+    description: item.description ?? '',
 
-    price:
-      item.price ??
-      (
-        (item.priceMinorUnits ??
-          0) / 100
-      ),
+    price: item.price ?? ((item.priceMinorUnits ?? 0) / 100),
 
-    status:
-      item.status ??
-      (
-        item.isActive
-          ? 'active'
-          : 'inactive'
-      ),
+    status: item.status ?? (item.isActive ? 'active' : 'inactive'),
 
-    addons:
-      item.addOns ??
-      item.addons ??
-      [],
+    // ✅ RATING FIELDS — API se map karein
+    rating: item.averageRating ?? item.rating ?? undefined,
+    maxRating: item.maxRating ?? undefined,
+    reviewCount: item.ratingCount ?? item.reviewCount ?? 0,
 
-    slides:
-      Array.isArray(
-        item.slides
-      )
-        ? item.slides.map(
-            (
-              slide: any,
-              index: number
-            ) => ({
-              position:
-                slide.position ??
-                index + 1,
-              imageKey:
-                slide.imageKey ??
-                '',
-              imageUrl:
-                slide.imageUrl ??
-                '',
-            })
-          )
-        : [],
+    addons: item.addOns ?? item.addons ?? [],
 
-    sizes:
-      Array.isArray(
-        item.sizes
-      )
-        ? item.sizes.map(
-            (size: any) => ({
-              id: size.id,
-              name: size.name,
-              priceMinorUnits:
-                size.priceMinorUnits ??
-                0,
-              price:
-                (
-                  size.priceMinorUnits ??
-                  0
-                ) / 100,
-              isActive:
-                size.isActive ??
-                true,
-            })
-          )
-        : null,
+    slides: Array.isArray(item.slides)
+      ? item.slides.map((slide: any, index: number) => ({
+        position: slide.position ?? index + 1,
+        imageKey: slide.imageKey ?? '',
+        imageUrl: slide.imageUrl ?? '',
+      }))
+      : [],
+
+    sizes: Array.isArray(item.sizes)
+      ? item.sizes.map((size: any) => ({
+        id: size.id,
+        name: size.name,
+        priceMinorUnits: size.priceMinorUnits ?? 0,
+        price: (size.priceMinorUnits ?? 0) / 100,
+        isActive: size.isActive ?? true,
+      }))
+      : null,
   }
 }

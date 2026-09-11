@@ -57,7 +57,6 @@ interface QrRecord {
 
 // Where a scanned QR should land: the guest app, not this console.
 const GUEST_BASE = process.env.NEXT_PUBLIC_GUEST_APP_URL ?? 'http://localhost:3000';
-const ZONES = ['All Zones', 'Main Hall', 'Garden Terrace', 'Private Dining'];
 
 type GenState = 'idle' | 'generating' | 'done' | 'error';
 
@@ -224,13 +223,27 @@ export default function BranchQrPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filtered = records.filter(r => zoneFilter === 'All Zones' || r.zone === zoneFilter);
+  const zones = Array.from(
+    new Set(
+      records
+        .map(record => record.zone?.trim())
+        .filter(Boolean)
+    )
+  );
+
+  const zoneOptions = ['All Zones', ...zones];
+
+  const filtered = records.filter(
+    record => zoneFilter === 'All Zones' || record.zone === zoneFilter
+  );
+
   const stats = {
     total: records.length,
     linked: records.filter(r => r.linked).length,
     generated: records.filter(r => r.qrDataUrl).length,
-    zones: new Set(records.map(r => r.zone)).size
+    zones: new Set(records.map(r => r.zone)).size,
   };
+
 
   return (
     <>
@@ -478,7 +491,7 @@ export default function BranchQrPage() {
 
         {/* ── Zone Filters ── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {ZONES.map(z => {
+          {zoneOptions.map(z => {
             const active = zoneFilter === z;
             return (
               <button
