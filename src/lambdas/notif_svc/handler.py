@@ -158,7 +158,7 @@ def _process(payload: dict):
             order_id,
         )
 
-    # 2b. WebSocket — kitchen/KDS side (NEW)
+    # 2b. WebSocket — kitchen/KDS side (NEW)--
     # Independent of the customer push above — kitchen needs to know about
     # guest-initiated changes (like cancellations) it never triggered.
     restaurant_id = payload.get("restaurantId")
