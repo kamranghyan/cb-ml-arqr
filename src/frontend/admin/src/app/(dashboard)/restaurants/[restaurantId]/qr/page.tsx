@@ -347,12 +347,7 @@ export default function BranchQrPage() {
             margin: 0,
             fontFamily: "'Poppins', sans-serif",
           }}>QR Code Management</h1>
-          <p style={{
-            fontSize: 12,
-            color: colors.muted,
-            margin: '2px 0 0',
-            fontFamily: "'Poppins', sans-serif",
-          }}>Encode restaurantId + tableId → generate PNG → store in S3</p>
+         
         </div>
         <div style={{
           display: 'flex',

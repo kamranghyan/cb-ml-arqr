@@ -29,15 +29,10 @@ import {
   Info,
 } from 'lucide-react';
 import Image from 'next/image';
-
 import { useTheme } from '@/hooks/useTheme';
 import { useCartStore } from '@/lib/store';
 import { getGuestScope, withScope } from '@/lib/guest-scope';
-import { connectWebSocket } from '@/lib/orders';
-
-// ============================================================================
-// TYPES
-// ============================================================================
+import { useGuestOrdersSocket } from '@/components/guest/GuestOrdersSocketProvider';
 
 interface NotificationItem {
   id: string | number;
@@ -48,11 +43,8 @@ interface NotificationItem {
   type?: 'info' | 'success' | 'alert' | 'promo' | 'error';
 }
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
 const BRAND = '#ff5723';
+const NOTIFICATIONS_STORAGE_KEY = 'menulay_guest_notifications';
 
 const NAV_TABS = [
   {
@@ -480,8 +472,9 @@ const normalizeWebSocketNotification = (
     notification.id ??
     notification.notificationId ??
     notification.notificationID ??
-    notification.orderId ??
-    `${Date.now()}-${Math.random()}`;
+    (notification.orderId
+      ? `${notification.orderId}-${notification.status ?? notification.orderStatus ?? eventType}`
+      : `${Date.now()}-${Math.random()}`);
 
   const title =
     notification.title ??
@@ -524,6 +517,24 @@ const normalizeWebSocketNotification = (
   };
 };
 
+function loadStoredNotifications(): NotificationItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = sessionStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredNotifications(items: NotificationItem[]) {
+  try {
+    sessionStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // storage full/unavailable — non-critical
+  }
+}
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -558,7 +569,12 @@ export default function GuestTopBar() {
     useState(false);
 
   const [notifications, setNotifications] =
-    useState<NotificationItem[]>([]);
+    useState<NotificationItem[]>(() => loadStoredNotifications());
+
+  const { lastUpdate } = useGuestOrdersSocket();
+  useEffect(() => {
+    saveStoredNotifications(notifications);
+  }, [notifications]);
 
   const [loading, setLoading] =
     useState(true);
@@ -781,9 +797,9 @@ export default function GuestTopBar() {
           Array.isArray(data)
             ? data
             : data.notifications ??
-              data.items ??
-              data.data ??
-              [];
+            data.items ??
+            data.data ??
+            [];
 
         if (!Array.isArray(rawNotifications)) {
 
@@ -847,9 +863,11 @@ export default function GuestTopBar() {
             }
           );
 
-        setNotifications(
-          normalized
-        );
+        setNotifications((prev) => {
+          const knownIds = new Set(normalized.map((n: NotificationItem) => String(n.id)));
+          const localOnly = prev.filter((n) => !knownIds.has(String(n.id)));
+          return [...localOnly, ...normalized];
+        });
 
       } catch (error) {
 
@@ -865,262 +883,30 @@ export default function GuestTopBar() {
       }
 
     }, []);
-
-  // ========================================================================
-  // WEBSOCKET SETUP
+      // ========================================================================
+  // FETCH HISTORY (once per mount) + shared WS updates
   // ========================================================================
 
   useEffect(() => {
-
-    let mounted = true;
-
-    let socket:
-      WebSocket | null = null;
-
-    const initialize =
-      async () => {
-
-        if (!mounted) {
-          return;
-        }
-
-        try {
-
-          // ---------------------------------------------------------------
-          // 1. Load notification history
-          // ---------------------------------------------------------------
-
-          await fetchNotifications();
-
-          if (!mounted) {
-            return;
-          }
-
-          // ---------------------------------------------------------------
-          // 2. Connect WebSocket
-          // ---------------------------------------------------------------
-
-          console.log(
-            '[Guest Notifications] Connecting WebSocket...'
-          );
-
-          socket =
-            connectWebSocket();
-
-          console.log(
-            '[Guest Notifications] WebSocket instance created'
-          );
-
-          // ---------------------------------------------------------------
-          // OPEN
-          // ---------------------------------------------------------------
-
-          socket.addEventListener(
-            'open',
-            () => {
-
-              console.log(
-                '[Guest Notifications] WebSocket OPEN'
-              );
-
-            }
-          );
-
-          // ---------------------------------------------------------------
-          // MESSAGE
-          // ---------------------------------------------------------------
-
-          socket.addEventListener(
-            'message',
-            (event) => {
-
-              try {
-
-                console.log(
-                  '[Guest Notifications] RAW WS MESSAGE:',
-                  event.data
-                );
-
-                let payload =
-                  event.data;
-
-                if (
-                  typeof payload ===
-                  'string'
-                ) {
-
-                  try {
-
-                    payload =
-                      JSON.parse(
-                        payload
-                      );
-
-                  } catch {
-
-                    console.warn(
-                      '[Guest Notifications] WS message is not JSON:',
-                      payload
-                    );
-
-                    return;
-                  }
-                }
-
-                console.log(
-                  '[Guest Notifications] PARSED WS PAYLOAD:',
-                  payload
-                );
-
-                const newNotification =
-                  normalizeWebSocketNotification(
-                    payload
-                  );
-
-                if (!newNotification) {
-
-                  console.log(
-                    '[Guest Notifications] Message was not converted to notification'
-                  );
-
-                  return;
-                }
-
-                if (!mounted) {
-                  return;
-                }
-
-                setNotifications(
-                  (prev) => {
-
-                    const alreadyExists =
-                      prev.some(
-                        (item) =>
-                          String(
-                            item.id
-                          ) ===
-                          String(
-                            newNotification.id
-                          )
-                      );
-
-                    if (
-                      alreadyExists
-                    ) {
-
-                      console.log(
-                        '[Guest Notifications] Duplicate ignored:',
-                        newNotification.id
-                      );
-
-                      return prev;
-                    }
-
-                    console.log(
-                      '[Guest Notifications] NEW notification:',
-                      newNotification
-                    );
-
-                    // -----------------------------------------------------
-                    // Play sound
-                    // -----------------------------------------------------
-
-                    playNotificationSound();
-
-                    return [
-                      newNotification,
-                      ...prev,
-                    ];
-
-                  }
-                );
-
-              } catch (error) {
-
-                console.error(
-                  '[Guest Notifications] Failed to process WS message:',
-                  error
-                );
-
-              }
-
-            }
-          );
-
-          // ---------------------------------------------------------------
-          // ERROR
-          // ---------------------------------------------------------------
-
-          socket.addEventListener(
-            'error',
-            (error) => {
-
-              console.error(
-                '[Guest Notifications] WebSocket ERROR:',
-                error
-              );
-
-            }
-          );
-
-          // ---------------------------------------------------------------
-          // CLOSE
-          // ---------------------------------------------------------------
-
-          socket.addEventListener(
-            'close',
-            (event) => {
-
-              console.log(
-                '[Guest Notifications] WebSocket CLOSED:',
-                {
-                  code:
-                    event.code,
-
-                  reason:
-                    event.reason,
-
-                  wasClean:
-                    event.wasClean,
-                }
-              );
-
-            }
-          );
-
-        } catch (error) {
-
-          console.error(
-            '[Guest Notifications] Initialization failed:',
-            error
-          );
-
-        }
-
-      };
-
-    initialize();
-
-    return () => {
-
-      mounted = false;
-
-      if (socket) {
-
-        console.log(
-          '[Guest Notifications] Closing WebSocket...'
-        );
-
-        socket.close();
-
-      }
-
-    };
-
-  }, [
-    fetchNotifications,
-    playNotificationSound,
-  ]);
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    if (!lastUpdate) return;
+
+    const newNotification = normalizeWebSocketNotification(lastUpdate.raw);
+    if (!newNotification) return;
+
+    setNotifications((prev) => {
+      const alreadyExists = prev.some(
+        (item) => String(item.id) === String(newNotification.id)
+      );
+      if (alreadyExists) return prev;
+
+      playNotificationSound();
+      return [newNotification, ...prev];
+    });
+  }, [lastUpdate, playNotificationSound]);
 
   // ========================================================================
   // UI CONTROLS
@@ -1224,11 +1010,11 @@ export default function GuestTopBar() {
 
       const finalHref =
         href === '/guest' ||
-        href === '/guest/menu'
+          href === '/guest/menu'
           ? withScope(
-              href,
-              scope
-            )
+            href,
+            scope
+          )
           : href;
 
       router.push(
@@ -1357,10 +1143,9 @@ export default function GuestTopBar() {
 
           <button
             aria-label={
-              `Notifications${
-                unreadCount > 0
-                  ? `, ${unreadCount} unread`
-                  : ''
+              `Notifications${unreadCount > 0
+                ? `, ${unreadCount} unread`
+                : ''
               }`
             }
             onClick={
@@ -2032,49 +1817,15 @@ export default function GuestTopBar() {
 
                     {isCart &&
                       cartCount >
-                        0 && (
-                        <span
-                          style={{
-                            background:
-                              BRAND,
-                            color:
-                              '#fff',
-                            fontSize: 11,
-                            fontWeight:
-                              700,
-                            padding:
-                              '1px 10px',
-                            borderRadius:
-                              12,
-                            minWidth:
-                              20,
-                            textAlign:
-                              'center',
-                            fontFamily:
-                              "'Poppins', sans-serif",
-                          }}
-                        >
+                      0 && (
+                        <span style={{ background: BRAND, color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 10px', borderRadius: 12, minWidth: 20, textAlign: 'center', fontFamily: "'Poppins', sans-serif" }}>
                           {cartCount}
                         </span>
                       )}
 
                     {/* ACTIVE INDICATOR */}
 
-                    {active && (
-                      <span
-                        style={{
-                          width: 4,
-                          height: 24,
-                          background:
-                            BRAND,
-                          borderRadius:
-                            2,
-                          position:
-                            'absolute',
-                          right: 0,
-                        }}
-                      />
-                    )}
+                    {active && <span style={{ width: 4, height: 24, background: BRAND, borderRadius: 2, position: 'absolute', right: 0 }} />}
 
                   </button>
                 );
