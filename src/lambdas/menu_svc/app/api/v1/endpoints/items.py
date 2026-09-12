@@ -139,6 +139,10 @@ async def get_item(
         MenuItemService,
         Depends(get_item_service),
     ],
+    rating_svc: Annotated[
+        RatingService,
+        Depends(get_rating_service),
+    ],
 ):
     try:
         item = svc.get(
@@ -147,14 +151,28 @@ async def get_item(
             itemId,
         )
 
-        return item.to_dict()
+        item_dict = item.to_dict()
+
+        ratings_by_item = rating_svc.get_item_ratings(restaurantId)
+        rating_info = ratings_by_item.get(itemId)
+
+        item_dict["averageRating"] = (
+            rating_info["averageRating"] if rating_info else None
+        )
+        item_dict["maxRating"] = (
+            rating_info["maxRating"] if rating_info else None
+        )
+        item_dict["ratingCount"] = (
+            rating_info["ratingCount"] if rating_info else 0
+        )
+
+        return item_dict
 
     except MenuItemNotFoundError as exc:
         raise ResourceNotFoundError(
             "MenuItem",
             itemId,
         ) from exc
-
 
 # ============================================================================
 # CREATE ITEM
@@ -582,6 +600,8 @@ async def update_item(
                         assets["imageKey"]
                     )
 
+                
+
                 # -------------------------------------------------------------
                 # AR model
                 # -------------------------------------------------------------
@@ -623,6 +643,7 @@ async def update_item(
                         restaurantId,
                         itemId,
                         asset_updates,
+                        merge_slides=False,
                     )
 
                 # -------------------------------------------------------------
@@ -641,30 +662,6 @@ async def update_item(
                         assets["arModelUrl"]
                     )
 
-                # -------------------------------------------------------------
-                # IMPORTANT:
-                #
-                # upload_item_assets() returns slides with imageUrl.
-                #
-                # svc.update() stores only imageKey.
-                #
-                # Therefore inject the generated URLs back into response.
-                # -------------------------------------------------------------
-
-                if assets.get("slides"):
-
-                    from app.models.menu_item import MenuItemSlide
-
-                    item.slides = [
-                        MenuItemSlide(
-                            position=slide["position"],
-                            imageKey=slide["imageKey"],
-                            imageUrl=slide.get(
-                                "imageUrl"
-                            ),
-                        )
-                        for slide in assets["slides"]
-                    ]
 
             except Exception as exc:
 

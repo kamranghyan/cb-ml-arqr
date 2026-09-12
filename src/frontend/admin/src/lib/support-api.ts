@@ -50,6 +50,7 @@ export interface SupportOrder {
   orderId:               string
   restaurantId:          string
   tableId:               string
+  tableNumber?:          string
   orderType?:            string
   deliveryAddress?:      string
   contactPhone?:         string
@@ -205,5 +206,5 @@ export function destinationOf(o: SupportOrder): string {
   const t = orderTypeOf(o)
   if (t === 'delivery') return o.deliveryAddress || 'Delivery'
   if (t === 'pickup')   return 'Counter'
-  return o.tableId ? `Table ${o.tableId}` : '—'
+  return o.tableNumber || (o.tableId ? `Table ${o.tableId}` : '—')
 }

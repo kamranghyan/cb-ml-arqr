@@ -1162,11 +1162,9 @@ class S3Repository:
                 -> main image / slide 1
 
             images / images[]
-                -> multiple gallery images
-                   first = slide 1
-                   second = slide 2
-                   ...
-                   sixth = slide 6
+                -> multiple gallery images, matched to whichever slide
+                   positions the client's "slides" JSON field marks as
+                   new (blank imageKey) — see below.
 
             slide2
             slide3
@@ -1237,6 +1235,17 @@ class S3Repository:
 
         # --------------------------------------------------------------------
         # Repeated images / images[]
+        #
+        # IMPORTANT:
+        # These are gallery slide uploads only — the main image always
+        # comes through the dedicated "image"/"file" field above. The
+        # client sends a "slides" JSON field describing the FULL, final
+        # slide list: entries with a real imageKey are untouched existing
+        # slides, entries with a blank/missing imageKey are new slots
+        # waiting for one of these files. We match new files to those
+        # blank slots IN ORDER, so each upload lands on the position the
+        # client actually intended — never on whatever position happens
+        # to be first in the request.
         # --------------------------------------------------------------------
 
         repeated_images: list[dict] = []
@@ -1255,73 +1264,71 @@ class S3Repository:
             )
         )
 
-        # --------------------------------------------------------------------
-        # If images/images[] were sent without image/file:
-        #
-        # first image = slide 1
-        # --------------------------------------------------------------------
-
         if repeated_images:
 
-            if not has_main_image:
+            target_positions: list[int] = []
 
-                for index, image_info in enumerate(
-                    repeated_images[
-                        :_MAX_GALLERY_IMAGES
-                    ],
-                    start=1,
+            slides_field = form.fields.get("slides")
+
+            if slides_field:
+
+                try:
+                    declared_slides = json.loads(slides_field)
+                except Exception:
+                    declared_slides = []
+
+                for slide in declared_slides:
+
+                    position = int(slide.get("position", 0) or 0)
+                    image_key = (slide.get("imageKey") or "").strip()
+
+                    if position and not image_key:
+                        target_positions.append(position)
+
+            # ----------------------------------------------------------------
+            # Fallback for requests with no usable "slides" JSON
+            # (e.g. the create-item flow, where nothing has a position
+            # yet) — keep the old best-effort sequential order.
+            # ----------------------------------------------------------------
+
+            if not target_positions:
+
+                start = 2 if has_main_image else 1
+                target_positions = list(
+                    range(start, start + len(repeated_images))
+                )
+
+            for image_info, position in zip(
+                repeated_images,
+                target_positions,
+            ):
+
+                if position > _MAX_GALLERY_IMAGES:
+                    continue
+
+                if not image_info.get("bytes"):
+                    continue
+
+                if (
+                    has_main_image
+                    and image_info.get("bytes") == main_image_info.get("bytes")
                 ):
+                    continue
 
-                    if not image_info.get("bytes"):
-                        continue
+                # Explicit target position wins over anything already
+                # queued at that slot from an earlier pass.
+                gallery_files = [
+                    (p, info)
+                    for (p, info) in gallery_files
+                    if p != position
+                ]
 
-                    gallery_files.append(
-                        (
-                            index,
-                            image_info,
-                        )
+                gallery_files.append(
+                    (
+                        position,
+                        image_info,
                     )
-
-            # ----------------------------------------------------------------
-            # Main image already exists.
-            #
-            # Main image = slide 1.
-            #
-            # Additional repeated images start at slide 2.
-            # ----------------------------------------------------------------
-
-            else:
-
-                next_position = 2
-
-                for image_info in repeated_images:
-
-                    if next_position > _MAX_GALLERY_IMAGES:
-                        break
-
-                    if not image_info.get("bytes"):
-                        continue
-
-                    # Avoid uploading the exact same bytes twice when
-                    # frontend sends the main image in both:
-                    #
-                    # image
-                    # images[]
-                    #
-                    if (
-                        image_info.get("bytes")
-                        == main_image_info.get("bytes")
-                    ):
-                        continue
-
-                    gallery_files.append(
-                        (
-                            next_position,
-                            image_info,
-                        )
-                    )
-
-                    next_position += 1
+                )
 
         # --------------------------------------------------------------------
         # Explicit slide2-slide6 fields
@@ -1605,3 +1612,4 @@ class S3Repository:
         )
 
         return result
+

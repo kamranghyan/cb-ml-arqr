@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     order_table: str = Field("", alias="TABLE_ORDER")
     menu_table: str = Field("", alias="TABLE_MENU")
     item_table: str = Field("ItemTable-dev", alias="ITEM_TABLE")
+    dining_table: str = Field("DiningTable-dev", alias="DINING_TABLE")
 
     # ── Step Functions ────────────────────────────────────────────────
     step_arn: str = Field("none", alias="STEP_ARN")

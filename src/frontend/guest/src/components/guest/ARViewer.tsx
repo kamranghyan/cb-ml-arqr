@@ -88,7 +88,34 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     placed: false,
     refSpace: null,
     cameraCleanup: null,
+    // ✅ Every DOM node ever appended directly to <body> for an AR
+    // attempt (WebXR overlay OR camera fallback) gets tracked here.
+    // This is the single source of truth for teardown, so a node can
+    // never be leaked no matter which code path created it or where
+    // that path failed.
+    domNodes: [] as HTMLElement[],
   });
+
+  // ✅ Register a body-level DOM node so it is guaranteed removable.
+  function trackDom<T extends HTMLElement>(el: T): T {
+    xrRef.current.domNodes.push(el);
+    return el;
+  }
+
+  // ✅ Remove every tracked body-level DOM node. Safe to call multiple
+  // times, safe to call when nothing was ever created, and — critically
+  // — safe to call from an error handler where we don't know exactly
+  // how far setup got before it failed.
+  function cleanupArDom() {
+    xrRef.current.domNodes.forEach((el: HTMLElement) => {
+      try {
+        el.remove();
+      } catch {
+        // already removed — fine
+      }
+    });
+    xrRef.current.domNodes = [];
+  }
 
   useEffect(() => {
     const mobile = isMobileDevice();
@@ -113,6 +140,9 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       }
       if (xrRef.current.cameraCleanup) xrRef.current.cameraCleanup();
       xrRef.current.session?.end().catch(() => { });
+      // ✅ Belt-and-braces: whatever happens above, nothing we ever put
+      // on <body> should still be there once this component is gone.
+      cleanupArDom();
     };
   }, [glbUrl]);
 
@@ -212,6 +242,12 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
   }
 
   async function startAR() {
+    // ✅ Ignore repeat taps while an AR session is already active —
+    // launching a second stream/canvas on top of the first was another
+    // way this screen could end up stacking multiple full-screen
+    // overlays and getting stuck.
+    if (status === 'ar-active') return;
+
     log('Starting AR...');
     let webxrWorks = false;
     if ('xr' in navigator) {
@@ -238,6 +274,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       arRenderer.domElement.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9997;touch-action:none;';
       document.body.appendChild(arRenderer.domElement);
+      trackDom(arRenderer.domElement);
 
       const arScene = new THREE.Scene();
       const arCamera = new THREE.PerspectiveCamera(
@@ -259,6 +296,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       domOverlayRoot.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;pointer-events:none;';
       document.body.appendChild(domOverlayRoot);
+      trackDom(domOverlayRoot);
 
       const touchLayer = document.createElement('div');
       touchLayer.style.cssText =
@@ -501,9 +539,14 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
         touchLayer.removeEventListener('touchstart', onTouchStart);
         touchLayer.removeEventListener('touchmove', onTouchMove);
         arRenderer.setAnimationLoop(null);
-        arRenderer.domElement.remove();
         arRenderer.dispose();
-        domOverlayRoot.remove();
+        // ✅ Single call removes arRenderer.domElement AND domOverlayRoot
+        // (and everything inside it) — no separate .remove() calls to
+        // forget or get wrong.
+        cleanupArDom();
+        Object.assign(xrRef.current, {
+          session: null, hitSrc: null, model: null, placed: false,
+        });
         setStatus('model-ready');
         setPlaced(false);
       });
@@ -511,14 +554,25 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     } catch (err: any) {
       log(`WebXR error: ${err?.message ?? String(err)}`);
       log('Falling back to camera AR...');
+      // ✅ THE FIX: if requestSession() (or anything after it) throws,
+      // arRenderer.domElement and domOverlayRoot were already appended
+      // to <body> — and since the session never started, its 'end'
+      // event (the ONLY place that used to clean these up) never fires.
+      // They used to sit there forever: full-screen, touch-action:none,
+      // silently blocking every click and swipe-back gesture, with
+      // startCameraAR()'s own UI rendering uselessly underneath them.
+      // Removing them here, before falling back, is what actually fixes
+      // the "everything is stuck" symptom.
+      cleanupArDom();
       await startCameraAR();
     }
   }
 
   async function startCameraAR() {
     log('Starting Camera AR fallback...');
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: window.innerWidth }, height: { ideal: window.innerHeight } },
         audio: false,
       });
@@ -531,6 +585,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       video.muted = true;
       video.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:9990;';
       document.body.appendChild(video);
+      trackDom(video);
       await video.play();
       log('Video playing ✓');
 
@@ -541,6 +596,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       arRenderer.domElement.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9991;touch-action:none;';
       document.body.appendChild(arRenderer.domElement);
+      trackDom(arRenderer.domElement);
 
       const arScene = new THREE.Scene();
       const arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -627,12 +683,13 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
 
       const cleanup = () => {
         cancelAnimationFrame(animId);
-        stream.getTracks().forEach(t => t.stop());
-        video.remove();
+        stream?.getTracks().forEach(t => t.stop());
         arRenderer.domElement.removeEventListener('touchstart', onTouchStart);
         arRenderer.domElement.removeEventListener('touchmove', onTouchMove);
-        arRenderer.domElement.remove();
         arRenderer.dispose();
+        // ✅ Removes both `video` and `arRenderer.domElement` (both were
+        // tracked above) in one guaranteed step.
+        cleanupArDom();
       };
 
       Object.assign(xrRef.current, {
@@ -646,6 +703,10 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
 
     } catch (err: any) {
       log(`Camera AR error: ${err?.message}`);
+      // ✅ Whatever got created before the failure (stream and/or the
+      // video element) gets torn down instead of leaking.
+      stream?.getTracks().forEach(t => t.stop());
+      cleanupArDom();
       setErrorMsg(
         err?.name === 'NotAllowedError'
           ? 'Camera permission denied. Please allow camera access and try again.'
@@ -661,6 +722,10 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       xrRef.current.cameraCleanup = null;
     }
     xrRef.current.session?.end().catch(() => { });
+    // ✅ Safety net: covers the case where a WebXR session's 'end' event
+    // hasn't fired yet, or something was left over from an earlier
+    // failed attempt.
+    cleanupArDom();
     setStatus('model-ready');
     setPlaced(false);
   }

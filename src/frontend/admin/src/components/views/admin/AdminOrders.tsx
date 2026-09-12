@@ -677,7 +677,7 @@ function OrderCard({
               fontFamily: "'Poppins', sans-serif",
             }}
           >
-            Table {order.tableId || '—'}
+            {order.tableNumber ? `Table ${order.tableNumber}` : (order.tableId ? `Table ${order.tableId}` : '—')}
           </div>
 
           <div

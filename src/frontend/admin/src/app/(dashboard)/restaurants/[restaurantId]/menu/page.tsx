@@ -21,6 +21,8 @@ import {
   deleteMenuItem,
   createAddon,
   updateAddon,
+  deleteAddon,
+  updateMenuItemWithFiles,
 } from '@/lib/menu-api';
 import { TENANT_ID } from '@/lib/api-config';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
@@ -450,225 +452,225 @@ export default function BranchMenuPage() {
     setAddonDescription('');
     setSaveErr('');
   };
-const openModal = async (item?: ApiMenuItem) => {
-  setModal({
-    open: true,
-    item,
-  });
+  const openModal = async (item?: ApiMenuItem) => {
+    setModal({
+      open: true,
+      item,
+    });
 
-  setIsActive(
-    item
-      ? item.status === 'active'
-      : true,
-  );
+    setIsActive(
+      item
+        ? item.status === 'active'
+        : true,
+    );
 
-  setIsChef(
-    item
-      ? (item.tags ?? []).includes('chef')
-      : false,
-  );
+    setIsChef(
+      item
+        ? (item.tags ?? []).includes('chef')
+        : false,
+    );
 
-  setUploadFile(null);
-  setUploadName(null);
+    setUploadFile(null);
+    setUploadName(null);
 
-  setGlbFile(null);
-  setImagePreview(null);
+    setGlbFile(null);
+    setImagePreview(null);
 
-  setGlbName(null);
-  setGlbStatus('idle');
-  setGlbError('');
+    setGlbName(null);
+    setGlbStatus('idle');
+    setGlbError('');
 
-  setSaveMsg('');
-  setSaveErr('');
+    setSaveMsg('');
+    setSaveErr('');
 
-  setAddonInput('');
-  setAddonPrice('');
-  setAddonDescription('');
+    setAddonInput('');
+    setAddonPrice('');
+    setAddonDescription('');
+    setNewAddons([]);
+    setItemImages([]);
+    setItemImagePreviews([]);
 
-  setItemImages([]);
-  setItemImagePreviews([]);
+    setSizes([]);
+    setSlides([]);
 
-  setSizes([]);
-  setSlides([]);
+    // ------------------------------------------------------------
+    // Existing addons
+    // ------------------------------------------------------------
 
-  // ------------------------------------------------------------
-  // Existing addons
-  // ------------------------------------------------------------
+    if (item?.id) {
+      try {
+        const existingAddons =
+          await fetchMenuItemAddons(
+            item.id,
+            restaurantId,
+          );
 
-  if (item?.id) {
-    try {
-      const existingAddons =
-        await fetchMenuItemAddons(
-          item.id,
-          restaurantId,
+        setExistingAddons(
+          existingAddons ?? [],
         );
 
-      setExistingAddons(
-        existingAddons ?? [],
-      );
+        setAddons(
+          existingAddons ?? [],
+        );
+      } catch (err) {
+        console.error(
+          'Failed to load addons:',
+          err,
+        );
 
-      setAddons(
-        existingAddons ?? [],
-      );
-    } catch (err) {
-      console.error(
-        'Failed to load addons:',
-        err,
-      );
-
+        setExistingAddons([]);
+        setAddons([]);
+      }
+    } else {
       setExistingAddons([]);
       setAddons([]);
     }
-  } else {
-    setExistingAddons([]);
-    setAddons([]);
-  }
 
-  // ------------------------------------------------------------
-  // Category
-  // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Category
+    // ------------------------------------------------------------
 
-  let selectedCategory = '';
+    let selectedCategory = '';
 
-  if (item) {
-    const itemCategoryId =
-      String(
-        item.categoryId ??
+    if (item) {
+      const itemCategoryId =
+        String(
+          item.categoryId ??
           (item as any).category?.id ??
           '',
-      );
+        );
 
-    const itemCategoryName =
-      String(
-        item.categoryName ??
+      const itemCategoryName =
+        String(
+          item.categoryName ??
           (item as any).category?.name ??
           (typeof (item as any).category ===
-          'string'
+            'string'
             ? (item as any).category
             : '') ??
           '',
-      )
-        .trim()
-        .toLowerCase();
-
-    const categoryById =
-      cats.find(
-        c =>
-          String(c.id) ===
-          itemCategoryId,
-      );
-
-    const categoryByName =
-      cats.find(
-        c =>
-          c.name
-            .trim()
-            .toLowerCase() ===
-          itemCategoryName,
-      );
-
-    selectedCategory =
-      categoryById?.id ??
-      categoryByName?.id ??
-      '';
-  } else {
-    selectedCategory =
-      cats[0]?.id ?? '';
-  }
-
-  // ------------------------------------------------------------
-  // Basic form
-  // ------------------------------------------------------------
-
-  setForm({
-    name: item?.name ?? '',
-    description:
-      item?.description ?? '',
-
-    price:
-      item?.price !== undefined &&
-      item?.price !== null
-        ? String(item.price)
-        : '',
-
-    category: selectedCategory,
-
-    prepTime:
-      item?.prepTime ?? '',
-
-    calories:
-      item?.calories !== undefined &&
-      item?.calories !== null
-        ? String(item.calories)
-        : '',
-  });
-
-  // ------------------------------------------------------------
-  // Existing sizes
-  // ------------------------------------------------------------
-
-  if (
-    item?.sizes &&
-    item.sizes.length > 0
-  ) {
-    setSizes(
-      item.sizes.map(size => ({
-        name: size.name,
-        price: String(
-          size.price ?? 0,
-        ),
-      })),
-    );
-  } else {
-    setSizes([]);
-  }
-
-  // ------------------------------------------------------------
-  // Existing slides
-  //
-  // IMPORTANT:
-  // Preserve imageKey.
-  // ------------------------------------------------------------
-
-  if (
-    item?.slides &&
-    item.slides.length > 0
-  ) {
-    const existingSlides =
-      item.slides
-        .sort(
-          (a, b) =>
-            a.position -
-            b.position,
         )
-        .map((slide, index) => ({
-          file: null,
+          .trim()
+          .toLowerCase();
 
-          preview:
-            slide.imageUrl ||
-            null,
+      const categoryById =
+        cats.find(
+          c =>
+            String(c.id) ===
+            itemCategoryId,
+        );
 
-          imageKey:
-            slide.imageKey ||
-            '',
+      const categoryByName =
+        cats.find(
+          c =>
+            c.name
+              .trim()
+              .toLowerCase() ===
+            itemCategoryName,
+        );
 
-          position:
-            slide.position ||
-            index + 1,
-        }));
+      selectedCategory =
+        categoryById?.id ??
+        categoryByName?.id ??
+        '';
+    } else {
+      selectedCategory =
+        cats[0]?.id ?? '';
+    }
 
-    console.log(
-      '📸 Existing slides loaded:',
-      existingSlides,
-    );
+    // ------------------------------------------------------------
+    // Basic form
+    // ------------------------------------------------------------
 
-    setSlides(
-      existingSlides,
-    );
-  } else {
-    setSlides([]);
-  }
-};
+    setForm({
+      name: item?.name ?? '',
+      description:
+        item?.description ?? '',
+
+      price:
+        item?.price !== undefined &&
+          item?.price !== null
+          ? String(item.price)
+          : '',
+
+      category: selectedCategory,
+
+      prepTime:
+        item?.prepTime ?? '',
+
+      calories:
+        item?.calories !== undefined &&
+          item?.calories !== null
+          ? String(item.calories)
+          : '',
+    });
+
+    // ------------------------------------------------------------
+    // Existing sizes
+    // ------------------------------------------------------------
+
+    if (
+      item?.sizes &&
+      item.sizes.length > 0
+    ) {
+      setSizes(
+        item.sizes.map(size => ({
+          name: size.name,
+          price: String(
+            size.price ?? 0,
+          ),
+        })),
+      );
+    } else {
+      setSizes([]);
+    }
+
+    // ------------------------------------------------------------
+    // Existing slides
+    //
+    // IMPORTANT:
+    // Preserve imageKey.
+    // ------------------------------------------------------------
+
+    if (
+      item?.slides &&
+      item.slides.length > 0
+    ) {
+      const existingSlides =
+        item.slides
+          .sort(
+            (a, b) =>
+              a.position -
+              b.position,
+          )
+          .map((slide, index) => ({
+            file: null,
+
+            preview:
+              slide.imageUrl ||
+              null,
+
+            imageKey:
+              slide.imageKey ||
+              '',
+
+            position:
+              slide.position ||
+              index + 1,
+          }));
+
+      console.log(
+        '📸 Existing slides loaded:',
+        existingSlides,
+      );
+
+      setSlides(
+        existingSlides,
+      );
+    } else {
+      setSlides([]);
+    }
+  };
 
   const uploadToS3 = async (url: string, file: File, ct: string) => {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': ct }, body: file });
@@ -702,42 +704,65 @@ const openModal = async (item?: ApiMenuItem) => {
           price: parseFloat(size.price),
         }));
 
-      // ✅ Prepare slides payload
+      // ✅ Prepare slides payload — preserve existing imageKey, blank only for genuinely new ones
       const slidesPayload = slides
         .filter(slide => slide.preview || slide.file)
         .map((slide, index) => ({
           position: index + 1,
-          imageKey: '', // Will be set by backend
+          imageKey: slide.imageKey || '',
         }));
 
       if (modal.item?.id) {
         // ── UPDATE EXISTING ITEM ──
         const version = (modal.item as any).version ?? 1;
-        const raw = await updateMenuItem(
-          restaurantId,
-          modal.item.id,
-          {
-            name: form.name.trim(),
-            description: form.description.trim(),
-            price: parseFloat(form.price),
-            categoryId: form.category,
-            status: isActive ? 'active' : 'inactive',
-            tags: isChef ? ['chef'] : [],
-            prepTime: form.prepTime || '20 min',
-            calories: form.calories ? parseInt(form.calories) : undefined,
-            sizes: sizesPayload,
-            slides: slidesPayload,
-          },
-          version
-        );
+        const hasNewSlideFiles = itemImages.length > 0;
+
+        const raw = hasNewSlideFiles
+          ? await updateMenuItemWithFiles(
+            restaurantId,
+            modal.item.id,
+            {
+              name: form.name.trim(),
+              description: form.description.trim(),
+              price: parseFloat(form.price),
+              categoryId: form.category,
+              isActive,
+              prepTime: form.prepTime || '20 min',
+              calories: form.calories ? parseInt(form.calories) : undefined,
+              sizes: sizesPayload,
+              slides: slidesPayload,
+              version,
+            },
+            uploadFile,
+            null,
+            itemImages,
+          )
+          : await updateMenuItem(
+            restaurantId,
+            modal.item.id,
+            {
+              name: form.name.trim(),
+              description: form.description.trim(),
+              price: parseFloat(form.price),
+              categoryId: form.category,
+              status: isActive ? 'active' : 'inactive',
+              tags: isChef ? ['chef'] : [],
+              prepTime: form.prepTime || '20 min',
+              calories: form.calories ? parseInt(form.calories) : undefined,
+              sizes: sizesPayload,
+              slides: slidesPayload,
+            },
+            version,
+          );
 
         const updatedItemId = (raw as any).id ?? (raw as any).itemId;
         setItems(prev => prev.map(i => i.id === updatedItemId ? normaliseItem(raw) : i));
         setSaveMsg('Item updated with sizes & slides! ✓');
         createdItemId = updatedItemId;
 
-        // Handle image upload for existing item
-        if (uploadFile) {
+        // Handle main image upload for existing item (JSON path only —
+        // the multipart path already sent uploadFile in the same request)
+        if (uploadFile && !hasNewSlideFiles) {
           setSaveMsg('Getting image upload URL…');
           const fetched = await fetchMenuItem(modal.item.id, restaurantId) as any;
           if (fetched.imageUrl) {
@@ -760,7 +785,6 @@ const openModal = async (item?: ApiMenuItem) => {
           setSaveMsg('Uploading item + 3D model…');
         }
 
-        // ✅ FIX: Pass itemImages for SLIDES to the API
         const raw = await createMenuItemWithFiles(
           restaurantId,
           {
@@ -769,16 +793,14 @@ const openModal = async (item?: ApiMenuItem) => {
             price: parseFloat(form.price),
             categoryId: form.category,
             isActive: true,
-            // ✅ Fix: Send prepTime as number, not string with "min"
             prepTime: form.prepTime ? String(parseInt(form.prepTime.replace(/\D/g, '')) || 20) : undefined,
             calories: form.calories ? parseInt(form.calories) : undefined,
             sizes: sizesPayload,
-            // ✅ Only send slides if there are images
             slides: slidesPayload.length > 0 ? slidesPayload : undefined,
           },
           uploadFile,
           glbFile,
-          itemImages // ✅ Pass the actual file array here
+          itemImages
         );
 
         const newItem = normaliseItem(raw);
@@ -793,21 +815,37 @@ const openModal = async (item?: ApiMenuItem) => {
         }
       }
 
-      // ── CREATE ADDONS AFTER ITEM IS CREATED/UPDATED ──
-      if (addons.length > 0 && createdItemId) {
-        setSaveMsg('Creating add-ons...');
-        for (const addon of addons) {
-          await createAddon(  // ⚠️ HAR BAAR NAYA ADD-ON BAN RAHA HAI!
-            restaurantId,
-            createdItemId,
-            {
-              name: addon.name,
-              description: addon.description || '',
-              priceMinorUnits: addon.priceMinorUnits,
-              isActive: addon.isActive,
-              sortOrder: addon.sortOrder ?? 0,
-            }
-          );
+      // ── SYNC ADD-ONS AFTER ITEM IS CREATED/UPDATED ──
+      if (createdItemId) {
+        // Only genuinely NEW add-ons get created — existing ones are
+        // already saved and must not be re-created.
+        if (newAddons.length > 0) {
+          setSaveMsg('Creating add-ons...');
+          for (const addon of newAddons) {
+            await createAddon(
+              restaurantId,
+              createdItemId,
+              {
+                name: addon.name,
+                description: addon.description || '',
+                priceMinorUnits: addon.priceMinorUnits,
+                isActive: addon.isActive,
+                sortOrder: addon.sortOrder ?? 0,
+              }
+            );
+          }
+        }
+
+        // Add-ons that were removed from the list (X button) get deleted.
+        const currentIds = new Set(addons.map(a => a.addOnId));
+        const removedAddons = existingAddons.filter(
+          a => !currentIds.has(a.addOnId)
+        );
+        if (removedAddons.length > 0) {
+          setSaveMsg('Removing add-ons...');
+          for (const addon of removedAddons) {
+            await deleteAddon(restaurantId, createdItemId, addon.addOnId);
+          }
         }
       }
 
@@ -1492,7 +1530,7 @@ const openModal = async (item?: ApiMenuItem) => {
                       }}
                     />
                   ) : (
-                    <span>{item.emoji}</span>
+                    <span>🍽️</span>
                   )}
                 </div>
 
@@ -1562,6 +1600,7 @@ const openModal = async (item?: ApiMenuItem) => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
+                  width: 'fit-content',
                   padding: '4px 10px',
                   borderRadius: 20,
                   fontSize: 11,

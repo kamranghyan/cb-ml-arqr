@@ -29,6 +29,8 @@ interface ApiOrder {
   status: string;
   cancellationReason?: string;
   tableId?: string;
+  tableNumber?: string;
+  zone?: string;
   tenantId?: string;
   restaurantId?: string;
   lineItems: ApiLineItem[];
@@ -114,9 +116,15 @@ function guessEmoji(name: string): string {
 
 export function normaliseOrder(
   raw: ApiOrder
-): KdsOrder & { _apiId: string } {
+): KdsOrder & { _apiId: string; tableId?: string } {
+  // ✅ FIX: use the real tableNumber the backend now saves at order-creation
+  // time. Never invent one by stripping digits out of the tableId UUID —
+  // that produced meaningless numbers that had nothing to do with the
+  // actual table. Orders placed before this backend fix simply won't have
+  // tableNumber — show a short, honest reference instead of a fake number.
   const tableNum =
-    (raw.tableId ?? 'T?').replace(/[^0-9]/g, '').padStart(2, '0') || '??';
+    raw.tableNumber
+    || (raw.tableId ? `#${raw.tableId.slice(0, 6).toUpperCase()}` : '—');
 
   const placedAt = raw.placedAt
     ? new Date(raw.placedAt).toLocaleTimeString('en-US', {
@@ -250,7 +258,8 @@ export function normaliseOrder(
   return {
     id: `LM-${shortId}`,
     table: tableNum,
-    zone: 'Main Hall',
+    tableId: raw.tableId,
+    zone: raw.zone || '',
     status: toKdsStatus(raw.status, raw.flags),
     elapsedSeconds: 0,
     maxSeconds: 1500,
@@ -262,7 +271,7 @@ export function normaliseOrder(
     placedAt,
     cancellationReason: raw.cancellationReason,
     _apiId: raw.orderId,
-  } as KdsOrder & { _apiId: string };
+  } as KdsOrder & { _apiId: string; tableId?: string };
 }
 
 

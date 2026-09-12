@@ -91,6 +91,8 @@ class OrderRecord(BaseModel):
     tenantId: str
     restaurantId: str
     tableId: str
+    tableNumber: Optional[str] = None
+    zone: Optional[str] = None
     status: str
     lineItems: List[dict]
     totalAmountMinorUnits: int
@@ -109,7 +111,15 @@ class OrderRecord(BaseModel):
     ttl: int
 
     @classmethod
-    def build(cls, request: OrderRequest, order_id: str, execution_arn: str, now: datetime) -> "OrderRecord":
+    def build(
+        cls,
+        request: OrderRequest,
+        order_id: str,
+        execution_arn: str,
+        now: datetime,
+        table_number: Optional[str] = None,
+        zone: Optional[str] = None,
+    ) -> "OrderRecord":
         placed_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         ttl = int((now + timedelta(days=90)).timestamp())
         
@@ -134,6 +144,8 @@ class OrderRecord(BaseModel):
             tenantId=request.tenantId,
             restaurantId=request.restaurantId,
             tableId=request.tableId,
+            tableNumber=table_number,
+            zone=zone,
             customerName=request.customerName,
             pickupTime=request.pickupTime,
             status="RECEIVED",

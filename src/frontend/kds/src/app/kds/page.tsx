@@ -104,9 +104,11 @@ export default function KitchenDisplayPage() {
       const data = await res.json();
       const order = data.order ?? data;
 
-      const table = String(order.tableId ?? '')
-        .replace(/[^0-9]/g, '')
-        .padStart(2, '0') || '??';
+      // ✅ FIX: use the real tableNumber, not digits stripped from the
+      // tableId UUID.
+      const table =
+        order.tableNumber
+        || (order.tableId ? `#${String(order.tableId).slice(0, 6).toUpperCase()}` : '??');
 
       const reason = order.cancellationReason || 'No reason given';
 

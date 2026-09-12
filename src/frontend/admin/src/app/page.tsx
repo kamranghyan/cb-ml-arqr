@@ -9,7 +9,7 @@
  */
 
 import PermissionGuard from '@/components/auth/PermissionGuard';
-import RestaurantsView from './_RestaurantsView';
+import RestaurantsView from '@/app/(dashboard)/restaurants/_RestaurantsView';
 
 export default function RestaurantsPage() {
   return (
