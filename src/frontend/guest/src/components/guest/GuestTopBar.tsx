@@ -42,7 +42,7 @@ interface NotificationItem {
   read: boolean;
   type?: 'info' | 'success' | 'alert' | 'promo' | 'error';
 }
-
+//
 const BRAND = '#ff5723';
 const NOTIFICATIONS_STORAGE_KEY = 'menulay_guest_notifications';
 
