@@ -273,10 +273,24 @@ class MenuItemService:
 
         return menu_items, encode_lek(lek)
 
+
     def update(
-        self, tenant_id: str, restaurant_id: str, item_id: str, body: dict
+        self, tenant_id: str, restaurant_id: str, item_id: str, body: dict,
+        merge_slides: bool = False,
     ) -> MenuItem:
-        """Partial update with optimistic locking (version required)."""
+        """
+        Partial update with optimistic locking (version required).
+
+        merge_slides:
+            False (default) — the incoming "slides" list is treated as the
+            full, authoritative list. Anything not in it is dropped. This is
+            what the client-facing PUT uses, so remove/reorder/add all just
+            work as a normal replace.
+            True — merge incoming slides into the existing list by position,
+            keeping everything else untouched. Only used internally, right
+            after a multipart asset upload, to patch in the real imageKey for
+            freshly-uploaded slots without wiping the rest of the gallery.
+        """
         self.get(tenant_id, restaurant_id, item_id)  # 404 guard
 
         expected_version = body.get("version")
@@ -303,27 +317,35 @@ class MenuItemService:
         updates = {k: v for k, v in body.items() if k in mutable}
 
         if "slides" in updates:
-            current_item = self.get(
-                tenant_id,
-                restaurant_id,
-                item_id,
-            )
-
-            existing_slides = {
-                slide.position: slide
-                for slide in current_item.slides
-            }
-
             incoming_slides = updates["slides"] or []
 
-            for slide in incoming_slides:
-                position = int(slide["position"])
-                existing_slides[position] = MenuItemSlide.from_dict(slide)
+            if merge_slides:
+                current_item = self.get(
+                    tenant_id,
+                    restaurant_id,
+                    item_id,
+                )
 
-            updates["slides"] = [
-                slide.to_dict(exclude_none=True)
-                for _, slide in sorted(existing_slides.items())
-            ]
+                existing_slides = {
+                    slide.position: slide
+                    for slide in current_item.slides
+                }
+
+                for slide in incoming_slides:
+                    position = int(slide["position"])
+                    existing_slides[position] = MenuItemSlide.from_dict(slide)
+
+                updates["slides"] = [
+                    slide.to_dict(exclude_none=True)
+                    for _, slide in sorted(existing_slides.items())
+                ]
+            else:
+                updates["slides"] = [
+                    MenuItemSlide.from_dict(slide).to_dict(exclude_none=True)
+                    for slide in sorted(
+                        incoming_slides, key=lambda s: int(s["position"])
+                    )
+                ]
 
         updates["updatedAt"] = utc_now()
 
@@ -338,18 +360,19 @@ class MenuItemService:
             "tenantId": tenant_id, "restaurantId": restaurant_id,
             "itemId": item_id, "newVersion": expected_version + 1,
         })
-        item = MenuItem.from_dict(attrs)
-        return self._inject_asset_urls(item)
+
+        updated_item = MenuItem.from_dict(attrs)
+        return self._inject_asset_urls(updated_item)
 
     def delete(self, tenant_id: str, restaurant_id: str, item_id: str) -> None:
-        self.get(tenant_id, restaurant_id, item_id)  # 404 guard
-
-        self._ddb_delete(item_id)
-
-        self._cache.delete(
-            CacheService.item_key(tenant_id, restaurant_id, item_id),
-            CacheService.items_list_key(tenant_id, restaurant_id),
-        )
-        log.info("MenuItem deleted", extra={
-            "tenantId": tenant_id, "restaurantId": restaurant_id, "itemId": item_id,
-        })
+            self.get(tenant_id, restaurant_id, item_id)  # 404 guard
+    
+            self._ddb_delete(item_id)
+    
+            self._cache.delete(
+                CacheService.item_key(tenant_id, restaurant_id, item_id),
+                CacheService.items_list_key(tenant_id, restaurant_id),
+            )
+            log.info("MenuItem deleted", extra={
+                "tenantId": tenant_id, "restaurantId": restaurant_id, "itemId": item_id,
+            })

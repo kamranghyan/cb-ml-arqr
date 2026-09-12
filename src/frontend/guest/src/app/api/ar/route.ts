@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Could not resolve tenant' }, { status: 404 });
     }
 
-    const url = `${API_BASE}/${rid}/${iid}`;
+    const url = `${API_BASE}/ar/${rid}/${iid}`;
     console.log('📡 Fetching AR from:', url);
     
     const res = await fetch(url, {
@@ -86,7 +86,7 @@ export async function PUT(req: NextRequest) {
   try {
     const contentType = req.headers.get('content-type') ?? 'model/gltf-binary';
     const body = await req.arrayBuffer();
-    const res = await fetch(`${API_BASE}/${rid}/${iid}`, {
+    const res = await fetch(`${API_BASE}/ar/${rid}/${iid}`, {
       method: 'PUT',
       headers: { 'x-tenant-id': await resolveTenant(rid), 'Content-Type': contentType },
       body: body.byteLength > 0 ? body : undefined,
@@ -106,7 +106,7 @@ export async function DELETE(req: NextRequest) {
   if (!rid || !iid) return NextResponse.json({ error: 'Missing rid or iid' }, { status: 400 });
 
   try {
-    const res = await fetch(`${API_BASE}/${rid}/${iid}`, {
+    const res = await fetch(`${API_BASE}/ar/${rid}/${iid}`, {
       method: 'DELETE',
       headers: { 'x-tenant-id': await resolveTenant(rid) },
     });

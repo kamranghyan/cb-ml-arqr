@@ -925,14 +925,8 @@ function GuestContent() {
                         }}
                       />
                     ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
-                        <Image
-                          src='/images/menu/pizza.jpg'
-                          alt={item.name}
-                          width={100}
-                          height={100}
-                          style={{ objectFit: 'cover' }}
-                        />
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${ isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)' }` }}>
+                        🍽️
                       </div>
                     )}
                   </div>

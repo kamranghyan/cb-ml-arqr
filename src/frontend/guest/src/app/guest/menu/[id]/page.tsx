@@ -38,13 +38,6 @@ interface SizeOption {
   mult: number;
 }
 
-// ── Fallback sizes ──
-const FALLBACK_SIZES: SizeOption[] = [
-  { label: 'Small', price: 0, mult: 0.75 },
-  { label: 'Medium', price: 0, mult: 1.00 },
-  { label: 'Large', price: 0, mult: 1.25 },
-];
-
 export default function ItemDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
@@ -52,7 +45,7 @@ export default function ItemDetailPage() {
 
   const [item, setItem] = useState<ApiMenuItem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sizeIndex, setSizeIndex] = useState(1);
+  const [sizeIndex, setSizeIndex] = useState(0);
   const [qty, setQty] = useState(1);
 
   const [addOns, setAddOns] = useState<AddOn[]>([]);
@@ -78,15 +71,12 @@ export default function ItemDetailPage() {
         const rid = getGuestScope().restaurantId;
         if (!rid) return;
 
-        // ✅ API call to fetch restaurant data (from your provided URL)
         const res = await fetch(`/api/menu/restaurants/${rid}`, {
           cache: 'no-store',
         });
 
         if (res.ok) {
           const data = await res.json();
-          // Assuming the API returns a 'logoUrl' or 'imageUrl' field
-          // You might need to check the exact property name in your API response
           const logo = data?.logoUrl || data?.imageUrl || null;
           setRestaurantLogo(logo);
         } else {
@@ -206,6 +196,8 @@ export default function ItemDetailPage() {
   type MenuItemSize = { name?: string; price?: number; priceMinorUnits?: number; };
 
   // ── Sizes ──
+  // If the item has no defined sizes, show a single "Regular" option
+  // at the item's own price instead of inventing Small/Medium/Large.
   const getSizes = (): SizeOption[] => {
     const itemWithSizes = item as (ApiMenuItem & { sizes?: MenuItemSize[] }) | null;
     const basePrice = item?.price || 0;
@@ -220,12 +212,13 @@ export default function ItemDetailPage() {
         return { label: s.name || 'Medium', price, mult: price > 0 && basePrice > 0 ? price / basePrice : 1 };
       });
     }
-    return FALLBACK_SIZES.map((s) => ({ ...s, price: Math.round(basePrice * s.mult), mult: s.mult }));
+
+    return [{ label: 'Regular', price: basePrice, mult: 1 }];
   };
 
   const sizeOptions: SizeOption[] = getSizes();
   const safeSizeIndex = Math.min(sizeIndex, sizeOptions.length - 1);
-  const selectedSize = sizeOptions[safeSizeIndex] || sizeOptions[0] || { label: 'Medium', price: 0, mult: 1 };
+  const selectedSize = sizeOptions[safeSizeIndex] || sizeOptions[0];
   const sizePrice = selectedSize?.price ?? item?.price ?? 0;
 
   const toppingsTotal = toppings.reduce((sum, label) => {
@@ -236,6 +229,9 @@ export default function ItemDetailPage() {
   const unitPrice = sizePrice + toppingsTotal;
   const finalPrice = Math.round(unitPrice * qty);
 
+  // ── Rating ──
+  const hasRating = item?.rating != null && (item?.reviewCount ?? 0) > 0;
+
   // ── AR ──
   const hasAr = !!(item as any)?.arModelKey || !!(item as any)?.arModelUrl;
   const arUrl = (item as any)?.arModelUrl ?? '';
@@ -243,61 +239,59 @@ export default function ItemDetailPage() {
   const arHref = `/guest/ar?rid=${encodeURIComponent(rid)}&iid=${encodeURIComponent(id ?? '')}&name=${encodeURIComponent(item?.name ?? '')}&emoji=${encodeURIComponent(item?.emoji ?? '🍽️')}&imageUrl=${encodeURIComponent((item as any)?.imageUrl ?? '')}${arUrl ? '&url=' + encodeURIComponent(arUrl) : ''}`;
 
   // ── Add to cart ──
-const handleAddToCart = (): void => {
-  if (!item) return;
+  const handleAddToCart = (): void => {
+    if (!item) return;
 
-  const selectedSizeLabel =
-    sizeOptions[safeSizeIndex]?.label || 'Medium';
+    const selectedSizeLabel = sizeOptions[safeSizeIndex]?.label || 'Regular';
 
-  // Get complete selected addon objects
-  const selectedAddOns = addOns.filter((addon) =>
-    toppings.includes(addon.name)
-  );
+    // Get complete selected addon objects
+    const selectedAddOns = addOns.filter((addon) =>
+      toppings.includes(addon.name)
+    );
 
-  const selectedAddOnIds = selectedAddOns.map(
-    (addon) => addon.addOnId
-  );
+    const selectedAddOnIds = selectedAddOns.map(
+      (addon) => addon.addOnId
+    );
 
-  addItem({
-    menuItemId: item.id,
-    name: item.name,
-    emoji: item.emoji ?? '🍽️',
-    imageUrl: (item as any)?.imageUrl || undefined,
-    price: item.price,
-    quantity: qty,
+    addItem({
+      menuItemId: item.id,
+      name: item.name,
+      emoji: item.emoji ?? '🍽️',
+      imageUrl: (item as any)?.imageUrl || undefined,
+      price: item.price,
+      quantity: qty,
 
-    options: {
-      size: selectedSizeLabel,
+      options: {
+        size: selectedSizeLabel,
 
-      sizeMultiplier:
-        sizeOptions[safeSizeIndex]?.mult || 1,
+        sizeMultiplier: sizeOptions[safeSizeIndex]?.mult || 1,
 
-      toppings: selectedAddOns
-        .map((addon) => addon.name)
-        .join(', '),
+        toppings: selectedAddOns
+          .map((addon) => addon.name)
+          .join(', '),
 
-      toppingsTotal,
+        toppingsTotal,
 
-      // ✅ IMPORTANT
-      addOnIds: selectedAddOnIds,
+        // ✅ IMPORTANT
+        addOnIds: selectedAddOnIds,
 
-      // ✅ IMPORTANT
-      addOns: selectedAddOns.map((addon) => ({
-        addOnId: addon.addOnId,
-        name: addon.name,
-        priceMinorUnits: addon.priceMinorUnits,
-        quantity: 1,
-      })),
-    },
-  });
+        // ✅ IMPORTANT
+        addOns: selectedAddOns.map((addon) => ({
+          addOnId: addon.addOnId,
+          name: addon.name,
+          priceMinorUnits: addon.priceMinorUnits,
+          quantity: 1,
+        })),
+      },
+    });
 
-  setAdded(true);
+    setAdded(true);
 
-  setTimeout(() => {
-    setAdded(false);
-    router.push('/guest/cart');
-  }, 800);
-};
+    setTimeout(() => {
+      setAdded(false);
+      router.push('/guest/cart');
+    }, 800);
+  };
 
   // ── Theme colors ──
   const D = isDark
@@ -485,10 +479,18 @@ const handleAddToCart = (): void => {
         {/* ── Info card ── */}
         <div style={{ background: BRAND, borderRadius: 20, padding: '18px 20px', marginBottom: 24, marginTop: "20px" }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Star size={16} fill="#fff" color="#fff" />
-              <span style={{ fontSize: 15, color: '#fff', fontFamily: "'Poppins', sans-serif" }}>{(item?.rating ?? 4.5).toFixed(1)} ({item?.reviewCount ?? 0} reviews)</span>
-            </div>
+            {hasRating ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Star size={16} fill="#fff" stroke="#fff" strokeWidth={1.5} />
+                <span style={{ fontSize: 14, color: '#fff', fontFamily: "'Poppins', sans-serif" }}>
+                  {item!.rating!.toFixed(1)} ({item?.reviewCount} review{item?.reviewCount === 1 ? '' : 's'})
+                </span>
+              </div>
+            ) : (
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontFamily: "'Poppins', sans-serif" }}>
+                No ratings yet — be the first to rate!
+              </span>
+            )}
             <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 22, fontWeight: 700, color: '#fff' }}>Rs. {item?.price?.toLocaleString() ?? 0}</span>
           </div>
           <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.95)', margin: 0, lineHeight: 1.6, fontFamily: "'Poppins', sans-serif" }}>{item?.description || 'A carefully crafted dish made with the finest ingredients.'}</p>
@@ -511,9 +513,9 @@ const handleAddToCart = (): void => {
           <h2 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 19, fontWeight: 700, color: D.text, margin: '0 0 14px' }}>Choose Size</h2>
           <div style={{ display: 'flex', gap: 12 }}>
             {sizeOptions.map((s: SizeOption, i: number) => {
-              const selected = sizeIndex === i;
+              const selected = safeSizeIndex === i;
               return (
-                <button key={`${s.label}-${i}`} onClick={() => setSizeIndex(i)} style={{ flex: 1, padding: '16px 8px', borderRadius: 16, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, cursor: 'pointer', transition: 'all 0.15s', fontFamily: "'Poppins', sans-serif", outline: 'none' }}>
+                <button key={`${s.label}-${i}`} onClick={() => setSizeIndex(i)} style={{ flex: '0 0 40%', padding: '16px 8px', borderRadius: 16, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, cursor: 'pointer', transition: 'all 0.15s', fontFamily: "'Poppins', sans-serif", outline: 'none' }}>
                   <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, margin: '0 0 4px', color: selected ? '#fff' : BRAND }}>{s.label}</p>
                   <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 15, margin: 0, color: selected ? '#fff' : BRAND }}>{s.price?.toLocaleString() || '0'}</p>
                 </button>
