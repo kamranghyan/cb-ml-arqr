@@ -55,12 +55,10 @@ export default function ArEntry({ itemId, itemName, itemEmoji, arModelUrl }: ArB
   const caps = useDeviceCapabilities();
   const { isDark } = useTheme();
   const colors = getColors(isDark);
-
   const [fetchState, setFetchState] = useState<FetchState>(arModelUrl ? 'ready' : 'idle');
   const [glbUrl, setGlbUrl] = useState<string | null>(arModelUrl ?? null);
   const [fetchError, setFetchError] = useState<string>('');
   const [showViewer, setShowViewer] = useState(false);
-
   const launch = useCallback(async () => {
     if (glbUrl) { setShowViewer(true); return; }
 

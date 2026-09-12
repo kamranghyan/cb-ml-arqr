@@ -13,7 +13,7 @@ import { ApiMenuItem, fetchMenuItems, normaliseItem } from '@/lib/menu-api';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import OrderFeedbackShareModal from '@/components/guest/OrderFeedbackShareModal';
-import { connectWebSocket } from '@/lib/orders';
+import { useGuestOrdersSocket } from '@/components/guest/GuestOrdersSocketProvider';
 
 const BRAND = '#ff5723';
 
@@ -90,7 +90,7 @@ export default function TrackingPage() {
   const [cancelError, setCancelError] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [prepTime, setPrepTime] = useState('20-30 mins');
-
+  const [staffConfirmed, setStaffConfirmed] = useState(false);
   // ✅ New states for order completion
   const [showCompleteOverlay, setShowCompleteOverlay] = useState(false);
   const [isOrderCompleted, setIsOrderCompleted] = useState(false);
@@ -98,8 +98,18 @@ export default function TrackingPage() {
   const isMounted = useRef(true);
   const isFirstLoad = useRef(true);
   const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const { lastUpdate } = useGuestOrdersSocket();
 
+  useEffect(() => {
+    if (!lastUpdate) return;
+    setOrders((prevOrders) =>
+      prevOrders.map((order) =>
+        order.orderId === lastUpdate.orderId
+          ? { ...order, status: lastUpdate.status }
+          : order
+      )
+    );
+  }, [lastUpdate])
   // Load menu images only once
   useEffect(() => {
     const loadMenuImages = async () => {
@@ -210,120 +220,19 @@ export default function TrackingPage() {
   // ─────────────────────────────────────────────────────────────
   // Guest Orders WebSocket
   // ─────────────────────────────────────────────────────────────
+  // Global socket se order updates receive karo (connection persist rehta
+  // hai chahe guest kisi bhi page pe ho — menu, cart, ya tracking)
   useEffect(() => {
-    let ws: WebSocket | null = null;
+    if (!lastUpdate) return;
 
-    try {
-      ws = connectWebSocket();
-      if (!ws) {
-        console.error('❌ [Guest WS] Failed to create websocket connection');
-        return;
-      }
-
-      wsRef.current = ws;
-      const socket = ws;
-
-      socket.onopen = () => {
-        console.log('🟢 [Guest WS] Connected successfully');
-      };
-
-      socket.onmessage = (event) => {
-        console.log('📩 [Guest WS] Message received:', event.data);
-
-        try {
-          const data = JSON.parse(event.data);
-
-          console.log('📦 [Guest WS] Parsed update:', data);
-
-          /*
-           * Expected examples:
-           *
-           * {
-           *   orderId: "...",
-           *   status: "PREPARING"
-           * }
-           *
-           * OR
-           *
-           * {
-           *   type: "ORDER_STATUS_UPDATED",
-           *   orderId: "...",
-           *   status: "READY"
-           * }
-           */
-
-          const updatedOrderId =
-            data?.orderId ??
-            data?.order?.orderId ??
-            data?.order?.id;
-
-          const updatedStatus =
-            data?.status ??
-            data?.order?.status;
-
-          if (!updatedOrderId || !updatedStatus) {
-            console.log(
-              'ℹ️ [Guest WS] Message does not contain order status update'
-            );
-            return;
-          }
-
-          setOrders((prevOrders) =>
-            prevOrders.map((order) => {
-              if (order.orderId !== updatedOrderId) {
-                return order;
-              }
-
-              console.log(
-                `🔄 [Guest WS] Order ${updatedOrderId} status: ${order.status} → ${updatedStatus}`
-              );
-
-              return {
-                ...order,
-                status: updatedStatus,
-              };
-            })
-          );
-        } catch (error) {
-          console.error(
-            '❌ [Guest WS] Failed to parse message:',
-            error
-          );
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error('❌ [Guest WS] Connection error:', error);
-      };
-
-      socket.onclose = (event) => {
-        console.log(
-          '🔴 [Guest WS] Disconnected',
-          {
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean,
-          }
-        );
-      };
-    } catch (error) {
-      console.error(
-        '❌ [Guest WS] Failed to connect:',
-        error
-      );
-    }
-
-    return () => {
-      if (ws) {
-        console.log('🔌 [Guest WS] Closing connection');
-
-        ws.close();
-        ws = null;
-      }
-
-      wsRef.current = null;
-    };
-  }, []);
+    setOrders((prevOrders) =>
+      prevOrders.map((order) =>
+        order.orderId === lastUpdate.orderId
+          ? { ...order, status: lastUpdate.status }
+          : order
+      )
+    );
+  }, [lastUpdate]);
 
   const myOrders = orders.filter(o => {
     if (!o.tableId) return false;
@@ -355,6 +264,7 @@ export default function TrackingPage() {
     return (menuItem as any)?.imageUrl ?? '';
   };
   const currentStep = latest ? getStepIndex(latest.status) : 0;
+  const canCancelOrder = currentStep === 0;
   const isCancelled = ['TIMED_OUT', 'CANCELLED'].includes((latest?.status ?? '').toUpperCase());
   const isAtDeliveredStep = latest ? getStepIndex(latest.status) === 3 : false;
   const isOrderAlreadyCompleted = latest ? ['COMPLETED', 'DONE'].includes((latest.status ?? '').toUpperCase()) : false;
@@ -374,12 +284,19 @@ export default function TrackingPage() {
   const cancelOrder = async () => {
     if (!latest) return;
 
+    if (!canCancelOrder) {
+      const statusLabel = STATUS_STEPS[currentStep]?.label ?? latest.status;
+      toast.error(`Your order is currently "${statusLabel}" — it can't be cancelled right now. Please speak to staff.`);
+      return;
+    }
+
     const reason = cancelReason.trim();
 
     if (!reason) {
       setCancelError('Please enter a reason for cancelling your order.');
       return;
     }
+
 
     setCancelling(true);
     setCancelError('');
@@ -414,9 +331,10 @@ export default function TrackingPage() {
 
       toast.success('Order cancelled successfully');
 
-      setShowCancel(false);
+            setShowCancel(false);
       setCancelReason('');
       setCancelError('');
+      setStaffConfirmed(false);
 
       const tableId = sessionStorage.getItem('lm_tid') || sessionTid || '';
       router.push(`/guest?rid=${rid}&tid=${tableId}`);
@@ -676,6 +594,7 @@ export default function TrackingPage() {
                   setShowCancel(false);
                   setCancelError('');
                   setCancelReason('');
+                  setStaffConfirmed(false);
                 }}
                 disabled={cancelling}
                 style={{
@@ -706,7 +625,7 @@ export default function TrackingPage() {
                   color: '#fff',
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: cancelling || !cancelReason.trim()
+                  cursor: cancelling || !cancelReason.trim() || (!canCancelOrder && !staffConfirmed)
                     ? 'not-allowed'
                     : 'pointer',
                   display: 'flex',

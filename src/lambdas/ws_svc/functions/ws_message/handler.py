@@ -180,6 +180,20 @@ def lambda_handler(event: dict, context) -> dict:
         }
 
     if action == "ping":
+        # Keepalive from the client also refreshes this connection's TTL,
+        # so a guest who keeps the app open/foregrounded for a long order
+        # (or just sends periodic pings) never has their connection record
+        # expire out from under them mid-order.
+        try:
+            conn_table.update_item(
+                Key={"connectionId": connection_id},
+                UpdateExpression="SET #ttl = :ttl",
+                ExpressionAttributeNames={"#ttl": "ttl"},
+                ExpressionAttributeValues={":ttl": int(time.time()) + 14400},
+            )
+        except ClientError as e:
+            logger.warning("Failed to refresh TTL on ping for %s: %s", connection_id, e)
+
         return {"statusCode": 200, "body": json.dumps({"type": "PONG"})}
 
     # KDS broadcasts a status change to every other screen on the same tenant.

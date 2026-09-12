@@ -384,7 +384,7 @@ def lambda_handler(event: dict, context) -> dict:
         # Store authenticated connection
         # ─────────────────────────────────────────────────────────────────────
 
-        ttl = int(time.time()) + 3600
+        ttl = int(time.time()) + 14400  
 
         item = {
             "connectionId": connection_id,
@@ -478,7 +478,7 @@ def lambda_handler(event: dict, context) -> dict:
         # flow rather than trusting a tenantId supplied by the browser.
         # ─────────────────────────────────────────────────────────────────────
 
-        ttl = int(time.time()) + 3600
+        ttl = int(time.time()) + 14400  
 
         table.put_item(
           Item={
