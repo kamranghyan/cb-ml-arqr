@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query
-
+from app.services.dining_table_lookup import get_table_info
 from shared.aws_clients import get_dynamodb_client
 from shared.cognito_auth import UserContext
 from shared.exceptions import BadRequestError, ResourceNotFoundError
@@ -109,9 +109,20 @@ async def create_order(
         except MenuValidationError as exc:
             raise BadRequestError(exc.message) from exc
 
+    # Resolve the human-readable table number (e.g. "T-144") and zone
+    # once, at creation time, so every later read (GET /orders, KDS,
+    # dashboards) gets both for free without a cross-service join.
+    # Best-effort — a lookup failure never blocks placing the order.
+    table_info = get_table_info(body.tableId) if body.tableId else None
+    table_number = table_info.get("tableNumber") if table_info else None
+    zone = table_info.get("zone") if table_info else None
+
     # Write to DynamoDB
     now = datetime.now(timezone.utc)
-    record = OrderRecord.build(request, order_id, execution_arn="PENDING", now=now)
+    record = OrderRecord.build(
+        request, order_id, execution_arn="PENDING", now=now,
+        table_number=table_number, zone=zone,
+    )
 
     try:
         repo.write_order(record)
@@ -139,7 +150,6 @@ async def create_order(
         "status": "RECEIVED",
         "stepFunctionsExecutionArn": execution_arn,
     }
-
 
 # ── GET /orders ───────────────────────────────────────────────────────────────
 

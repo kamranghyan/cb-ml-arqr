@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, User, MapPin, Sun, Moon, FileText, Heart, QrCode, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useGuestProfileStore } from '@/lib/guest-profile-store';
-import { clearGuestScope, extractTableNumber } from '@/lib/guest-scope';
+import { clearGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import { toast } from 'sonner';
@@ -91,7 +91,6 @@ export default function ProfilePage() {
         console.error('Camera error:', error);
         if (!cancelled) {
           setScanError('Unable to access camera. Please allow camera permissions.');
-          toast.error('Unable to access camera. Please allow camera permissions.');
           setScanning(false);
         }
       }
@@ -171,11 +170,48 @@ export default function ProfilePage() {
     }, 200);
   };
 
-  const handleScanResult = (result: string) => {
+  // ✅ Single source of truth for the human-readable table number: always
+  // resolve it from menu_svc's own tables list by tableId, instead of
+  // trusting whatever a QR code happened to encode (which may be missing,
+  // stale, or an unreadable UUID fragment). Falls back to whatever the QR
+  // gave us only if this lookup itself fails (e.g. offline).
+  const resolveTableNumber = async (
+    restaurantId: string,
+    tableId: string,
+    fallback: string
+  ): Promise<string> => {
+    try {
+      const res = await fetch(
+        `/api/menu/restaurants/${restaurantId}/tables`,
+        { cache: 'no-store' }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const match = (data?.tables ?? []).find(
+          (t: any) => t.tableId === tableId
+        );
+
+        if (match?.tableNumber) {
+          return match.tableNumber;
+        }
+      }
+    } catch (err) {
+      console.warn('Table lookup failed, using fallback:', err);
+    }
+
+    return fallback;
+  };
+
+  const handleScanResult = async (result: string) => {
     console.log('📦 Processing QR result:', result);
 
     setShowScanner(false);
     setScanning(false);
+
+    let restaurantId = '';
+    let tableId = '';
+    let fallbackTableNumber = '';
 
     try {
       // Try to parse as JSON first
@@ -183,38 +219,14 @@ export default function ProfilePage() {
       console.log('✅ Parsed as JSON:', data);
 
       if (data.restaurantId && data.tableId) {
-        // Format table number
-        let tableNumber = data.tableNumber || data.tableId;
-        // If tableNumber is just a number, format it as T-XX
-        if (tableNumber && !tableNumber.startsWith('T-')) {
-          const num = tableNumber.replace(/[^0-9]/g, '');
-          if (num) {
-            tableNumber = `T-${num.padStart(2, '0')}`;
-          }
-        }
-
-        console.log('✅ Setting session data:', {
-          rid: data.restaurantId,
-          tid: data.tableId,
-          table: tableNumber
-        });
-
-        sessionStorage.setItem('lm_rid', data.restaurantId);
-        sessionStorage.setItem('lm_tid', data.tableId);
-
-        if (tableNum) {
-          sessionStorage.setItem('lm_table', tableNum);
-        }
-
-        toast.success(`Table ${tableNum || ''} selected`);
-
-        console.log('✅ Redirecting to /guest/menu');
-        router.push('/guest/menu');
-        return;
+        restaurantId = data.restaurantId;
+        tableId = data.tableId;
+        fallbackTableNumber = data.tableNumber || '';
       } else {
         console.warn('⚠️ Missing restaurantId or tableId in JSON:', data);
         setScanError('Invalid QR data. Missing restaurant or table info.');
         toast.error('Invalid QR code: restaurant or table information is missing.');
+        return;
       }
     } catch (e) {
       console.log('Not JSON, trying URL...');
@@ -224,35 +236,22 @@ export default function ProfilePage() {
 
         const rid = url.searchParams.get('rid');
         const tid = url.searchParams.get('tid');
-        let tableNum = url.searchParams.get('table') || url.searchParams.get('tableNumber') || '';
+        const rawTable =
+          url.searchParams.get('table') ||
+          url.searchParams.get('tableNumber') ||
+          '';
 
-        console.log('URL params:', { rid, tid, tableNum });
+        console.log('URL params:', { rid, tid, rawTable });
 
         if (rid && tid) {
-          // Format table number
-          if (tableNum && !tableNum.startsWith('T-')) {
-            const num = tableNum.replace(/[^0-9]/g, '');
-            if (num) {
-              tableNum = `T-${num.padStart(2, '0')}`;
-            }
-          } else if (!tableNum) {
-            // Extract from tid if not provided
-            const extracted = extractTableNumber(tid);
-            if (extracted) tableNum = extracted;
-          }
-
-          console.log('✅ Setting session from URL params');
-          sessionStorage.setItem('lm_rid', rid);
-          sessionStorage.setItem('lm_tid', tid);
-          if (tableNum) sessionStorage.setItem('lm_table', tableNum);
-
-          console.log('✅ Redirecting to /guest/menu');
-          router.push('/guest/menu');
-          return;
+          restaurantId = rid;
+          tableId = tid;
+          fallbackTableNumber = rawTable;
         } else {
           console.warn('⚠️ Missing rid or tid in URL:', { rid, tid });
           setScanError('Invalid QR URL. Missing restaurant or table info.');
           toast.error('Invalid QR code: restaurant or table information is missing.');
+          return;
         }
       } catch (err) {
         console.error('❌ Invalid QR code:', err);
@@ -263,8 +262,38 @@ export default function ProfilePage() {
           setScanError('');
           setShowScanner(true);
         }, 2000);
+        return;
       }
     }
+
+    const tableNumber = await resolveTableNumber(
+      restaurantId,
+      tableId,
+      fallbackTableNumber
+    );
+
+    console.log('✅ Setting session data:', {
+      rid: restaurantId,
+      tid: tableId,
+      table: tableNumber,
+    });
+
+    sessionStorage.setItem('lm_rid', restaurantId);
+    sessionStorage.setItem('lm_tid', tableId);
+
+    if (tableNumber) {
+      sessionStorage.setItem('lm_table', tableNumber);
+      setTableNum(tableNumber);
+    } else {
+      // Genuinely couldn't resolve a real table number — don't store a
+      // guessed/fake one. Cart page will fall back to showing tableId.
+      sessionStorage.removeItem('lm_table');
+      setTableNum('');
+    }
+
+
+    console.log('✅ Redirecting to /guest/menu');
+    router.push('/guest/menu');
   };
 
   const handleSave = () => {

@@ -515,7 +515,7 @@ export default function ItemDetailPage() {
             {sizeOptions.map((s: SizeOption, i: number) => {
               const selected = safeSizeIndex === i;
               return (
-                <button key={`${s.label}-${i}`} onClick={() => setSizeIndex(i)} style={{ flex: '0 0 40%', padding: '16px 8px', borderRadius: 16, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, cursor: 'pointer', transition: 'all 0.15s', fontFamily: "'Poppins', sans-serif", outline: 'none' }}>
+                <button key={`${s.label}-${i}`} onClick={() => setSizeIndex(i)} style={{ flex: 1, padding: '16px 8px', borderRadius: 16, border: `2px solid ${BRAND}`, background: selected ? BRAND : D.card, cursor: 'pointer', transition: 'all 0.15s', fontFamily: "'Poppins', sans-serif", outline: 'none' }}>
                   <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 600, margin: '0 0 4px', color: selected ? '#fff' : BRAND }}>{s.label}</p>
                   <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 15, margin: 0, color: selected ? '#fff' : BRAND }}>{s.price?.toLocaleString() || '0'}</p>
                 </button>

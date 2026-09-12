@@ -17,6 +17,12 @@ Parameters:
       Name of the orders table. This stack CREATES this table (see OrdersTable
       resource), so the value must not collide with a table owned by another
       stack or by Terraform.
+  DiningTable:
+    Type: String
+    Default: DiningTable-dev
+    Description: >-
+      Restaurant dining-tables table, owned by menu_svc. Read-only here —
+      used to resolve a human-readable tableNumber for each order.
   CognitoRegion:
     Type: String
     Default: ap-south-1
@@ -64,6 +70,7 @@ Globals:
         TABLE_MENU:              !Ref MenuTable
         ITEM_TABLE:           !Sub "ItemTable-${Environment}"
         TABLE_ORDER:             !Ref OrderTable
+        DINING_TABLE:            !Ref DiningTable
         STEP_ARN:                !Ref StepArn
         NOTIFICATIONS_QUEUE_URL: !Ref NotificationsQueueUrl
         SKIP_MENU:               !Ref SkipMenuValidation
@@ -162,6 +169,7 @@ Resources:
                 - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MenuTable}/index/*"
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}"
                 - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DiningTable}"
             # Step Functions — start executions for the order lifecycle state machine
             - Effect: Allow
               Action:
