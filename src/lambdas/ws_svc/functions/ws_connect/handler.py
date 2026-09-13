@@ -391,7 +391,6 @@ def lambda_handler(event: dict, context) -> dict:
             "connectionType": "user",
             "userId": user_id,
             "email": email,
-            "restaurantId": restaurant_id,
             "groups": groups,
             "role": role,
             "connectedAt": int(time.time()),
@@ -406,7 +405,32 @@ def lambda_handler(event: dict, context) -> dict:
         if tenant_id:
             item["tenantId"] = tenant_id
 
-        table.put_item(Item=item)
+        # restaurantId is ALSO a GSI key (restaurantId-index) — same rule
+        # applies here. A tenant OWNER's JWT has no restaurant_id claim at
+        # all (they oversee every branch, not just one), so writing ""
+        # used to throw a DynamoDB ValidationException on every owner
+        # connect — silently failing the entire $connect handshake, so the
+        # owner's dashboard never got a working WebSocket connection and
+        # never received ORDER_CREATED/ORDER_UPDATE broadcasts. Omitting
+        # the attribute for owners is correct: _broadcast()'s branch
+        # filter already treats "no restaurantId on the connection" as
+        # "sees every branch under this tenant" — exactly right for an
+        # owner watching the whole company.
+        if restaurant_id:
+            item["restaurantId"] = restaurant_id
+
+        try:
+            table.put_item(Item=item)
+        except Exception as e:
+            logger.error(
+                "Failed to persist connection record for %s "
+                "(userId=%s, tenantId=%s, restaurantId=%s): %s",
+                connection_id, user_id, tenant_id or "-", restaurant_id or "-", e,
+            )
+            return {
+                "statusCode": 500,
+                "body": "Failed to establish connection",
+            }
 
 
         # Redis
