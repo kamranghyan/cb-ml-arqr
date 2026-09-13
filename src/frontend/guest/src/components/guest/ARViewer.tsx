@@ -803,7 +803,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     setStatus('model-ready');
     setPlaced(false);
   }
-
+//
   function reposition() {
     const xr = xrRef.current;
     if (xr.model) {
