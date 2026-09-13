@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Grid3x3, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Grid3x3, AlertCircle, MapPin, Check } from 'lucide-react';
 import {
   fetchTables, createTable, updateTable, deleteTable, type ApiTable,
+  fetchZones, createZone, updateZone, deleteZone, type ApiZone,
 } from '@/lib/admin-api';
 import { getTheme } from '@/lib/theme';
 import { toast } from 'sonner';
@@ -35,9 +36,12 @@ export default function TablesPage() {
   const restaurantId = String(useParams().restaurantId ?? '');
   const [isDark, setIsDark] = useState(false);
   const [rows, setRows] = useState<ApiTable[]>([]);
+  const [zones, setZones] = useState<ApiZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modal, setModal] = useState<{ open: boolean; edit?: ApiTable }>({ open: false });
+  const [zoneModal, setZoneModal] = useState(false);
+  const [manageZonesModal, setManageZonesModal] = useState(false);
 
   // ── Theme listener ──
   useEffect(() => {
@@ -77,7 +81,12 @@ export default function TablesPage() {
     setLoading(true);
     setError('');
     try {
-      setRows(await fetchTables(restaurantId));
+      const [tables, zoneList] = await Promise.all([
+        fetchTables(restaurantId),
+        fetchZones(restaurantId),
+      ]);
+      setRows(tables);
+      setZones(zoneList);
     } catch (e: any) {
       setError(e?.message ?? 'Could not load tables');
     } finally {
@@ -105,7 +114,10 @@ export default function TablesPage() {
     }
   }
 
-  const zones = Array.from(new Set(rows.map(r => r.zone).filter(Boolean)));
+  const tableCountByZoneName = rows.reduce((acc: Record<string, number>, r) => {
+    if (r.zone) acc[r.zone] = (acc[r.zone] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div style={{
@@ -124,7 +136,7 @@ export default function TablesPage() {
           color: ${colors.placeholder} !important;
           opacity: 0.8;
         }
-        input:focus {
+        input:focus, select:focus {
           outline: none;
         }
         ::-webkit-scrollbar {
@@ -164,42 +176,15 @@ export default function TablesPage() {
           gap: 8,
           flexWrap: 'wrap',
         }}>
-          <button
-            onClick={load}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              border: `1.5px solid ${colors.border}`,
-              borderRadius: 10,
-              background: colors.card,
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: 'pointer',
-              color: colors.text,
-              fontFamily: "'Poppins', sans-serif",
-              outline: 'none',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-              e.currentTarget.style.borderColor = colors.border;
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = colors.hoverBg;
-              e.currentTarget.style.borderColor = BRAND;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = colors.card;
-              e.currentTarget.style.borderColor = colors.border;
-            }}
-          >
+          <HeaderButton onClick={load} colors={colors}>
             <RefreshCw size={14} /> Refresh
-          </button>
+          </HeaderButton>
+          <HeaderButton onClick={() => setManageZonesModal(true)} colors={colors}>
+            <MapPin size={14} /> Manage Zones
+          </HeaderButton>
+          <HeaderButton onClick={() => setZoneModal(true)} colors={colors}>
+            <Plus size={14} /> New Zone
+          </HeaderButton>
           <button
             onClick={() => setModal({ open: true })}
             style={{
@@ -328,61 +313,11 @@ export default function TablesPage() {
             }}>
               <thead style={{ background: colors.card2 }}>
                 <tr>
-                  <th style={{
-                    padding: '10px 12px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: colors.subtle,
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                    fontFamily: "'Poppins', sans-serif",
-                  }}>Table</th>
-                  <th style={{
-                    padding: '10px 12px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: colors.subtle,
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                    fontFamily: "'Poppins', sans-serif",
-                  }}>Zone</th>
-                  <th style={{
-                    padding: '10px 12px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: colors.subtle,
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                    fontFamily: "'Poppins', sans-serif",
-                  }}>Outlet</th>
-                  <th style={{
-                    padding: '10px 12px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: colors.subtle,
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                    fontFamily: "'Poppins', sans-serif",
-                  }}>Seats</th>
-                  <th style={{
-                    padding: '10px 12px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: colors.subtle,
-                    textAlign: 'right',
-                    whiteSpace: 'nowrap',
-                    fontFamily: "'Poppins', sans-serif",
-                  }}></th>
+                  <th style={thStyle(colors, 'left')}>Table</th>
+                  <th style={thStyle(colors, 'left')}>Zone</th>
+                  <th style={thStyle(colors, 'left')}>Outlet</th>
+                  <th style={thStyle(colors, 'left')}>Seats</th>
+                  <th style={thStyle(colors, 'right')}></th>
                 </tr>
               </thead>
               <tbody>
@@ -421,81 +356,12 @@ export default function TablesPage() {
                       whiteSpace: 'nowrap',
                       fontFamily: "'Poppins', sans-serif",
                     }}>
-                      <button
-                        onClick={() => setModal({ open: true, edit: t })}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '6px 10px',
-                          border: `1.5px solid ${colors.border}`,
-                          borderRadius: 8,
-                          background: colors.card,
-                          fontWeight: 600,
-                          fontSize: 13,
-                          cursor: 'pointer',
-                          color: colors.text,
-                          marginRight: 6,
-                          fontFamily: "'Poppins', sans-serif",
-                          transition: 'all 0.2s ease',
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-                          e.currentTarget.style.borderColor = BRAND;
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.boxShadow = 'none';
-                          e.currentTarget.style.borderColor = colors.border;
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = colors.hoverBg;
-                          e.currentTarget.style.borderColor = BRAND;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = colors.card;
-                          e.currentTarget.style.borderColor = colors.border;
-                        }}
-                      >
+                      <IconButton onClick={() => setModal({ open: true, edit: t })} colors={colors}>
                         <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => onDelete(t)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '6px 10px',
-                          border: `1.5px solid ${colors.border}`,
-                          borderRadius: 8,
-                          background: colors.card,
-                          fontWeight: 600,
-                          fontSize: 13,
-                          cursor: 'pointer',
-                          color: colors.danger,
-                          fontFamily: "'Poppins', sans-serif",
-                          transition: 'all 0.2s ease',
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-                          e.currentTarget.style.borderColor = BRAND;
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.boxShadow = 'none';
-                          e.currentTarget.style.borderColor = colors.border;
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = colors.hoverBg;
-                          e.currentTarget.style.borderColor = BRAND;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = colors.card;
-                          e.currentTarget.style.borderColor = colors.border;
-                        }}
-                      >
+                      </IconButton>
+                      <IconButton onClick={() => onDelete(t)} colors={colors} danger>
                         <Trash2 size={14} />
-                      </button>
+                      </IconButton>
                     </td>
                   </tr>
                 ))}
@@ -510,8 +376,35 @@ export default function TablesPage() {
         <TableModal
           restaurantId={restaurantId}
           edit={modal.edit}
+          zones={zones}
           onClose={() => setModal({ open: false })}
           onSaved={() => { setModal({ open: false }); load(); }}
+          say={say}
+          colors={colors}
+          isDark={isDark}
+        />
+      )}
+
+      {/* ── Create Zone Modal ── */}
+      {zoneModal && (
+        <CreateZoneModal
+          restaurantId={restaurantId}
+          onClose={() => setZoneModal(false)}
+          onSaved={() => { setZoneModal(false); load(); }}
+          say={say}
+          colors={colors}
+          isDark={isDark}
+        />
+      )}
+
+      {/* ── Manage Zones Modal ── */}
+      {manageZonesModal && (
+        <ManageZonesModal
+          restaurantId={restaurantId}
+          zones={zones}
+          tableCountByZoneName={tableCountByZoneName}
+          onClose={() => setManageZonesModal(false)}
+          onChanged={load}
           say={say}
           colors={colors}
           isDark={isDark}
@@ -522,85 +415,165 @@ export default function TablesPage() {
   );
 }
 
-// ── Table Modal ──
+// ── Shared small UI pieces ──
 
-function TableModal({
-  restaurantId,
-  edit,
-  onClose,
-  onSaved,
-  say,
-  colors,
-  isDark,
+function thStyle(colors: ReturnType<typeof getColors>, align: 'left' | 'right'): React.CSSProperties {
+  return {
+    padding: '10px 12px',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.subtle,
+    textAlign: align,
+    whiteSpace: 'nowrap',
+    fontFamily: "'Poppins', sans-serif",
+  };
+}
+
+function HeaderButton({
+  onClick, colors, children,
 }: {
-  restaurantId: string;
-  edit?: ApiTable;
+  onClick: () => void;
+  colors: ReturnType<typeof getColors>;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '8px 14px',
+        border: `1.5px solid ${colors.border}`,
+        borderRadius: 10,
+        background: colors.card,
+        fontWeight: 600,
+        fontSize: 13,
+        cursor: 'pointer',
+        color: colors.text,
+        fontFamily: "'Poppins', sans-serif",
+        outline: 'none',
+        transition: 'all 0.2s ease',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+        e.currentTarget.style.borderColor = BRAND;
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.boxShadow = 'none';
+        e.currentTarget.style.borderColor = colors.border;
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = colors.hoverBg;
+        e.currentTarget.style.borderColor = BRAND;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = colors.card;
+        e.currentTarget.style.borderColor = colors.border;
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function IconButton({
+  onClick, colors, danger, children,
+}: {
+  onClick: () => void;
+  colors: ReturnType<typeof getColors>;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 10px',
+        border: `1.5px solid ${colors.border}`,
+        borderRadius: 8,
+        background: colors.card,
+        fontWeight: 600,
+        fontSize: 13,
+        cursor: 'pointer',
+        color: danger ? colors.danger : colors.text,
+        marginRight: 6,
+        fontFamily: "'Poppins', sans-serif",
+        transition: 'all 0.2s ease',
+        outline: 'none',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+        e.currentTarget.style.borderColor = BRAND;
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.boxShadow = 'none';
+        e.currentTarget.style.borderColor = colors.border;
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = colors.hoverBg;
+        e.currentTarget.style.borderColor = BRAND;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = colors.card;
+        e.currentTarget.style.borderColor = colors.border;
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const inputStyleFor = (colors: ReturnType<typeof getColors>): React.CSSProperties => ({
+  width: '100%',
+  padding: '9px 12px',
+  border: `1.5px solid ${colors.border}`,
+  borderRadius: 10,
+  fontSize: 14,
+  fontFamily: "'Poppins', sans-serif",
+  boxSizing: 'border-box',
+  color: colors.text,
+  background: colors.bg,
+  outline: 'none',
+  transition: 'all 0.2s ease',
+});
+
+const labelStyleFor = (colors: ReturnType<typeof getColors>): React.CSSProperties => ({
+  display: 'block',
+  fontSize: 12,
+  fontWeight: 700,
+  color: colors.muted,
+  marginBottom: 5,
+  fontFamily: "'Poppins', sans-serif",
+});
+
+function focusHandlers(colors: ReturnType<typeof getColors>) {
+  return {
+    onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
+      e.currentTarget.style.borderColor = BRAND;
+      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+    },
+    onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
+      e.currentTarget.style.borderColor = colors.border;
+      e.currentTarget.style.boxShadow = 'none';
+    },
+  };
+}
+
+function ModalShell({
+  title, onClose, colors, isDark, children,
+}: {
+  title: string;
   onClose: () => void;
-  onSaved: () => void;
-  say: (m: string, k?: 'ok' | 'err') => void;
   colors: ReturnType<typeof getColors>;
   isDark: boolean;
+  children: React.ReactNode;
 }) {
-  const [f, setF] = useState({
-    tableNumber: edit?.tableNumber ?? '',
-    zone: edit?.zone ?? 'Main Hall',
-    outlet: edit?.outlet ?? 'Main Hall',
-    capacity: edit?.capacity ?? 4,
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
-
-  async function save() {
-    setSaving(true);
-    try {
-      if (edit) {
-        await updateTable(edit.tableId, f, restaurantId);
-        say('Table updated');
-      } else {
-        await createTable(f, restaurantId);
-        say('Table created');
-      }
-      onSaved();
-    } catch (e: any) {
-      say(e.message, 'err');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '9px 12px',
-    border: `1.5px solid ${colors.border}`,
-    borderRadius: 10,
-    fontSize: 14,
-    fontFamily: "'Poppins', sans-serif",
-    boxSizing: 'border-box',
-    color: colors.text,
-    background: colors.bg,
-    outline: 'none',
-    transition: 'all 0.2s ease',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: 12,
-    fontWeight: 700,
-    color: colors.muted,
-    marginBottom: 5,
-    fontFamily: "'Poppins', sans-serif",
-  };
-
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = BRAND;
-    e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = colors.border;
-    e.currentTarget.style.boxShadow = 'none';
-  };
-
   return (
     <div
       onClick={onClose}
@@ -624,7 +597,9 @@ function TableModal({
           borderRadius: 16,
           padding: 'clamp(20px, 3vw, 24px)',
           width: '100%',
-          maxWidth: 420,
+          maxWidth: 440,
+          maxHeight: '85vh',
+          overflowY: 'auto',
           border: `1px solid ${colors.border}`,
           boxShadow: `0 8px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)'}`,
         }}
@@ -642,7 +617,7 @@ function TableModal({
             color: colors.text,
             fontFamily: "'Poppins', sans-serif",
           }}>
-            {edit ? 'Edit Table' : 'New Table'}
+            {title}
           </h3>
           <button
             onClick={onClose}
@@ -659,12 +634,8 @@ function TableModal({
               transition: 'all 0.2s ease',
               outline: 'none',
             }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
+            onFocus={(e) => { e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`; }}
+            onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = colors.hoverBg;
               e.currentTarget.style.color = colors.text;
@@ -677,104 +648,432 @@ function TableModal({
             <X size={18} />
           </button>
         </div>
-
-        <div style={{ display: 'grid', gap: 14 }}>
-          <div>
-            <label style={labelStyle}>Table Number</label>
-            <input
-              style={inputStyle}
-              value={f.tableNumber}
-              placeholder="T1"
-              onChange={e => set('tableNumber', e.target.value)}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={labelStyle}>Zone</label>
-              <input
-                style={inputStyle}
-                value={f.zone}
-                placeholder="Enter zone"
-                onChange={e => set('zone', e.target.value)}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Outlet</label>
-              <input
-                style={inputStyle}
-                value={f.outlet}
-                placeholder="Enter outlet"
-                onChange={e => set('outlet', e.target.value)}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label style={labelStyle}>Seats</label>
-            <input
-              style={inputStyle}
-              type="number"
-              value={f.capacity}
-              placeholder="4"
-              onChange={e => set('capacity', parseInt(e.target.value) || 1)}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-            />
-          </div>
-
-          <button
-            onClick={save}
-            disabled={saving || !f.tableNumber.trim()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              padding: '10px 16px',
-              border: 'none',
-              borderRadius: 10,
-              background: BRAND,
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: saving || !f.tableNumber.trim() ? 'not-allowed' : 'pointer',
-              fontFamily: "'Poppins', sans-serif",
-              opacity: saving || !f.tableNumber.trim() ? 0.6 : 1,
-              transition: 'all 0.2s ease',
-              outline: 'none',
-            }}
-            onFocus={(e) => {
-              if (!saving && f.tableNumber.trim()) {
-                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
-              }
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            onMouseEnter={(e) => {
-              if (!saving && f.tableNumber.trim()) {
-                e.currentTarget.style.background = '#e64a1a';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!saving && f.tableNumber.trim()) {
-                e.currentTarget.style.background = BRAND;
-              }
-            }}
-          >
-            {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
-            {edit ? 'Save Changes' : 'Create'}
-          </button>
-        </div>
+        {children}
       </div>
     </div>
+  );
+}
+
+// ── Table Modal ──
+
+function TableModal({
+  restaurantId,
+  edit,
+  zones,
+  onClose,
+  onSaved,
+  say,
+  colors,
+  isDark,
+}: {
+  restaurantId: string;
+  edit?: ApiTable;
+  zones: ApiZone[];
+  onClose: () => void;
+  onSaved: () => void;
+  say: (m: string, k?: 'ok' | 'err') => void;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
+}) {
+  const [f, setF] = useState({
+    tableNumber: edit?.tableNumber ?? '',
+    zone: edit?.zone ?? (zones[0]?.name ?? 'Main Hall'),
+    outlet: edit?.outlet ?? (zones[0]?.outlet ?? 'Main Hall'),
+    capacity: edit?.capacity ?? 4,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k: string, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  const inputStyle = inputStyleFor(colors);
+  const labelStyle = labelStyleFor(colors);
+  const { onFocus: handleFocus, onBlur: handleBlur } = focusHandlers(colors);
+
+  function onZoneSelect(zoneName: string) {
+    const match = zones.find(z => z.name === zoneName);
+    setF(p => ({
+      ...p,
+      zone: zoneName,
+      outlet: match?.outlet ?? p.outlet,
+    }));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      if (edit) {
+        await updateTable(edit.tableId, f, restaurantId);
+        say('Table updated');
+      } else {
+        await createTable(f, restaurantId);
+        say('Table created');
+      }
+      onSaved();
+    } catch (e: any) {
+      say(e.message, 'err');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={edit ? 'Edit Table' : 'New Table'} onClose={onClose} colors={colors} isDark={isDark}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div>
+          <label style={labelStyle}>Table Number</label>
+          <input
+            style={inputStyle}
+            value={f.tableNumber}
+            placeholder="T1"
+            onChange={e => set('tableNumber', e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <label style={labelStyle}>Zone</label>
+            {zones.length > 0 ? (
+              <select
+                style={inputStyle}
+                value={f.zone}
+                onChange={e => onZoneSelect(e.target.value)}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+              >
+                {!zones.some(z => z.name === f.zone) && (
+                  <option value={f.zone}>{f.zone}</option>
+                )}
+                {zones.map(z => (
+                  <option key={z.id} value={z.name}>{z.name}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input
+                  style={inputStyle}
+                  value={f.zone}
+                  placeholder="Enter zone"
+                  onChange={e => set('zone', e.target.value)}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                />
+                <p style={{ fontSize: 11, color: colors.subtle, margin: '4px 0 0', fontFamily: "'Poppins', sans-serif" }}>
+                  No zones yet — create one via "New Zone" for a dropdown next time.
+                </p>
+              </>
+            )}
+          </div>
+          <div>
+            <label style={labelStyle}>Outlet</label>
+            <input
+              style={inputStyle}
+              value={f.outlet}
+              placeholder="Enter outlet"
+              onChange={e => set('outlet', e.target.value)}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Seats</label>
+          <input
+            style={inputStyle}
+            type="number"
+            value={f.capacity}
+            placeholder="4"
+            onChange={e => set('capacity', parseInt(e.target.value) || 1)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+        </div>
+
+        <button
+          onClick={save}
+          disabled={saving || !f.tableNumber.trim()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: 10,
+            background: BRAND,
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: saving || !f.tableNumber.trim() ? 'not-allowed' : 'pointer',
+            fontFamily: "'Poppins', sans-serif",
+            opacity: saving || !f.tableNumber.trim() ? 0.6 : 1,
+            transition: 'all 0.2s ease',
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            if (!saving && f.tableNumber.trim()) {
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}`;
+            }
+          }}
+          onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
+          onMouseEnter={(e) => {
+            if (!saving && f.tableNumber.trim()) {
+              e.currentTarget.style.background = '#e64a1a';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving && f.tableNumber.trim()) {
+              e.currentTarget.style.background = BRAND;
+            }
+          }}
+        >
+          {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
+          {edit ? 'Save Changes' : 'Create'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ── Create Zone Modal ──
+
+function CreateZoneModal({
+  restaurantId,
+  onClose,
+  onSaved,
+  say,
+  colors,
+  isDark,
+}: {
+  restaurantId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  say: (m: string, k?: 'ok' | 'err') => void;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
+}) {
+  const [name, setName] = useState('');
+  const [outlet, setOutlet] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const inputStyle = inputStyleFor(colors);
+  const labelStyle = labelStyleFor(colors);
+  const { onFocus: handleFocus, onBlur: handleBlur } = focusHandlers(colors);
+
+  async function save() {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await createZone({ name: name.trim(), outlet: outlet.trim() || undefined }, restaurantId);
+      say('Zone created');
+      onSaved();
+    } catch (e: any) {
+      say(e.message ?? 'Could not create zone', 'err');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title="New Zone" onClose={onClose} colors={colors} isDark={isDark}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div>
+          <label style={labelStyle}>Zone Name</label>
+          <input
+            style={inputStyle}
+            value={name}
+            placeholder="e.g. Rooftop"
+            onChange={e => setName(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Outlet</label>
+          <input
+            style={inputStyle}
+            value={outlet}
+            placeholder={name || 'Same as zone name if left blank'}
+            onChange={e => setOutlet(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+        </div>
+
+        <button
+          onClick={save}
+          disabled={saving || !name.trim()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: 10,
+            background: BRAND,
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: saving || !name.trim() ? 'not-allowed' : 'pointer',
+            fontFamily: "'Poppins', sans-serif",
+            opacity: saving || !name.trim() ? 0.6 : 1,
+            transition: 'all 0.2s ease',
+            outline: 'none',
+          }}
+        >
+          {saving && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
+          Create Zone
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ── Manage Zones Modal ──
+
+function ManageZonesModal({
+  restaurantId,
+  zones,
+  tableCountByZoneName,
+  onClose,
+  onChanged,
+  say,
+  colors,
+  isDark,
+}: {
+  restaurantId: string;
+  zones: ApiZone[];
+  tableCountByZoneName: Record<string, number>;
+  onClose: () => void;
+  onChanged: () => void;
+  say: (m: string, k?: 'ok' | 'err') => void;
+  colors: ReturnType<typeof getColors>;
+  isDark: boolean;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ name: '', outlet: '' });
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const inputStyle = { ...inputStyleFor(colors), padding: '7px 10px', fontSize: 13 };
+  const { onFocus: handleFocus, onBlur: handleBlur } = focusHandlers(colors);
+
+  function startEdit(z: ApiZone) {
+    setEditingId(z.id);
+    setDraft({ name: z.name, outlet: z.outlet });
+  }
+
+  async function saveEdit(zoneId: string) {
+    if (!draft.name.trim()) return;
+    setBusyId(zoneId);
+    try {
+      await updateZone(zoneId, { name: draft.name.trim(), outlet: draft.outlet.trim() || draft.name.trim() }, restaurantId);
+      say('Zone updated');
+      setEditingId(null);
+      onChanged();
+    } catch (e: any) {
+      say(e.message ?? 'Could not update zone', 'err');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function removeZone(z: ApiZone) {
+    const inUse = tableCountByZoneName[z.name] ?? 0;
+    const warning = inUse > 0
+      ? `"${z.name}" is used by ${inUse} table${inUse === 1 ? '' : 's'}. Removing it only takes it out of the "New Table" dropdown — those tables keep their zone. Continue?`
+      : `Delete zone "${z.name}"?`;
+    if (!confirm(warning)) return;
+
+    setBusyId(z.id);
+    try {
+      await deleteZone(z.id, restaurantId);
+      say('Zone deleted');
+      onChanged();
+    } catch (e: any) {
+      say(e.message ?? 'Could not delete zone', 'err');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <ModalShell title="Manage Zones" onClose={onClose} colors={colors} isDark={isDark}>
+      {zones.length === 0 ? (
+        <p style={{ fontSize: 13, color: colors.subtle, fontFamily: "'Poppins', sans-serif" }}>
+          No zones yet. Close this and use "New Zone" to create one.
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {zones.map(z => (
+            <div
+              key={z.id}
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: 10,
+                padding: 10,
+                background: colors.card2,
+              }}
+            >
+              {editingId === z.id ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <input
+                    style={inputStyle}
+                    value={draft.name}
+                    placeholder="Zone name"
+                    onChange={e => setDraft(p => ({ ...p, name: e.target.value }))}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    autoFocus
+                  />
+                  <input
+                    style={inputStyle}
+                    value={draft.outlet}
+                    placeholder="Outlet"
+                    onChange={e => setDraft(p => ({ ...p, outlet: e.target.value }))}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                  />
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <IconButton onClick={() => setEditingId(null)} colors={colors}>
+                      <X size={14} />
+                    </IconButton>
+                    <IconButton onClick={() => saveEdit(z.id)} colors={colors}>
+                      {busyId === z.id
+                        ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <Check size={14} />}
+                    </IconButton>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, fontFamily: "'Poppins', sans-serif" }}>
+                      {z.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: colors.subtle, fontFamily: "'Poppins', sans-serif" }}>
+                      Outlet: {z.outlet} · {tableCountByZoneName[z.name] ?? 0} table{(tableCountByZoneName[z.name] ?? 0) === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexShrink: 0 }}>
+                    <IconButton onClick={() => startEdit(z)} colors={colors}>
+                      <Edit2 size={14} />
+                    </IconButton>
+                    <IconButton onClick={() => removeZone(z)} colors={colors} danger>
+                      {busyId === z.id
+                        ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <Trash2 size={14} />}
+                    </IconButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </ModalShell>
   );
 }
 

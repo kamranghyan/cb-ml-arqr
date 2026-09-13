@@ -292,3 +292,82 @@ async def delete_restaurant(
                  admin=user.email, tenant_id=tenant_id, restaurant_id=restaurantId)
 
     return {"message": "Restaurant deleted"}
+
+@router.post(
+    "/restaurants/{restaurantId}/zones",
+    status_code=201,
+    summary="Create a dining-table zone (e.g. 'Main Hall', 'Rooftop')",
+)
+async def create_zone(
+    restaurantId: str,
+    request:      Request,
+    user:         Annotated[UserContext,       Depends(require_restaurant_manager)],
+    svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+):
+    body = await parse_body(request)
+    tenant_id = resolve_write_tenant(user, body.get("tenantId"))
+    assert_restaurant_scope(user, restaurantId)
+
+    try:
+        existing = svc.get(tenant_id, restaurantId)
+    except RestaurantNotFoundError as exc:
+        raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if existing.tenantId and existing.tenantId != tenant_id:
+        raise ForbiddenError("This restaurant belongs to another tenant.")
+
+    restaurant = svc.add_zone(tenant_id, restaurantId, body)
+    return restaurant.to_dict()
+
+
+@router.put(
+    "/restaurants/{restaurantId}/zones/{zoneId}",
+    summary="Rename a zone or change its outlet",
+)
+async def update_zone(
+    restaurantId: str,
+    zoneId:       str,
+    request:      Request,
+    user:         Annotated[UserContext,       Depends(require_restaurant_manager)],
+    svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+):
+    body = await parse_body(request)
+    tenant_id = resolve_write_tenant(user, body.get("tenantId"))
+    assert_restaurant_scope(user, restaurantId)
+
+    try:
+        existing = svc.get(tenant_id, restaurantId)
+    except RestaurantNotFoundError as exc:
+        raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if existing.tenantId and existing.tenantId != tenant_id:
+        raise ForbiddenError("This restaurant belongs to another tenant.")
+
+    restaurant = svc.update_zone(tenant_id, restaurantId, zoneId, body)
+    return restaurant.to_dict()
+
+
+@router.delete(
+    "/restaurants/{restaurantId}/zones/{zoneId}",
+    summary="Delete a zone",
+)
+async def delete_zone(
+    restaurantId: str,
+    zoneId:       str,
+    user:         Annotated[UserContext,       Depends(require_restaurant_manager)],
+    svc:          Annotated[RestaurantService, Depends(get_restaurant_service)],
+    tenantId:     Optional[str] = Query(None),
+):
+    tenant_id = resolve_write_tenant(user, tenantId)
+    assert_restaurant_scope(user, restaurantId)
+
+    try:
+        existing = svc.get(tenant_id, restaurantId)
+    except RestaurantNotFoundError as exc:
+        raise ResourceNotFoundError("Restaurant", restaurantId) from exc
+
+    if existing.tenantId and existing.tenantId != tenant_id:
+        raise ForbiddenError("This restaurant belongs to another tenant.")
+
+    restaurant = svc.delete_zone(tenant_id, restaurantId, zoneId)
+    return restaurant.to_dict()
