@@ -19,6 +19,12 @@ export interface ApiSocialMedia {
   facebook?: string | null
 }
 
+export interface ApiZone {
+  id: string
+  name: string
+  outlet: string
+}
+
 export interface ApiRestaurant {
   restaurantId: string
   tenantId?: string
@@ -38,6 +44,7 @@ export interface ApiRestaurant {
   deliveryNote?: string
   cuisineTags?: string[]
   socialMedia?: ApiSocialMedia
+  zones?: ApiZone[]
   createdAt?: string
   updatedAt?: string
 }
@@ -187,6 +194,59 @@ export async function updateRestaurant(
 
 export async function deleteRestaurant(restaurantId: string): Promise<void> {
   await adminFetch(`/restaurants/${restaurantId}`, { method: 'DELETE' })
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Zones
+// ══════════════════════════════════════════════════════════════════════════════
+// Zones live on the restaurant record itself, so "fetch zones" is really
+// "fetch the restaurant and read .zones" — no separate GET endpoint needed.
+
+export async function fetchZones(
+  restaurantId: string = RESTAURANT_ID
+): Promise<ApiZone[]> {
+  const restaurant = await fetchRestaurant(restaurantId)
+  return restaurant.zones ?? []
+}
+
+export async function createZone(
+  payload: { name: string; outlet?: string },
+  restaurantId: string = RESTAURANT_ID
+): Promise<ApiZone[]> {
+  const restaurant = await adminFetch<ApiRestaurant>(
+    `/restaurants/${restaurantId}/zones`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  )
+  return restaurant.zones ?? []
+}
+
+export async function updateZone(
+  zoneId: string,
+  payload: Partial<{ name: string; outlet: string }>,
+  restaurantId: string = RESTAURANT_ID
+): Promise<ApiZone[]> {
+  const restaurant = await adminFetch<ApiRestaurant>(
+    `/restaurants/${restaurantId}/zones/${zoneId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  )
+  return restaurant.zones ?? []
+}
+
+export async function deleteZone(
+  zoneId: string,
+  restaurantId: string = RESTAURANT_ID
+): Promise<ApiZone[]> {
+  const restaurant = await adminFetch<ApiRestaurant>(
+    `/restaurants/${restaurantId}/zones/${zoneId}`,
+    { method: 'DELETE' }
+  )
+  return restaurant.zones ?? []
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

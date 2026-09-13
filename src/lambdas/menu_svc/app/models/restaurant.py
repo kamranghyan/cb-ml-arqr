@@ -57,6 +57,15 @@ class Restaurant(BaseModel):
     # -- Social media links -----------------------------------------------
     socialMedia: dict[str, Optional[str]] = field(default_factory=dict)
 
+    # -- Dining-table zones -------------------------------------------------
+    # Each zone is {"id": "...", "name": "Main Hall", "outlet": "Main Hall"}.
+    # Created once via the "New Zone" modal, then reused as a dropdown option
+    # every time a new table is created — nobody retypes "Main Hall" by hand
+    # for the 30th table. The id is what "Manage Zones" edits/deletes by, so
+    # renaming a zone never breaks which one you meant. Lives on the
+    # restaurant record — no dedicated table needed.
+    zones: list[dict[str, str]] = field(default_factory=list)
+
     # -- DynamoDB key helpers -----------------------------------------------
 
     @property
@@ -106,6 +115,11 @@ class Restaurant(BaseModel):
 
             if len(self.cuisineTags) > 10:
                 errors["cuisineTags"] = "at most 10 tags"
+
+        # -- Zones --------------------------------------------------------
+        for i, zone in enumerate(self.zones):
+            if not isinstance(zone, dict) or not str(zone.get("name", "")).strip():
+                errors[f"zones.{i}"] = "each zone needs a non-empty name"
 
         # -- Social media links --------------------------------------------
         allowed_socials = {
@@ -179,6 +193,9 @@ class Restaurant(BaseModel):
         if self.cuisineTags or not exclude_none:
             data["cuisineTags"] = self.cuisineTags
 
+        if self.zones or not exclude_none:
+            data["zones"] = self.zones
+
         data["socialMedia"] = self.socialMedia
 
         return data
@@ -225,6 +242,7 @@ class Restaurant(BaseModel):
                 int(data["ratingCount"]) if data.get("ratingCount") is not None else None
             ),
             socialMedia=dict(data.get("socialMedia") or {}),
+            zones=list(data.get("zones") or []),
         )
 
     @classmethod

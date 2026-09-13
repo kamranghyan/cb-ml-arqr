@@ -22,6 +22,8 @@ import boto3
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
+from shared.exceptions import BadRequestError, ResourceNotFoundError
+
 from app.models.restaurant import Restaurant
 from app.models.address import Address
 from app.services.cache_service import CacheService
@@ -196,6 +198,114 @@ class RestaurantService:
             "tenantId": tenant_id, "restaurantId": restaurant_id
         })
         return restaurant
+
+    # ── Zones ────────────────────────────────────────────────────────────
+    #
+    # Zones live on the restaurant record as a small list, not a dedicated
+    # table — "Main Hall", "Rooftop" etc. rarely number more than a dozen
+    # per branch. Each zone gets an id at creation, so renaming one never
+    # changes which one "Manage Zones" is editing/deleting.
+
+    def add_zone(self, tenant_id: str, restaurant_id: str, zone: dict) -> Restaurant:
+        """
+        Atomically append one zone to the restaurant's zone list.
+
+        Uses list_append instead of get→modify→put so two admins creating a
+        zone at the same moment never clobber each other's entry.
+        """
+        self.get(tenant_id, restaurant_id)  # 404 guard
+
+        name = str(zone.get("name", "")).strip()
+        if not name:
+            raise BadRequestError("Zone name is required")
+
+        outlet = str(zone.get("outlet") or name).strip()
+        new_zone = {"id": new_id(), "name": name, "outlet": outlet}
+
+        resp = self._table.update_item(
+            Key={"restaurantId": restaurant_id},
+            UpdateExpression=(
+                "SET #z = list_append(if_not_exists(#z, :empty), :new_zone), "
+                "updatedAt = :now"
+            ),
+            ExpressionAttributeNames={"#z": "zones"},
+            ExpressionAttributeValues={
+                ":empty": [],
+                ":new_zone": [new_zone],
+                ":now": utc_now(),
+            },
+            ReturnValues="ALL_NEW",
+        )
+
+        self._cache.delete(self._cache_key(tenant_id, restaurant_id))
+
+        restaurant = Restaurant.from_dict(decimal_to_python(resp.get("Attributes", {})))
+        log.info("Restaurant zone added", extra={
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "zoneName": name,
+        })
+        return restaurant
+
+    @staticmethod
+    def _find_zone_index(restaurant: Restaurant, zone_id: str) -> int:
+        for i, z in enumerate(restaurant.zones):
+            if z.get("id") == zone_id:
+                return i
+        raise ResourceNotFoundError("Zone", zone_id)
+
+    def update_zone(
+        self, tenant_id: str, restaurant_id: str, zone_id: str, updates: dict,
+    ) -> Restaurant:
+        """
+        Rename a zone / change its outlet. Existing tables that already use
+        the old zone name keep whatever they were saved with — this only
+        changes what appears in the "New Table" dropdown going forward.
+        """
+        restaurant = self.get(tenant_id, restaurant_id)
+        idx = self._find_zone_index(restaurant, zone_id)
+
+        current = restaurant.zones[idx]
+        name = str(updates.get("name", current.get("name", ""))).strip()
+        outlet = str(updates.get("outlet", current.get("outlet", ""))).strip()
+
+        if not name:
+            raise BadRequestError("Zone name is required")
+
+        resp = self._table.update_item(
+            Key={"restaurantId": restaurant_id},
+            UpdateExpression=f"SET zones[{idx}] = :zone, updatedAt = :now",
+            ExpressionAttributeValues={
+                ":zone": {"id": zone_id, "name": name, "outlet": outlet},
+                ":now": utc_now(),
+            },
+            ReturnValues="ALL_NEW",
+        )
+
+        self._cache.delete(self._cache_key(tenant_id, restaurant_id))
+
+        updated = Restaurant.from_dict(decimal_to_python(resp.get("Attributes", {})))
+        log.info("Restaurant zone updated", extra={
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "zoneId": zone_id,
+        })
+        return updated
+
+    def delete_zone(self, tenant_id: str, restaurant_id: str, zone_id: str) -> Restaurant:
+        restaurant = self.get(tenant_id, restaurant_id)
+        idx = self._find_zone_index(restaurant, zone_id)
+
+        resp = self._table.update_item(
+            Key={"restaurantId": restaurant_id},
+            UpdateExpression=f"REMOVE zones[{idx}] SET updatedAt = :now",
+            ExpressionAttributeValues={":now": utc_now()},
+            ReturnValues="ALL_NEW",
+        )
+
+        self._cache.delete(self._cache_key(tenant_id, restaurant_id))
+
+        updated = Restaurant.from_dict(decimal_to_python(resp.get("Attributes", {})))
+        log.info("Restaurant zone deleted", extra={
+            "tenantId": tenant_id, "restaurantId": restaurant_id, "zoneId": zone_id,
+        })
+        return updated
 
     def list_all(
         self,
