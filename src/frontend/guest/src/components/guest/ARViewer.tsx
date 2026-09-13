@@ -57,6 +57,33 @@ async function checkWebXR(): Promise<boolean> {
   }
 }
 
+// ✅ Free every GPU resource a loaded glTF scene is holding — geometry,
+// materials, and every texture map on every material. THREE's own
+// renderer.dispose() only releases the renderer/context, never the
+// model data it rendered. Without this, every AR-page visit leaks a
+// full copy of the model's geometry + textures in GPU memory, and after
+// a handful of visits the browser silently can't allocate a new WebGL
+// context — the next canvas just stays blank, no error thrown.
+function disposeObject3D(obj: THREE.Object3D | null) {
+  if (!obj) return;
+  obj.traverse((child: any) => {
+    if (child.geometry) {
+      child.geometry.dispose();
+    }
+    if (child.material) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((mat: THREE.Material) => {
+        Object.values(mat as any).forEach((value: any) => {
+          if (value && typeof value.dispose === 'function' && value.isTexture) {
+            value.dispose();
+          }
+        });
+        mat.dispose();
+      });
+    }
+  });
+}
+
 export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽️' }: Props) {
   const { isDark } = useTheme();
   const colors = getColors(isDark);
@@ -77,6 +104,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
   };
 
   const threeRef = useRef<any>(null);
+  const loadTokenRef = useRef(0); // ✅ guards against a stale/duplicate loadModel() finishing late
   const xrRef = useRef<any>({
     session: null,
     hitSrc: null,
@@ -88,24 +116,18 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     placed: false,
     refSpace: null,
     cameraCleanup: null,
-    // ✅ Every DOM node ever appended directly to <body> for an AR
-    // attempt (WebXR overlay OR camera fallback) gets tracked here.
-    // This is the single source of truth for teardown, so a node can
-    // never be leaked no matter which code path created it or where
-    // that path failed.
+    // Every DOM node ever appended directly to <body> for an AR attempt
+    // (WebXR overlay OR camera fallback) gets tracked here — the single
+    // source of truth for teardown, so nothing can leak regardless of
+    // which code path created it or where it failed.
     domNodes: [] as HTMLElement[],
   });
 
-  // ✅ Register a body-level DOM node so it is guaranteed removable.
   function trackDom<T extends HTMLElement>(el: T): T {
     xrRef.current.domNodes.push(el);
     return el;
   }
 
-  // ✅ Remove every tracked body-level DOM node. Safe to call multiple
-  // times, safe to call when nothing was ever created, and — critically
-  // — safe to call from an error handler where we don't know exactly
-  // how far setup got before it failed.
   function cleanupArDom() {
     xrRef.current.domNodes.forEach((el: HTMLElement) => {
       try {
@@ -133,15 +155,25 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     }
 
     return () => {
+      // Invalidate any in-flight load so its .then()/.onProgress callbacks
+      // become no-ops if they resolve after we've already torn down.
+      loadTokenRef.current += 1;
+
       if (threeRef.current) {
         cancelAnimationFrame(threeRef.current.animId);
+        threeRef.current.cleanup?.();
+        disposeObject3D(threeRef.current.scene);
+        // ✅ forceContextLoss(), not just dispose() — this is what
+        // actually returns the WebGL context slot to the browser
+        // immediately instead of waiting on GC timing. This one line is
+        // the fix for "model doesn't show up when I come back".
+        threeRef.current.renderer?.forceContextLoss();
         threeRef.current.renderer?.dispose();
         threeRef.current = null;
       }
       if (xrRef.current.cameraCleanup) xrRef.current.cameraCleanup();
       xrRef.current.session?.end().catch(() => { });
-      // ✅ Belt-and-braces: whatever happens above, nothing we ever put
-      // on <body> should still be there once this component is gone.
+      xrRef.current.renderer?.forceContextLoss?.();
       cleanupArDom();
     };
   }, [glbUrl]);
@@ -150,10 +182,12 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     if (status !== 'loading-model') return;
     if (!canvasRef.current) return;
     loadModel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, isMobile]);
 
   function loadModel() {
     const canvas = canvasRef.current!;
+    const myToken = ++loadTokenRef.current;
     log('Starting Three.js...');
 
     const w = canvas.clientWidth || window.innerWidth;
@@ -161,25 +195,63 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(isDark ? 0x0f0d0a : 0xf5f0e8);
+    scene.fog = new THREE.Fog(isDark ? 0x0f0d0a : 0xf5f0e8, 6, 16);
 
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 100);
     camera.position.set(0, 0.5, 2);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
+    renderer.toneMappingExposure = 1.3;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dir = new THREE.DirectionalLight(0xffeedd, 2.5);
-    dir.position.set(3, 5, 3);
-    scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xaaccff, 0.5);
-    fill.position.set(-3, 2, -2);
-    scene.add(fill);
-    scene.add(new THREE.GridHelper(4, 20, isDark ? 0x222222 : 0xcccccc, isDark ? 0x1a1a1a : 0xeeeeee));
+    // ── Lighting (matches the nicer desktop-viewer treatment) ──
+    const keyLight = new THREE.DirectionalLight(0xffd4a0, 2.4);
+    keyLight.position.set(3, 5, 3);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xaaccff, 0.7);
+    fillLight.position.set(-3, 2, -2);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xffa040, 1.0);
+    rimLight.position.set(0, -1, -4);
+    scene.add(rimLight);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+    // ── Ground shadow disc + gold accent ring ──
+    const groundGeo = new THREE.CircleGeometry(1.4, 64);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: isDark ? 0x1a1510 : 0xe8e0d8,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      opacity: isDark ? 0.5 : 0.3,
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const ringGeo = new THREE.TorusGeometry(0.65, 0.007, 16, 128);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: isDark ? 0xd4a34e : 0xc4873c,
+      metalness: 0.9,
+      roughness: 0.1,
+      emissive: isDark ? 0xd4a34e : 0xc4873c,
+      emissiveIntensity: 0.15,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    scene.add(ring);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -188,6 +260,8 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     controls.autoRotateSpeed = 1.5;
     controls.enableZoom = true;
     controls.enablePan = false;
+    controls.minDistance = 0.8;
+    controls.maxDistance = 6;
     controls.target.set(0, 0.3, 0);
 
     log('Loading GLB...');
@@ -195,6 +269,13 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     loader.load(
       glbUrl,
       (gltf: any) => {
+        if (myToken !== loadTokenRef.current) {
+          // Component moved on (unmounted, or a newer load started) while
+          // this fetch was in flight — dispose what we just loaded instead
+          // of adding it to a scene nobody's rendering anymore.
+          disposeObject3D(gltf.scene);
+          return;
+        }
         const model = gltf.scene;
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
@@ -203,15 +284,23 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
         const center = box.getCenter(new THREE.Vector3());
         model.position.sub(center.multiplyScalar(scale));
         model.position.y = -box.min.y * scale;
+        model.traverse((child: any) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
         scene.add(model);
         setLoadPct(100);
         setStatus('model-ready');
         log('GLB loaded OK ✓');
       },
       (xhr: any) => {
+        if (myToken !== loadTokenRef.current) return;
         if (xhr.total) setLoadPct(Math.round((xhr.loaded / xhr.total) * 100));
       },
       (err: any) => {
+        if (myToken !== loadTokenRef.current) return;
         log(`GLB error: ${err?.message}`);
         setErrorMsg('Failed to load 3D model. Presigned URL may have expired — refresh.');
         setStatus('error');
@@ -221,6 +310,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     let animId: number = 0;
     const tick = () => {
       animId = requestAnimationFrame(tick);
+      ring.rotation.z += 0.004;
       controls.update();
       renderer.render(scene, camera);
     };
@@ -236,16 +326,15 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     window.addEventListener('resize', onResize);
 
     threeRef.current = {
-      renderer, animId, camera, controls,
-      cleanup: () => window.removeEventListener('resize', onResize),
+      renderer, animId, camera, controls, scene,
+      cleanup: () => {
+        window.removeEventListener('resize', onResize);
+        controls.dispose();
+      },
     };
   }
 
   async function startAR() {
-    // ✅ Ignore repeat taps while an AR session is already active —
-    // launching a second stream/canvas on top of the first was another
-    // way this screen could end up stacking multiple full-screen
-    // overlays and getting stuck.
     if (status === 'ar-active') return;
 
     log('Starting AR...');
@@ -453,7 +542,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
           xr.model.position.copy(pos);
           xr.model.quaternion.copy(rot);
         } else {
-          xr.model.position.set(0, -0.3, -0.8);
+          xr.model.position.set(0, -0.1, -0.8);
         }
 
         xr.model.visible = true;
@@ -539,13 +628,12 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
         touchLayer.removeEventListener('touchstart', onTouchStart);
         touchLayer.removeEventListener('touchmove', onTouchMove);
         arRenderer.setAnimationLoop(null);
+        disposeObject3D(arScene);
+        arRenderer.forceContextLoss();
         arRenderer.dispose();
-        // ✅ Single call removes arRenderer.domElement AND domOverlayRoot
-        // (and everything inside it) — no separate .remove() calls to
-        // forget or get wrong.
         cleanupArDom();
         Object.assign(xrRef.current, {
-          session: null, hitSrc: null, model: null, placed: false,
+          session: null, hitSrc: null, model: null, placed: false, renderer: null,
         });
         setStatus('model-ready');
         setPlaced(false);
@@ -554,15 +642,6 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
     } catch (err: any) {
       log(`WebXR error: ${err?.message ?? String(err)}`);
       log('Falling back to camera AR...');
-      // ✅ THE FIX: if requestSession() (or anything after it) throws,
-      // arRenderer.domElement and domOverlayRoot were already appended
-      // to <body> — and since the session never started, its 'end'
-      // event (the ONLY place that used to clean these up) never fires.
-      // They used to sit there forever: full-screen, touch-action:none,
-      // silently blocking every click and swipe-back gesture, with
-      // startCameraAR()'s own UI rendering uselessly underneath them.
-      // Removing them here, before falling back, is what actually fixes
-      // the "everything is stuck" symptom.
       cleanupArDom();
       await startCameraAR();
     }
@@ -619,7 +698,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
           model.scale.setScalar(scale);
           const center = box.getCenter(new THREE.Vector3());
           model.position.sub(center.multiplyScalar(scale));
-          model.position.set(0, -0.3, -1.2);
+          model.position.set(0, -0.1, -1.2);
           arScene.add(model);
           xrRef.current.model = model;
           log('Camera AR model placed ✓');
@@ -686,9 +765,9 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
         stream?.getTracks().forEach(t => t.stop());
         arRenderer.domElement.removeEventListener('touchstart', onTouchStart);
         arRenderer.domElement.removeEventListener('touchmove', onTouchMove);
+        disposeObject3D(arScene);
+        arRenderer.forceContextLoss();
         arRenderer.dispose();
-        // ✅ Removes both `video` and `arRenderer.domElement` (both were
-        // tracked above) in one guaranteed step.
         cleanupArDom();
       };
 
@@ -703,8 +782,6 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
 
     } catch (err: any) {
       log(`Camera AR error: ${err?.message}`);
-      // ✅ Whatever got created before the failure (stream and/or the
-      // video element) gets torn down instead of leaking.
       stream?.getTracks().forEach(t => t.stop());
       cleanupArDom();
       setErrorMsg(
@@ -722,9 +799,6 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
       xrRef.current.cameraCleanup = null;
     }
     xrRef.current.session?.end().catch(() => { });
-    // ✅ Safety net: covers the case where a WebXR session's 'end' event
-    // hasn't fired yet, or something was left over from an earlier
-    // failed attempt.
     cleanupArDom();
     setStatus('model-ready');
     setPlaced(false);
@@ -733,7 +807,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
   function reposition() {
     const xr = xrRef.current;
     if (xr.model) {
-      xr.model.position.set(0, -0.3, -1.2);
+      xr.model.position.set(0, -0.1, -1.2);
       xr.model.rotation.set(0, 0, 0);
       xr.model.scale.setScalar(0.4);
     }
@@ -845,9 +919,9 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
             position: 'absolute',
             left: 0,
             right: 0,
+            top: 80,
             display: 'flex',
             justifyContent: 'center',
-            bottom: 150,
             pointerEvents: 'none',
           }}
         >
@@ -878,7 +952,7 @@ export default function ARViewer({ glbUrl, itemName = 'Menu Item', emoji = '🍽
             right: 0,
             display: 'flex',
             justifyContent: 'center',
-            bottom: 70,
+            bottom: 50,
             pointerEvents: 'auto',
           }}
         >
