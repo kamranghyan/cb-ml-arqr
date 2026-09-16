@@ -35,6 +35,12 @@ variable "ar_models_bucket_regional_domain" {
 
 # --- UI bucket inputs ---------------------------------------------------------
 
+variable "enable_waf" {
+  description = "Attach a CloudFront-scoped WAFv2 WebACL. Off by default for dev (cost + the us-east-1 CLOUDFRONT-scope quirk) — turn on for staging/prod."
+  type        = bool
+  default     = false
+}
+
 variable "guest_ui_bucket_name" {
   type = string
 }

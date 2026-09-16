@@ -7,7 +7,7 @@ terraform {
     aws = {
       source                = "hashicorp/aws"
       version               = "~> 5.0"
-      configuration_aliases = [ aws.us_east_1 ] # <-- This passes the provider into the module
+      configuration_aliases = [aws.us_east_1] # <-- This passes the provider into the module
     }
   }
 }
@@ -78,9 +78,9 @@ resource "aws_cognito_user_pool_client" "admin" {
   ]
 
   # Token expiry
-  access_token_validity  = 1   # 1 hour
-  id_token_validity      = 1   # 1 hour
-  refresh_token_validity = 30  # 30 days
+  access_token_validity  = 1  # 1 hour
+  id_token_validity      = 1  # 1 hour
+  refresh_token_validity = 30 # 30 days
 
   token_validity_units {
     access_token  = "hours"
@@ -131,7 +131,7 @@ resource "aws_cognito_user_pool_client" "guest" {
 # -----------------------------------------------------------------------------
 resource "aws_cognito_identity_pool" "main" {
   identity_pool_name               = "${local.name_prefix}-identity-pool"
-  allow_unauthenticated_identities = true  # guests don't need to log in
+  allow_unauthenticated_identities = true # guests don't need to log in
 
   cognito_identity_providers {
     client_id               = aws_cognito_user_pool_client.admin.id

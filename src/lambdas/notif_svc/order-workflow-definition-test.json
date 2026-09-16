@@ -5,7 +5,7 @@
 
     "MarkReceived": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",
@@ -26,7 +26,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sqs:sendMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
+        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/990016797093/notifications-queue-dev",
         "MessageBody": {
           "orderId.$": "$.orderId",
           "tenantId.$": "$.tenantId",
@@ -56,7 +56,7 @@
 
     "MarkPreparing": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",
@@ -77,7 +77,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sqs:sendMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
+        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/990016797093/notifications-queue-dev",
         "MessageBody": {
           "orderId.$": "$.orderId",
           "tenantId.$": "$.tenantId",
@@ -107,7 +107,7 @@
 
     "MarkReady": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",
@@ -128,7 +128,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sqs:sendMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
+        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/990016797093/notifications-queue-dev",
         "MessageBody": {
           "orderId.$": "$.orderId",
           "tenantId.$": "$.tenantId",
@@ -158,7 +158,7 @@
 
     "MarkDelivered": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",
@@ -179,7 +179,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sqs:sendMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
+        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/990016797093/notifications-queue-dev",
         "MessageBody": {
           "orderId.$": "$.orderId",
           "tenantId.$": "$.tenantId",
@@ -194,7 +194,7 @@
 
     "MarkCancelled": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",
@@ -215,7 +215,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sqs:sendMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/833090513377/notifications-queue-dev",
+        "QueueUrl": "https://sqs.ap-south-1.amazonaws.com/990016797093/notifications-queue-dev",
         "MessageBody": {
           "orderId.$": "$.orderId",
           "tenantId.$": "$.tenantId",
@@ -230,7 +230,7 @@
 
     "MarkTimedOut": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:ap-south-1:833090513377:function:orders-lambda-prod",
+      "Resource": "arn:aws:lambda:ap-south-1:990016797093:function:orders-lambda-prod",
       "Parameters": {
         "source": "stepfunctions",
         "orderId.$": "$.orderId",

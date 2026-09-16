@@ -77,20 +77,29 @@ output "ssm_api_key_path" {
   value = module.secrets.api_key_path
 }
 
-# --- Cloud Watch logs group (for Lambda) ---------------------------------
+# --- CloudWatch ---------------------------------------------------------
+# NOTE: these still reference the old mock service names (menu-service,
+# order-service, ...) — stale since the Compute rebuild. The real per-service
+# log groups (/aws/lambda/cb-ml-dev-menu-svc etc.) are created directly
+# inside the compute module now. Cleaning up this duplication in the
+# observability module is a follow-up, not done yet.
 
 output "log_group_names" {
-  description = "CloudWatch log group names per Lambda"
-  value       = module.observability.log_group_names
+  value = module.observability.log_group_names
 }
 
-# --- Compute -----
-
-output "api_gateway_url" {
-  description = "API base URL — paste into frontend index.html"
-  value       = module.compute.api_gateway_url
-}
+# --- Compute -------------------------------------------------------------
+# api_gateway_url removed — API Gateway is out of the compute module now
+# (see module README). It comes back once the `api` module lands.
 
 output "lambda_function_names" {
   value = module.compute.lambda_function_names
+}
+
+output "lambda_function_arns" {
+  value = module.compute.lambda_function_arns
+}
+
+output "shared_layer_arn" {
+  value = module.compute.shared_layer_arn
 }

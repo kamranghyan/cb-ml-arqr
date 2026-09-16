@@ -11,7 +11,7 @@ terraform {
     aws = {
       source                = "hashicorp/aws"
       version               = "~> 5.0"
-      configuration_aliases = [ aws.us_east_1 ] # <-- Keep this ONLY in the modules directory!
+      configuration_aliases = [aws.us_east_1] # <-- Keep this ONLY in the modules directory!
     }
   }
 }
@@ -36,20 +36,21 @@ data "aws_caller_identity" "current" {}
 # =============================================================================
 
 resource "aws_wafv2_web_acl" "main" {
+  count       = var.enable_waf ? 1 : 0
   provider    = aws.us_east_1
   name        = "${local.name_prefix}-waf"
   description = "WAF for ${local.name_prefix}"
   scope       = "CLOUDFRONT"
 
-  default_action { 
-    allow {} 
+  default_action {
+    allow {}
   }
 
   rule {
     name     = "AWSManagedRulesCommonRuleSet"
     priority = 1
-    override_action { 
-      none {} 
+    override_action {
+      none {}
     }
     statement {
       managed_rule_group_statement {
@@ -67,8 +68,8 @@ resource "aws_wafv2_web_acl" "main" {
   rule {
     name     = "AWSManagedRulesKnownBadInputsRuleSet"
     priority = 2
-    override_action { 
-      none {} 
+    override_action {
+      none {}
     }
     statement {
       managed_rule_group_statement {
@@ -86,8 +87,8 @@ resource "aws_wafv2_web_acl" "main" {
   rule {
     name     = "RateLimitPerIP"
     priority = 3
-    action { 
-      block {} 
+    action {
+      block {}
     }
     statement {
       rate_based_statement {
@@ -162,10 +163,10 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "${local.name_prefix}"
+  comment             = local.name_prefix
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  web_acl_id          = aws_wafv2_web_acl.main.arn
+  web_acl_id          = var.enable_waf ? aws_wafv2_web_acl.main[0].arn : ""
   aliases             = local.has_domain ? [var.domain_name] : []
 
   # --- Origins ---------------------------------------------------------------

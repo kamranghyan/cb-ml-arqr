@@ -10,7 +10,7 @@ terraform {
     aws = {
       source                = "hashicorp/aws"
       version               = "~> 5.0"
-      configuration_aliases = [ aws.us_east_1 ] # <-- This passes the provider into the module
+      configuration_aliases = [aws.us_east_1] # <-- This passes the provider into the module
     }
   }
 }

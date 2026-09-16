@@ -15,10 +15,6 @@ output "tenant_table_name" {
   value = aws_dynamodb_table.tenant.name
 }
 
-output "connection_table_name" {
-  value = aws_dynamodb_table.connection.name
-}
-
 output "dynamodb_table_arns" {
   value = [
     aws_dynamodb_table.menu.arn,
@@ -77,3 +73,34 @@ output "bucket_admin_ui_name" {
 output "bucket_admin_ui_regional_domain" {
   value = aws_s3_bucket.this["admin_ui"].bucket_regional_domain_name
 }
+
+output "guest_ui_website_endpoint" {
+  value = var.enable_direct_s3_hosting ? aws_s3_bucket_website_configuration.ui["guest_ui"].website_endpoint : null
+}
+
+output "admin_ui_website_endpoint" {
+  value = var.enable_direct_s3_hosting ? aws_s3_bucket_website_configuration.ui["admin_ui"].website_endpoint : null
+}
+
+output "kds_ui_website_endpoint" {
+  value = var.enable_direct_s3_hosting ? aws_s3_bucket_website_configuration.ui["kds_ui"].website_endpoint : null
+}
+
+output "connection_table_name" {
+  value = aws_dynamodb_table.connection.name
+}
+
+output "ws_order_subscriptions_table_name" {
+  value = aws_dynamodb_table.ws_order_subscriptions.name
+}
+
+output "connection_table_arn" {
+  value = aws_dynamodb_table.connection.arn
+}
+output "ws_order_subscriptions_table_arn" {
+  value = aws_dynamodb_table.ws_order_subscriptions.arn
+}
+
+output "order_table_stream_arn" {
+    value = aws_dynamodb_table.order.stream_arn
+  }

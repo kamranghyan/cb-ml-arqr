@@ -23,6 +23,12 @@ variable "owner" {
   default     = "cb-ml-team"
 }
 
+variable "enable_direct_s3_hosting" {
+  description = "TEMPORARY: serve UI buckets as public S3 static websites, bypassing CloudFront. Only for testing while the CloudFront account-verification ticket is open. Keep false otherwise."
+  type        = bool
+  default     = false
+}
+
 locals {
   common_tags = {
     Project     = var.prefix

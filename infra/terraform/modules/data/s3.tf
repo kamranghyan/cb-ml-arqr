@@ -4,19 +4,24 @@
 
 locals {
   buckets = {
-    # Asset buckets
-    menu_assets       = "${var.prefix}-${var.environment}-menu-assets"
-    ar_models         = "${var.prefix}-${var.environment}-ar-models"
-    analytics_archive = "${var.prefix}-${var.environment}-analytics-archive"
-    logs              = "${var.prefix}-${var.environment}-logs"
+    menu_assets       = "${var.prefix}-${var.environment}-ml-menu-assets"
+    ar_models         = "${var.prefix}-${var.environment}-ml-ar-models"
+    analytics_archive = "${var.prefix}-${var.environment}-ml-analytics-archive"
+    logs              = "${var.prefix}-${var.environment}-ml-logs"
+    invoices          = "${var.prefix}-${var.environment}-invoices"
 
-    # UI buckets — one per interface
-    guest_ui          = "${var.prefix}-${var.environment}-guest-ui"
-    kds_ui            = "${var.prefix}-${var.environment}-kds-ui"
-    admin_ui          = "${var.prefix}-${var.environment}-admin-ui"
+    guest_ui = "${var.prefix}-${var.environment}-ml-guest-ui"
+    kds_ui   = "${var.prefix}-${var.environment}-ml-kds-ui"
+    admin_ui = "${var.prefix}-${var.environment}-ml-admin-ui"
   }
 
   versioned_buckets = ["menu_assets", "ar_models"]
+
+  # UI buckets are the only ones that ever go public, and only while
+  # enable_direct_s3_hosting = true — a stopgap for testing before CloudFront
+  # is available on this account (see infra-README for the AWS Support ticket
+  # status). Everything else stays locked down regardless of this flag.
+  ui_buckets = ["guest_ui", "kds_ui", "admin_ui"]
 }
 
 resource "aws_s3_bucket" "this" {
@@ -31,10 +36,10 @@ resource "aws_s3_bucket_public_access_block" "this" {
   for_each = local.buckets
   bucket   = aws_s3_bucket.this[each.key].id
 
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  block_public_acls  = true
+  ignore_public_acls = true
+  block_public_policy     = contains(local.ui_buckets, each.key) && var.enable_direct_s3_hosting ? false : true
+  restrict_public_buckets = contains(local.ui_buckets, each.key) && var.enable_direct_s3_hosting ? false : true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
@@ -82,4 +87,40 @@ resource "aws_s3_bucket_lifecycle_configuration" "analytics" {
       storage_class = "GLACIER"
     }
   }
+}
+
+# =============================================================================
+# TEMPORARY DIRECT S3 HOSTING — testing only, while CloudFront is blocked.
+# Off by default. Flip enable_direct_s3_hosting back to false (and re-apply)
+# once the CloudFront account verification clears.
+# =============================================================================
+
+resource "aws_s3_bucket_website_configuration" "ui" {
+  for_each = var.enable_direct_s3_hosting ? toset(local.ui_buckets) : toset([])
+  bucket   = aws_s3_bucket.this[each.key].id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "404.html"
+  }
+}
+
+resource "aws_s3_bucket_policy" "ui_public_read" {
+  for_each   = var.enable_direct_s3_hosting ? toset(local.ui_buckets) : toset([])
+  bucket     = aws_s3_bucket.this[each.key].id
+  depends_on = [aws_s3_bucket_public_access_block.this]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "PublicReadForTesting"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.this[each.key].arn}/*"
+    }]
+  })
 }

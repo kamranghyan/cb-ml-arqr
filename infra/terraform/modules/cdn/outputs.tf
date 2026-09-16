@@ -24,5 +24,5 @@ output "cloudfront_distribution_arn" {
 
 output "waf_web_acl_arn" {
   description = "WAF WebACL ARN — attach to API Gateway in Step 8"
-  value       = aws_wafv2_web_acl.main.arn
+  value       = var.enable_waf ? aws_wafv2_web_acl.main[0].arn : null
 }

@@ -1,33 +1,54 @@
-# ============================================================================= 
-# DEV ENVIRONMENT 
-# ============================================================================= 
-terraform { 
-  required_version = ">= 1.10.0" # UPGRADED: Matches your pipeline engine
-  required_providers { 
-    aws = { 
-      source            = "hashicorp/aws" 
-      version           = "~> 5.0" 
-    } 
-  } 
+# =============================================================================
+# DEV ENVIRONMENT
+# =============================================================================
+terraform {
+  required_version = ">= 1.10.0"
 
-  backend "s3" { 
-    bucket  = "cb-ml-arqr-terraform-state-833090513377" 
-    key     = "dev/main/terraform.tfstate" 
-    region  = "ap-south-1" 
-    encrypt = true 
-  } 
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  # Backend config lives in backend.tf, not here — see that file.
 }
 
-# The aliased provider for edge services (Virginia)
+# -----------------------------------------------------------------------------
+# Default provider — ap-south-1, used by every module unless it explicitly
+# requests the us_east_1 alias below. Credentials come from the same
+# TF_VAR_aws_access_key / TF_VAR_aws_secret_key used everywhere else in this
+# environment (see variables.tf and the CI workflow) so local runs and CI
+# authenticate the same way.
+# -----------------------------------------------------------------------------
 provider "aws" {
-  alias      = "us_east_1"   # <-- MUST match the alias string exactly
-  region     = "us-east-1"
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.prefix
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Owner       = var.owner
+    }
+  }
 }
 
-# ... the rest of your modules (data, secrets, etc.) can remain exactly as they were
+# The aliased provider for edge services (Virginia) — required for WAF/ACM
+# resources used by the CDN module, which must live in us-east-1.
+provider "aws" {
+  alias  = "us_east_1" # <-- MUST match the alias string exactly
+  region = "us-east-1"
 
+  default_tags {
+    tags = {
+      Project     = var.prefix
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Owner       = var.owner
+    }
+  }
+}
 
 # -----------------------------------------------------------------------------
 # Step 5 — DATA MODULE
@@ -37,6 +58,8 @@ module "data" {
   prefix      = var.prefix
   environment = var.environment
   owner       = var.owner
+  enable_direct_s3_hosting = var.enable_direct_s3_hosting   # add this line
+
 
   providers = {
     aws           = aws
@@ -63,7 +86,6 @@ module "secrets" {
     aws.us_east_1 = aws.us_east_1
   }
 }
-
 
 # -----------------------------------------------------------------------------
 # Step 7 — AUTH MODULE
@@ -135,17 +157,33 @@ module "observability" {
 
 # -----------------------------------------------------------------------------
 # Step 11 — COMPUTE MODULE
+# NOTE: this module still targets the old mock lambdas (menu-service,
+# order-service, ...), which no longer exist in src/lambdas/. Left untouched
+# in this step on purpose — it gets rebuilt wholesale in the Compute step
+# against the real *_svc services. Don't deploy this module's changes yet.
 # -----------------------------------------------------------------------------
 module "compute" {
-  source           = "../../modules/compute"
-  prefix           = var.prefix
-  environment      = var.environment
-  owner            = var.owner
-  aws_region       = var.aws_region
-  
-  # Passes the clean root dataset variable map downward safely
-  lambdas_src_path = "${path.cwd}/../../../../../src/lambdas"
-  lambdas          = var.lambdas 
+  source      = "../../modules/compute"
+  prefix      = var.prefix
+  environment = var.environment
+  owner       = var.owner
+  aws_region  = var.aws_region
+
+  lambdas_src_path = "${path.module}/../../../../src/lambdas"
+
+  menu_assets_bucket_name = module.data.bucket_menu_assets
+  ar_models_bucket_name   = module.data.bucket_ar_models_name
+
+  cognito_user_pool_id    = module.auth.user_pool_id
+  cognito_admin_client_id = module.auth.admin_client_id
+  cognito_user_pool_arn   = module.auth.user_pool_arn
+
+  connection_table_name             = module.data.connection_table_name
+  connection_table_arn              = module.data.connection_table_arn
+  ws_order_subscriptions_table_name = module.data.ws_order_subscriptions_table_name
+  ws_order_subscriptions_table_arn  = module.data.ws_order_subscriptions_table_arn
+
+  order_table_stream_arn = module.data.order_table_stream_arn
 
   providers = {
     aws           = aws
