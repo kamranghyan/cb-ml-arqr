@@ -15,6 +15,7 @@ import {
     Star,
     ArrowRight,
     ArrowLeft,
+    Check,
     ShieldCheck,
 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ interface Plan {
     price: number;
     currency: string;
     description: string | null;
+    whats_included?: string[] | null;
     is_active: boolean;
 }
 
@@ -1321,6 +1323,52 @@ export default function TenantSubscription() {
                                             {plan.description ||
                                                 'Perfect for your business needs'}
                                         </p>
+                                        {plan.whats_included &&
+                                            plan.whats_included.length > 0 && (
+                                                <ul
+                                                    style={{
+                                                        margin: '10px 0 0',
+                                                        padding: 0,
+                                                        listStyle: 'none',
+                                                    }}
+                                                >
+                                                    {plan.whats_included
+                                                        .slice(0, 5)
+                                                        .map((item, idx) => (
+                                                            <li
+                                                                key={idx}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'flex-start',
+                                                                    gap: 6,
+                                                                    marginBottom: 5,
+                                                                    fontSize: 12.5,
+                                                                    color: colors.text,
+                                                                }}
+                                                            >
+                                                                <Check
+                                                                    size={13}
+                                                                    style={{ marginTop: 2, flexShrink: 0 }}
+                                                                    color={colors.brand ?? '#ff5723'}
+                                                                />
+                                                                {item}
+                                                            </li>
+                                                        ))}
+                                                    {plan.whats_included.length > 5 && (
+                                                        <li
+                                                            style={{
+                                                                fontSize: 11.5,
+                                                                color: colors.muted,
+                                                                fontStyle: 'italic',
+                                                                paddingLeft: 19,
+                                                            }}
+                                                        >
+                                                            +{plan.whats_included.length - 5} more
+                                                        </li>
+                                                    )}
+                                                </ul>
+                                            )}
+
 
                                         <p
                                             style={{

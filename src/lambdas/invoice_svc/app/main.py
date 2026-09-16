@@ -19,6 +19,7 @@ def generate_presigned_url(s3_key: str, expiration: int = 86400) -> str:
     return s3_client.generate_presigned_url(
         'get_object',
         Params={'Bucket': BUCKET_NAME, 'Key': s3_key},
+
         ExpiresIn=expiration
     )
 
@@ -28,6 +29,15 @@ def handle_payment_event(event):
     amount = detail.get('amount', 0.0)
     tenant_id = detail.get('tenant_id') or detail.get('tenantId', '')
     currency = detail.get('currency', 'PKR')
+    plan_id = detail.get('plan_id') or detail.get('planId', '')
+    payment_id = detail.get('payment_id') or detail.get('transaction_id', '')
+    # Genuinely dynamic — read whatever pay_svc actually recorded for this
+    # transaction. "EasyPaisa" is only a last-resort default for events
+    # that somehow arrive without it (e.g. an older event format) — it is
+    # NOT the primary source. When pay_svc adds a new payment path, that
+    # code sets its own payment_method and this line needs no changes.
+    payment_method = detail.get('payment_method') or 'EasyPaisa'
+
 
     if not order_id:
         print("Error: Missing orderId in event detail")
@@ -54,6 +64,7 @@ def handle_payment_event(event):
 
     # 3. Presigned Link
     download_url = generate_presigned_url(s3_key)
+    now_iso = datetime.datetime.utcnow().isoformat()
 
     # 4. Save to DynamoDB
     item = {
@@ -61,9 +72,19 @@ def handle_payment_event(event):
         'orderId': order_id,
         'tenantId': tenant_id,
         'amount': str(amount),
+        'currency': currency,
+        'planId': plan_id,
+        'paymentId': payment_id,
+        # This handler only ever fires on payment.succeeded — no
+        # "pending"/"failed" event reaches invoice_svc — so every
+        # invoice that gets created here is, by definition, already paid.
+        'paymentMethod': payment_method,
+        'status': 'PAID',
+        'paidAt': now_iso,
         's3Key': s3_key,
         'downloadUrl': download_url,
-        'createdAt': datetime.datetime.utcnow().isoformat()
+        'createdAt': datetime.datetime.utcnow().isoformat(),
+        'createdAt': now_iso
     }
     table.put_item(Item=item)
     return {"statusCode": 200, "body": json.dumps({"message": f"Invoice {invoice_id} created"})}
@@ -243,6 +264,8 @@ def handle_get_invoice_api(event):
                     or item.get("tenant_id") == tenant_id
                 )
             ]
+
+            items.sort(key=lambda i: i.get("createdAt", ""), reverse=True)
 
             # Refresh presigned URLs
             for item in items:

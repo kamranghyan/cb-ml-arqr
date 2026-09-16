@@ -67,6 +67,7 @@ async def initiate_payment(
             amount=payload.amount,
             email=payload.email,
             mobile_no=payload.mobileNo,
+            payment_method="EasyPaisa Mobile Account",
             status="PENDING",
         )
 
@@ -184,6 +185,7 @@ async def initiate_payment(
                     "transactionId"
                 ),
                 currency="PKR",
+                paymentMethod=updated_payment.get("paymentMethod"),
             )
 
             logger.info(

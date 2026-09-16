@@ -109,6 +109,7 @@ export async function fetchInvoiceDetails(invoiceId: string): Promise<Invoice | 
   }
 }
 
+
 // 3️⃣ Download Invoice PDF
 export async function downloadInvoice(invoiceId: string): Promise<void> {
   try {
@@ -127,15 +128,14 @@ export async function downloadInvoice(invoiceId: string): Promise<void> {
 
     if (!res.ok) throw new Error('Failed to download invoice');
 
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `invoice-${invoiceId}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    // This endpoint returns JSON { downloadUrl: <fresh presigned S3 URL> },
+    // never the PDF bytes directly — fetch that JSON first, then open the
+    // real PDF straight from S3 in a new tab (view), same behavior as the
+    // direct-downloadUrl path above. Never force a "Save As" download.
+    const data = await res.json();
+    if (!data?.downloadUrl) throw new Error('No download URL returned');
+
+    window.open(data.downloadUrl, '_blank', 'noopener,noreferrer');
   } catch (error) {
     console.error('Failed to download invoice:', error);
     throw error;

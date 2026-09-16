@@ -42,6 +42,7 @@ class EventBridgeService:
         amount: float,
         transactionId: str | None = None,
         currency: str = "PKR",
+        paymentMethod: str | None = None,
     ) -> dict[str, Any]:
         """
         Publish payment.succeeded after a payment has successfully
@@ -73,6 +74,7 @@ class EventBridgeService:
 
             "amount": amount,
             "currency": currency,
+            "payment_method": paymentMethod,
 
             # Traceability
             "order_id": orderId,

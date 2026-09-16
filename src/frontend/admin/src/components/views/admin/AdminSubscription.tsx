@@ -379,6 +379,10 @@ export default function AdminSubscription() {
                 currency: formData.currency,
                 description:
                     formData.description,
+                whats_included: formData.whats_included
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0),
             });
 
             setSuccess(
@@ -434,6 +438,10 @@ export default function AdminSubscription() {
                         formData.currency,
                     description:
                         formData.description,
+                    whats_included: formData.whats_included
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter((line) => line.length > 0),
                 }
             );
 
@@ -1608,9 +1616,14 @@ export default function AdminSubscription() {
                                                         color: colors.muted,
                                                     }}>
                                                         <p className='text-white mb-1 text-[14px]'>What's Included:</p>
-                                                        {(plan as Plan & { whats_included?: string[] }).whats_included!.map((item, idx) => (
+                                                        {(plan as Plan & { whats_included?: string[] }).whats_included!.slice(0, 5).map((item, idx) => (
                                                             <li key={idx} style={{ marginBottom: 2 }}>{item}</li>
                                                         ))}
+                                                        {(plan as Plan & { whats_included?: string[] }).whats_included!.length > 3 && (
+                                                            <li style={{ marginBottom: 2, listStyle: 'none', fontStyle: 'italic', opacity: 0.7 }}>
+                                                                +{(plan as Plan & { whats_included?: string[] }).whats_included!.length - 3} more
+                                                            </li>
+                                                        )}
                                                     </ul>
                                                 )}
                                             </p>

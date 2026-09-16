@@ -52,6 +52,7 @@ class PaymentDbService:
         amount: float,
         email: str,
         mobile_no: str,
+        payment_method: str,
         status: str = "PENDING",
     ) -> dict[str, Any]:
 
@@ -78,7 +79,7 @@ class PaymentDbService:
 
             "email": email,
             "mobileNo": mobile_no,
-
+            "paymentMethod": payment_method,
             "status": status,
 
             "createdAt": now,

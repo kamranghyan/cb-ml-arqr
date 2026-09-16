@@ -12,6 +12,7 @@ export interface Plan {
     currency: string;
     description: string | null;
     is_active: boolean;
+    whats_included?: string[];
 }
 
 export interface Subscription {

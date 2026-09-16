@@ -10,7 +10,7 @@ import { getGuestScope } from '@/lib/guest-scope';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
-
+import { toast } from 'sonner';
 const BRAND = '#ff5723';
 
 const ORDER_TYPES = ['dine_in', 'pickup', 'delivery'];
@@ -200,7 +200,7 @@ export default function CheckoutPage() {
   };
 
   const placeOrder = async () => {
-    console.log('🔥 NEW CHECKOUT CODE RUNNING'); 
+    console.log('🔥 NEW CHECKOUT CODE RUNNING');
     console.log('═══════════════════════════════════════════════');
     console.log('🔄 PLACE ORDER STARTED');
     console.log('═══════════════════════════════════════════════');
@@ -366,9 +366,56 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        const errorMsg = data?.error || data?.message || `Error ${res.status}`;
+        let errorMsg =
+          data?.error ||
+          data?.message ||
+          `Unable to place order. Please try again.`;
+
+        // Backend/proxy may return the actual error as a JSON string
+        if (typeof errorMsg === 'string') {
+          try {
+            const parsed = JSON.parse(errorMsg);
+
+            errorMsg =
+              parsed?.error?.message ??
+              parsed?.message ??
+              errorMsg;
+          } catch {
+            // Already a normal string
+          }
+        }
+
         console.log(`❌ Order failed: ${errorMsg}`);
-        throw new Error(errorMsg);
+
+        const normalizedError = String(errorMsg).toLowerCase();
+
+        // Previous active order exists
+        if (
+          normalizedError.includes('already have an order') ||
+          normalizedError.includes('active order') ||
+          normalizedError.includes('existing order')
+        ) {
+          toast.error(
+            'You already have an active order. Please complete or cancel it before placing a new order.',
+            {
+              action: {
+                label: 'Track Order',
+                onClick: () => router.push('/guest/tracking'),
+              },
+            }
+          );
+
+          // IMPORTANT:
+          // Do not throw this as a new Error because catch()
+          // would show the same backend error again.
+          setPlacing(false);
+          return;
+        }
+
+        // Other API errors
+        toast.error('Unable to place your order. Please try again.');
+        setPlacing(false);
+        return;
       }
 
       console.log('✅ Order placed successfully!');

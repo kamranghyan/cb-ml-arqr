@@ -16,9 +16,15 @@ import os
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
+from datetime import datetime, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+def _now_iso() -> str:
+    """ISO-8601 UTC timestamp — same format style order_svc already uses
+    for placedAt/updatedAt, so both services stay consistent."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # ── env vars ──────────────────────────────────────────────────────────────────
 SNS_TOPIC            = os.environ["SNS_TOPIC"]
@@ -195,6 +201,7 @@ def _publish_sns(order_id: str, tenant_id: str, status: str, message: str):
                 "tenantId": tenant_id,
                 "status":   status,
                 "message":  message,
+                "timestamp": _now_iso(),
             }),
             Subject=f"Order {status}",
             MessageAttributes={
@@ -221,6 +228,7 @@ def _push_websocket(user_id: str, order_id: str, status: str, message: str):
         "orderId": order_id,
         "status":  status,
         "message": message,
+        "timestamp": _now_iso(),
     }).encode()
 
     for conn_id in connection_ids:
@@ -253,6 +261,7 @@ def _push_guest_websocket(
         "orderId": order_id,
         "status": status,
         "message": message,
+        "timestamp": _now_iso(),
     }).encode()
 
     for conn_id in connection_ids:
@@ -347,6 +356,7 @@ def _push_kitchen_websocket(
         "orderId": order_id,
         "status": status,
         "message": message,
+        "timestamp": _now_iso(),
     }
     if cancellation_reason:
         ws_payload["cancellationReason"] = cancellation_reason
