@@ -362,7 +362,7 @@ function GuestContent() {
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
         }}>
-          <p style={{
+          {/* <p style={{
             fontFamily: "'Poppins', sans-serif",
             fontWeight: 800,
             fontSize: 32,
@@ -377,7 +377,7 @@ function GuestContent() {
             textShadow: '0 2px 12px rgba(0,0,0,0.5)',
           }}>
             {displayName}
-          </p>
+          </p> */}
         </div>
 
         {/* ── Restaurant info strip ────────────────────────────────────────── */}

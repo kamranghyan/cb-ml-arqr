@@ -715,7 +715,7 @@ export default function BranchMenuPage() {
       if (modal.item?.id) {
         // ── UPDATE EXISTING ITEM ──
         const version = (modal.item as any).version ?? 1;
-        const hasNewSlideFiles = itemImages.length > 0;
+        const hasNewSlideFiles = itemImages.length > 0|| !!glbFile;
 
         const raw = hasNewSlideFiles
           ? await updateMenuItemWithFiles(
@@ -772,11 +772,6 @@ export default function BranchMenuPage() {
           }
         }
 
-        if (glbFile && !(modal.item as any).arModelKey) {
-          setSaveErr('This item has no AR model slot. Use "Recreate & Upload Files" to create a fresh item with GLB.');
-          setSaving(false);
-          return;
-        }
       } else {
         // ── CREATE NEW ITEM ──
         setSaveMsg('Creating item…');
