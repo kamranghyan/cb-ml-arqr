@@ -244,6 +244,44 @@ class OrderRepository:
 
         # ── Feedback ──────────────────────────────────────────────────────────────
 
+    def find_active_order_for_guest(
+        self,
+        restaurant_id: str,
+        tenant_id: str,
+        guest_session_id: str,
+        hours: int = 24,
+    ) -> Optional[dict]:
+        """
+        Find this guest's most recent order that hasn't reached a terminal
+        status yet (RECEIVED/PREPARING/READY are all "still active").
+
+        Reuses the existing restaurant+time GSI rather than adding a new
+        guestSessionId index — order volume per restaurant in a day is
+        small, and this only runs at order-creation time, not on a hot
+        path, so filtering in Python here is simpler than a new GSI +
+        infra change for a check this infrequent.
+        """
+        if not guest_session_id:
+            return None
+
+        orders = self.list_orders(restaurant_id, tenant_id, hours=hours)
+
+        TERMINAL_STATUSES = {"DELIVERED", "CANCELLED", "TIMED_OUT", "COMPLETED"}
+
+        active = [
+            o for o in orders
+            if o.get("guestSessionId") == guest_session_id
+            and str(o.get("status", "")).upper() not in TERMINAL_STATUSES
+        ]
+
+        if not active:
+            return None
+
+        # Most recently placed, in case there's somehow more than one.
+        active.sort(key=lambda o: o.get("placedAt", ""), reverse=True)
+        return active[0]
+
+
     def add_feedback(
         self,
         order_id: str,
@@ -331,3 +369,5 @@ class OrderRepository:
                 error_code=exc.response["Error"]["Code"],
             )
             raise
+
+

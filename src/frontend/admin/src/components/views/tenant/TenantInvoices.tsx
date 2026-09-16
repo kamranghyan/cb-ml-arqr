@@ -67,6 +67,14 @@ interface InvoiceWithId extends Invoice {
   paid_at: string | null;
 }
 
+const PLAN_DISPLAY_NAMES: Record<string, string> = {
+  weekly: 'Weekly Plan',
+  monthly: 'Monthly Plan',
+  quarterly: 'Quarterly Plan',
+  semi_annual: 'Semi-Annual Plan',
+  annual: 'Annual Plan',
+};
+
 export default function TenantInvoices() {
   const router = useRouter();
   const { role, loading: authLoading } = useCurrentUser();
@@ -199,6 +207,11 @@ export default function TenantInvoices() {
             inv.created_at ||
             '';
 
+          const planId =
+            inv.planId ||
+            inv.plan_id ||
+            'monthly';
+
           return {
             ...inv,
 
@@ -215,15 +228,13 @@ export default function TenantInvoices() {
             order_id: orderId,
             orderId,
 
-            plan_id:
-              inv.planId ||
-              inv.plan_id ||
-              'monthly',
+            plan_id: planId,
 
             plan_name:
               inv.planName ||
               inv.plan_name ||
-              '',
+              PLAN_DISPLAY_NAMES[planId] ||
+              planId,
 
             amount: String(
               inv.amount ?? '0'
@@ -264,7 +275,11 @@ export default function TenantInvoices() {
               '',
           };
         });
-
+        mappedInvoices.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
         setInvoices(mappedInvoices);
         setCurrentPage(1);
 
@@ -282,7 +297,7 @@ export default function TenantInvoices() {
 
         setError(
           err?.message ||
-            'Failed to load invoices'
+          'Failed to load invoices'
         );
       } finally {
         invoiceRequestRunningRef.current = false;
@@ -401,7 +416,7 @@ export default function TenantInvoices() {
   ) => {
     const normalized =
       String(
-        // status || 'PENDING'
+        status || 'PENDING'
       ).toUpperCase();
 
     const statusMap: Record<
@@ -420,13 +435,13 @@ export default function TenantInvoices() {
           accents.green.bg,
       },
 
-      // PENDING: {
-      //   label: 'Pending',
-      //   color:
-      //     accents.orange.text,
-      //   bg:
-      //     accents.orange.bg,
-      // },
+      PENDING: {
+        label: 'Pending',
+        color:
+          accents.orange.text,
+        bg:
+          accents.orange.bg,
+      },
 
       FAILED: {
         label: 'Failed',
@@ -446,8 +461,7 @@ export default function TenantInvoices() {
     };
 
     return (
-      statusMap[normalized] || ""
-      // statusMap.PENDING
+      statusMap[normalized] || statusMap.PENDING
     );
   };
 
@@ -455,9 +469,9 @@ export default function TenantInvoices() {
     planId?: string
   ) => {
     switch (
-      String(
-        planId || ''
-      ).toLowerCase()
+    String(
+      planId || ''
+    ).toLowerCase()
     ) {
       case 'weekly':
         return <Clock size={16} />;
@@ -515,7 +529,7 @@ export default function TenantInvoices() {
 
       setError(
         err?.message ||
-          'Failed to download invoice'
+        'Failed to download invoice'
       );
     } finally {
       setDownloading(false);
@@ -536,7 +550,7 @@ export default function TenantInvoices() {
       return;
     }
 
-    await handleDownload(invoice);
+    await downloadInvoice(invoice.id);
   };
 
   // ─────────────────────────────────────────────
@@ -720,9 +734,9 @@ export default function TenantInvoices() {
             style={
               loading
                 ? {
-                    animation:
-                      'spin 1s linear infinite',
-                  }
+                  animation:
+                    'spin 1s linear infinite',
+                }
                 : undefined
             }
           />
@@ -1020,7 +1034,7 @@ export default function TenantInvoices() {
                   (invoice) => {
                     const statusBadge =
                       getStatusBadge(
-                        // invoice.status
+                        invoice.status
                       );
 
                     return (
@@ -1189,10 +1203,10 @@ export default function TenantInvoices() {
                             {formatPrice(
                               Number(
                                 invoice.amount ||
-                                  0
+                                0
                               ),
                               invoice.currency ||
-                                'USD'
+                              'USD'
                             )}
                           </span>
 
@@ -1284,7 +1298,7 @@ export default function TenantInvoices() {
                       onClick={() =>
                         goToPage(
                           currentPage -
-                            1
+                          1
                         )
                       }
                       disabled={
@@ -1310,12 +1324,12 @@ export default function TenantInvoices() {
                           colors.text,
                         cursor:
                           currentPage ===
-                          1
+                            1
                             ? 'not-allowed'
                             : 'pointer',
                         opacity:
                           currentPage ===
-                          1
+                            1
                             ? 0.5
                             : 1,
                       }}
@@ -1386,10 +1400,9 @@ export default function TenantInvoices() {
                               borderRadius:
                                 8,
                               border:
-                                `1.5px solid ${
-                                  active
-                                    ? BRAND
-                                    : colors.border
+                                `1.5px solid ${active
+                                  ? BRAND
+                                  : colors.border
                                 }`,
                               background:
                                 active
@@ -1421,7 +1434,7 @@ export default function TenantInvoices() {
                       onClick={() =>
                         goToPage(
                           currentPage +
-                            1
+                          1
                         )
                       }
                       disabled={
@@ -1447,12 +1460,12 @@ export default function TenantInvoices() {
                           colors.text,
                         cursor:
                           currentPage ===
-                          totalPages
+                            totalPages
                             ? 'not-allowed'
                             : 'pointer',
                         opacity:
                           currentPage ===
-                          totalPages
+                            totalPages
                             ? 0.5
                             : 1,
                       }}
@@ -1665,10 +1678,10 @@ export default function TenantInvoices() {
                     {formatPrice(
                       Number(
                         selectedInvoice.amount ||
-                          0
+                        0
                       ),
                       selectedInvoice.currency ||
-                        'USD'
+                      'USD'
                     )}
                   </p>
                 </div>
@@ -1694,7 +1707,7 @@ export default function TenantInvoices() {
                   {(() => {
                     const badge =
                       getStatusBadge(
-                        // selectedInvoice.status
+                        selectedInvoice.status
                       );
 
                     return (

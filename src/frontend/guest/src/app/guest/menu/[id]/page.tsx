@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ChevronLeft, Heart, Star, Plus, Minus, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, Star, Plus, Minus, Check, Box } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -498,13 +498,55 @@ export default function ItemDetailPage() {
 
         {/* ── AR entry ── */}
         {hasAr && (
-          <Link href={arHref} style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '0 0 24px', padding: '14px 16px', background: BRAND, borderRadius: 16, textDecoration: 'none', transition: 'all 0.2s ease' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🫙</div>
-            <div style={{ flex: 1 }}>
-              <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, margin: 0, fontFamily: "'Poppins', sans-serif" }}>View in Augmented Reality</p>
-              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0', fontFamily: "'Poppins', sans-serif" }}>Place on your table · Mobile & Desktop</p>
+          <Link
+            href={arHref}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              margin: '0 0 24px',
+              padding: '16px 18px',
+              background: 'linear-gradient(135deg, #ff5723, #ff7a45)',
+              borderRadius: 18,
+              textDecoration: 'none',
+              boxShadow: '0 4px 16px rgba(255,87,35,0.3)',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,87,35,0.35), 0 4px 16px rgba(255,87,35,0.3)'; }}
+            onBlur={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(255,87,35,0.3)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(255,87,35,0.4)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(255,87,35,0.3)'; }}
+            onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.97)'; }}
+            onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.97)'; }}
+            onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          >
+            <div style={{ position: 'relative', width: 46, height: 46, flexShrink: 0 }}>
+              <span style={{
+                position: 'absolute', inset: 0, borderRadius: 14,
+                background: 'rgba(255,255,255,0.4)',
+                animation: 'arPulseRing 2.2s ease-out infinite',
+              }} />
+              <div style={{
+                position: 'relative', width: 46, height: 46, borderRadius: 14,
+                background: 'rgba(255,255,255,0.22)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Box size={22} color="#fff" strokeWidth={2} />
+              </div>
             </div>
-            <span style={{ color: '#fff', fontSize: 20 }}>›</span>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ color: '#fff', fontSize: 14.5, fontWeight: 700, margin: 0, fontFamily: "'Poppins', sans-serif" }}>
+                View in Augmented Reality
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11.5, margin: '3px 0 0', fontFamily: "'Poppins', sans-serif" }}>
+                Tap to see it life-size on your table
+              </p>
+            </div>
+
+            <ChevronRight size={20} color="#fff" style={{ flexShrink: 0 }} />
           </Link>
         )}
 
@@ -565,8 +607,12 @@ export default function ItemDetailPage() {
       <BottomNav />
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes arPulseRing {
+          0% { transform: scale(1); opacity: 0.55; }
+          70%, 100% { transform: scale(1.55); opacity: 0; }
+        }
+       `}</style>
     </div>
   );
 }

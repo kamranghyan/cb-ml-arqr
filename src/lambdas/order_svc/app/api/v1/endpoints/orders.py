@@ -109,6 +109,23 @@ async def create_order(
         except MenuValidationError as exc:
             raise BadRequestError(exc.message) from exc
 
+   # Block a second concurrent order from the same guest session. This is
+   # the authoritative check — the guest app also checks this before
+   # showing the checkout button, but that's just UX; this is what
+   # actually prevents it, in case two tabs/devices race or the frontend
+   # check was skipped somehow.
+        if body.guestSessionId:
+            existing_active = repo.find_active_order_for_guest(
+               restaurant_id=body.restaurantId,
+               tenant_id=tenant_id,
+               guest_session_id=body.guestSessionId,
+         )
+        if existing_active:
+           raise BadRequestError(
+               "You already have an order in progress. "
+               "Please wait for it to complete before placing another."
+           )
+
     # Resolve the human-readable table number (e.g. "T-144") and zone
     # once, at creation time, so every later read (GET /orders, KDS,
     # dashboards) gets both for free without a cross-service join.
@@ -176,6 +193,32 @@ async def list_orders(
     
     return {"orders": processed_orders, "count": len(processed_orders)}
 
+
+@router.get("/active", summary="Get this guest's currently-active order, if any")
+async def get_active_order_for_guest(
+    restaurantId: Annotated[str, Query()],
+    guestSessionId: Annotated[str, Query(min_length=1)],
+    tenantId: Annotated[str, Depends(get_tenant_id)],
+    repo: Annotated[OrderRepository, Depends(get_order_repo)],
+):
+    order = repo.find_active_order_for_guest(
+        restaurant_id=restaurantId,
+        tenant_id=tenantId,
+        guest_session_id=guestSessionId,
+    )
+
+    if not order:
+        return {"order": None}
+
+    processed_order = clean_decimals(dict(order))
+    if "lineItems" in processed_order:
+        for item in processed_order["lineItems"]:
+            if "addOns" not in item:
+                item["addOns"] = []
+            if "addOnsTotalMinorUnits" not in item:
+                item["addOnsTotalMinorUnits"] = 0
+
+    return {"order": processed_order}
 
 # ── GET /{orderId}/guest, for guest notifications ─────────────────────────────────────────────────────
 
