@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
+import { ORDERS_API } from '@/lib/api-config';
 
 const BRAND = '#ff5723';
 
@@ -157,7 +158,9 @@ export default function CartPage() {
         lineItems,
         ...(notes.trim() && { notes: notes.trim() }),
       };
-      const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      
+      const res = await fetch(await ORDERS_API.create(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? data?.message ?? `Error ${res.status}`);
       if (data.prepTime) setPrepTime(data.prepTime);

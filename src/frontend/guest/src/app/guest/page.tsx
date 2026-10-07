@@ -564,7 +564,7 @@ function GuestContent() {
               marginTop: 8
             }}>
               {filteredSearch.slice(0, 6).map((item, idx, arr) => (
-                <Link key={item.id} href={`/guest/menu/${item.id}?rid=${qrRid}&tid=${tid}`}
+                <Link key={item.id} href={`/guest/menu/item?id=${item.id}&rid=${qrRid}&tid=${tid}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -635,7 +635,7 @@ function GuestContent() {
                     color: BRAND,
                     flexShrink: 0,
                     fontFamily: "'Poppins', sans-serif",
-                  }}>Rs. {item.price.toLocaleString()}</span>
+                  }}>Rs. {(item.price?? 0).toLocaleString()}</span>
                 </Link>
               ))}
               {filteredSearch.length === 0 && (
@@ -879,8 +879,9 @@ function GuestContent() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              Hello
               {popular.map(item => (
-                <Link key={item.id} href={`/guest/menu/${item.id}?rid=${qrRid}&tid=${tid}`}
+                <Link key={item.id} href={`/guest/menu/item?id=${item.id}&rid=${qrRid}&tid=${tid}`}
                   style={{
                     display: 'flex',
                     gap: 16,
@@ -944,7 +945,7 @@ function GuestContent() {
                       fontWeight: 700,
                       color: BRAND,
                       margin: '0 0 6px'
-                    }}>Rs. {item.price.toLocaleString()}</p>
+                    }}>Rs. {(item.price?? 0).toLocaleString()}</p>
                     <p style={{
                       fontSize: 13,
                       color: D.text,

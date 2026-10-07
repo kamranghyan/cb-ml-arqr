@@ -14,6 +14,7 @@ import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import OrderFeedbackShareModal from '@/components/guest/OrderFeedbackShareModal';
 import { useGuestOrdersSocket } from '@/components/guest/GuestOrdersSocketProvider';
+import { ORDERS_API } from '@/lib/api-config';
 
 const BRAND = '#ff5723';
 
@@ -155,8 +156,7 @@ export default function TrackingPage() {
 
     try {
       const { restaurantId } = getGuestScope();
-      const url = new URL('/api/orders', window.location.origin);
-      url.searchParams.set('rid', restaurantId);
+      const url = new URL(await ORDERS_API.list(restaurantId));
       console.log("📡 Fetching orders from:", url.toString());
 
       const res = await fetch(url.toString(), {
@@ -310,7 +310,7 @@ export default function TrackingPage() {
         throw new Error('Guest session not found. Please rescan the QR code.');
       }
 
-      const res = await fetch(`/api/orders/${apiId}?rid=${rid}`, {
+      const res = await fetch(await ORDERS_API.get(apiId, rid), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

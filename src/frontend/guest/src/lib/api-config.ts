@@ -1,68 +1,64 @@
 /**
- * Central API configuration
- * MENU_API uses /api/menu proxy — no direct browser-to-AWS calls.
+ * Central API configuration — calls API Gateway directly.
+ * Relative /api/* proxy paths only work with next.config.js rewrites(),
+ * which can't run in a static export (no server), and there's no CloudFront
+ * path-routing set up as an alternative yet either — so direct calls are
+ * the only thing that actually works while serving from S3.
  */
 
-export const RESTAURANT_ID =
-  process.env.NEXT_PUBLIC_RESTAURANT_ID ?? ''
+import { resolveTenantId } from './tenant'
 
-export const ADMIN_RESTAURANT_ID =
-  process.env.NEXT_PUBLIC_ADMIN_RESTAURANT_ID ?? ''
+export const RESTAURANT_ID = process.env.NEXT_PUBLIC_RESTAURANT_ID ?? ''
 
-export const TENANT_ID =
-  process.env.NEXT_PUBLIC_TENANT_ID ?? ''
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE
-
-export const AR_BASE =
-  process.env.NEXT_PUBLIC_AR_API_BASE
+export const MENU_API_BASE = process.env.NEXT_PUBLIC_API_BASE!
+export const ORDER_API_BASE = process.env.NEXT_PUBLIC_API_ORDER!
+export const AR_API_BASE = process.env.NEXT_PUBLIC_API_AR!
 
 if (typeof window !== 'undefined') {
-  if (!RESTAURANT_ID) console.warn('[API] NEXT_PUBLIC_RESTAURANT_ID is not set')
+  if (!MENU_API_BASE) console.error('[API] NEXT_PUBLIC_API_BASE is not set — API calls will be broken')
 }
 
-// ── MENU_API — ALL calls go through /api/menu proxy (NOT direct to AWS) ───────
+// ── order_svc (get_tenant_id): accepts header OR query param — query param used here ──
+async function withTenant(url: string, rid: string): Promise<string> {
+  const tenantId = await resolveTenantId(rid)
+  const sep = url.includes('?') ? '&' : '?'
+  return tenantId ? `${url}${sep}tenantId=${tenantId}` : url
+}
+
+export async function tenantHeaders(rid: string): Promise<Record<string, string>> {
+  const tenantId = await resolveTenantId(rid)
+  return tenantId ? { 'X-Tenant-Id': tenantId } : {}
+}
+
+
+export const RESTAURANT_API = {
+  get: (rid: string) => `${MENU_API_BASE}/menus/restaurants/${rid}`,
+  list: () => `${MENU_API_BASE}/menus/restaurants`,
+}
+
+// ── Menu ──────────────────────────────────────────────────────────────────
 export const MENU_API = {
-  items: (rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/items`,
-  item: (itemId: string, rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/items/${itemId}`,
-  categories: (rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/categories`,
+  items: (rid = RESTAURANT_ID) => `${MENU_API_BASE}/menus/restaurants/${rid}/items`,
+  item: (itemId: string, rid = RESTAURANT_ID) => `${MENU_API_BASE}/menus/restaurants/${rid}/items/${itemId}`,
+  categories: (rid = RESTAURANT_ID) => `${MENU_API_BASE}/menus/restaurants/${rid}/categories`,
 }
 
-// ── ADDON_API — Extra Toppings / add-ons per menu item ─────────────────────
-// NOTE: inferred from addons.py's route decorators, not a confirmed schema
-// (the service/model files weren't in what was shared) — same /api/menu
-// proxy, same /menus/ prefix convention as everything else.
 export const ADDON_API = {
-  list: (itemId: string, rid = RESTAURANT_ID) =>
-    `/api/menu/restaurants/${rid}/items/${itemId}/addons`,
+  list: (itemId: string, rid = RESTAURANT_ID) => `${MENU_API_BASE}/menus/restaurants/${rid}/items/${itemId}/addons`,
 }
 
-// ── AR_API — proxied through /api/ar ─────────────────────────────────────────
+// ── AR — ar_svc's tenant dependency hasn't been checked yet, see note below ──
 export const AR_API = {
-  model: (itemId: string, rid = RESTAURANT_ID) =>
-     `/api/ar?rid=${rid}&iid=${itemId}`,
+  model: async (itemId: string, rid = RESTAURANT_ID) => withTenant(`${AR_API_BASE}/ar/${rid}/${itemId}`, rid),
 }
 
-export const QR_API = {
-  generate: '/api/qr/generate',
-}
 
-export const DEFAULT_HEADERS: Record<string, string> = {
-  'Content-Type': 'application/json',
-}
+export const DEFAULT_HEADERS: Record<string, string> = { 'Content-Type': 'application/json' }
 
-export async function apiFetch<T>(
-  url: string,
-  options?: RequestInit,
-): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: { ...DEFAULT_HEADERS, ...options?.headers },
-  })
+
+export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, { ...options, headers: { ...DEFAULT_HEADERS, ...options?.headers } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`API ${res.status}: ${text || res.statusText}`)
@@ -70,14 +66,11 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>
 }
 
-export const TENANT_ID_KDS     = process.env.NEXT_PUBLIC_TENANT_ID_KDS     ?? ''
-export const RESTAURANT_ID_KDS = process.env.NEXT_PUBLIC_RESTAURANT_ID_KDS ?? 'r456'
-export const ORDERS_API_BASE   =
-  process.env.NEXT_PUBLIC_ORDERS_API_BASE
-
+// ── Orders — confirmed: order_svc's get_tenant_id accepts ?tenantId=, query param is correct ──
 export const ORDERS_API = {
-  list:   () => `/api/orders`,
-  get:    (orderId: string) => `/api/orders/${orderId}`,
-  create: () => `/api/orders`,
-  patch:  (orderId: string) => `/api/orders/${orderId}`,
+  list: (rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders`, rid),
+  get: (orderId: string, rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders/${orderId}/guest`, rid),
+  create: (rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders`, rid),
+  cancel: (orderId: string, rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders/${orderId}/guest`, rid),
+  feedback: (orderId: string, rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders/${orderId}/feedback`, rid),
 }

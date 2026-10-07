@@ -40,34 +40,57 @@ function MenuContent() {
   const { addItem, itemCount } = useCartStore();
   const cartCount = itemCount();
 
-  useEffect(() => {
-    const urlRid = params.get('rid') || '';
-    const urlTid = params.get('tid') || '';
-    const storedRid = sessionStorage.getItem('lm_rid') || '';
-    const storedTid = sessionStorage.getItem('lm_tid') || '';
-    if (!urlRid && !urlTid && !storedRid && !storedTid) {
-      toast.error('Please scan a table QR code first.');
-      window.location.href = '/guest';
-      return;
-    } if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
-    if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
+  const [restaurantId, setRestaurantId] = useState('');
+  const [tenantId, setTenantId] = useState('');
 
-    const menuRid = getGuestScope().restaurantId;
-    const timeout = setTimeout(() => { setLoading(false); }, 15000);
-    fetchMenuItems(menuRid)
-      .then(raw => {
-        clearTimeout(timeout);
-        const norm = raw.map(normaliseItem);
-        setItems(norm);
-        if ((raw[0] as any)?.restaurantName) setRestName((raw[0] as any).restaurantName + ' Menu');
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error('Failed to load menu:', error);
-        clearTimeout(timeout);
-        setLoading(false);
-        toast.error('Unable to load menu. Please try again.');
-      });
+  useEffect(() => {
+  const urlRid = params.get('rid') || '';
+  const urlTid = params.get('tid') || '';
+
+  const storedRid = sessionStorage.getItem('lm_rid') || '';
+  const storedTid = sessionStorage.getItem('lm_tid') || '';
+
+  const finalRid = urlRid || storedRid;
+  const finalTid = urlTid || storedTid;
+
+  if (!finalRid && !finalTid) {
+    toast.error('Please scan a table QR code first.');
+    window.location.href = '/guest';
+    return;
+  }
+
+  if (urlRid) sessionStorage.setItem('lm_rid', urlRid);
+  if (urlTid) sessionStorage.setItem('lm_tid', urlTid);
+
+  // Store values in state so they can be used in return()
+  setRestaurantId(finalRid);
+  setTenantId(finalTid);
+
+  const menuRid = getGuestScope().restaurantId;
+
+  const timeout = setTimeout(() => {
+    setLoading(false);
+  }, 15000);
+
+  fetchMenuItems(menuRid)
+    .then(raw => {
+      clearTimeout(timeout);
+
+      const norm = raw.map(normaliseItem);
+      setItems(norm);
+
+      if ((raw[0] as any)?.restaurantName) {
+        setRestName((raw[0] as any).restaurantName + ' Menu');
+      }
+
+      setLoading(false);
+    })
+    .catch((error) => {
+      console.error('Failed to load menu:', error);
+      clearTimeout(timeout);
+      setLoading(false);
+      toast.error('Unable to load menu. Please try again.');
+    });
   }, [params]);
 
   const catRaw = params.get('cat') || 'all';
@@ -410,7 +433,7 @@ function MenuContent() {
           {filtered.map(item => (
             <div
               key={item.id}
-              onClick={() => router.push(`/guest/menu/${item.id}`)}
+              onClick={() => router.push(`/guest/menu/item?id=${item.id}&rid=${restaurantId}&tid=${tenantId}`)}
               style={{
                 display: 'flex',
                 alignItems: 'center',

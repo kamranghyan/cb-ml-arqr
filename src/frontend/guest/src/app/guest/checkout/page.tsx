@@ -11,6 +11,7 @@ import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import { toast } from 'sonner';
+import { ORDERS_API } from '@/lib/api-config';
 const BRAND = '#ff5723';
 
 const ORDER_TYPES = ['dine_in', 'pickup', 'delivery'];
@@ -24,6 +25,21 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
 };
 
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for non-secure contexts (plain HTTP) — crypto.randomUUID()
+  // only exists under HTTPS/localhost. Not cryptographically strong, but
+  // this ID is just a client-side correlation token, not a security
+  // credential, so that's fine.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const getGuestSessionId = async (restaurantId: string): Promise<string> => {
   const existing = sessionStorage.getItem('guestSessionId');
 
@@ -31,30 +47,10 @@ const getGuestSessionId = async (restaurantId: string): Promise<string> => {
     return existing;
   }
 
-  const res = await fetch('/guest/session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      restaurantId,
-    }),
-    cache: 'no-store',
-  });
+  const guestSessionId = generateUUID();
+  sessionStorage.setItem('guestSessionId', guestSessionId);
 
-  if (!res.ok) {
-    throw new Error('Unable to create guest session.');
-  }
-
-  const data = await res.json();
-
-  if (!data?.guestSessionId) {
-    throw new Error('Guest session ID was not returned.');
-  }
-
-  sessionStorage.setItem('guestSessionId', data.guestSessionId);
-
-  return data.guestSessionId;
+  return guestSessionId;
 };
 
 export default function CheckoutPage() {
@@ -355,7 +351,7 @@ export default function CheckoutPage() {
       console.log('═══════════════════════════════════════════════');
 
       // ── 7. Call guest orders API ──
-      const res = await fetch('/api/orders', {
+      const res = await fetch(await ORDERS_API.create(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

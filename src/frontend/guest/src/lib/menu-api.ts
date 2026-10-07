@@ -4,8 +4,19 @@
  * Authorization token injected client-side before proxying.
  */
 
-import { MENU_API, AR_API, ADDON_API, RESTAURANT_ID, ADMIN_RESTAURANT_ID } from './api-config'
+import { MENU_API, AR_API, ADDON_API, RESTAURANT_API, RESTAURANT_ID, tenantHeaders } from './api-config'
 import { getValidIdToken } from './cognito'
+import { resolveTenantId } from './tenant'
+
+export const MENU_API_BASE = process.env.NEXT_PUBLIC_API_BASE!
+
+
+
+async function withTenant(url: string, rid: string): Promise<string> {
+  const tenantId = await resolveTenantId(rid)
+  const sep = url.includes('?') ? '&' : '?'
+  return tenantId ? `${url}${sep}tenantId=${tenantId}` : url
+}
 
 export interface ApiMenuItem {
   id: string
@@ -165,15 +176,13 @@ async function menuFetch<T>(
 // ── Fetch all menu items ───────────────────────────────────────────────────────
 export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem[]> {
   const rid = restaurantId?.trim() || RESTAURANT_ID;
+  const token = await getValidIdToken();
+  const headers: Record<string, string> = { ...(await tenantHeaders(rid)) };
+  if (token) headers['Authorization'] = token;
 
-  const data = await menuFetch<ApiMenuResponse | ApiMenuItem[]>(MENU_API.items(rid));
-
-  console.log("RAW MENU API RESPONSE:", data);
-  let items: any[] = []
-  if (Array.isArray(data)) items = data
-  else if (data && 'items' in data) items = (data as ApiMenuResponse).items
-  console.log("ITEMS BEFORE NORMALIZE:", items);
-  return items.map(normaliseItem)
+  const data = await menuFetch<ApiMenuResponse | ApiMenuItem[]>(MENU_API.items(rid), { headers });
+  const items = Array.isArray(data) ? data : (data.items ?? []);
+  return items.map(normaliseItem);
 }
 
 // lib/menu-api.ts
@@ -187,22 +196,9 @@ export async function fetchMenuItemAddons(
   // ✅ Direct fetch with cache control
   const token = await getValidIdToken();
   
-  const headers: Record<string, string> = {
-    'x-tenant-id': rid,
-  };
-  
-  if (token) {
-    headers['Authorization'] = token;
-  }
-
-  const res = await fetch(
-    `/api/menu/restaurants/${rid}/items/${itemId}/addons`,
-    {
-      headers,
-      cache: 'no-store',  // ✅ Force fresh data
-    }
-  );
-
+const headers: Record<string, string> = { ...(await tenantHeaders(rid)) };
+if (token) headers['Authorization'] = token;
+const res = await fetch(ADDON_API.list(itemId, rid), { headers, cache: 'no-store' });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Addons fetch failed (${res.status}): ${text}`);
@@ -220,7 +216,7 @@ export async function fetchMenuItemAddons(
 export async function fetchMenuItem(itemId: string, restaurantId?: string): Promise<ApiMenuItem> {
   const rid = restaurantId?.trim() || RESTAURANT_ID
 
-  const item = await menuFetch<any>(MENU_API.item(itemId, rid))
+  const item = await menuFetch<any>(MENU_API.item(itemId, rid), { headers: await tenantHeaders(rid) });
 
   const arData = await fetchARModel(itemId, rid)
 
@@ -233,7 +229,7 @@ export async function fetchMenuItem(itemId: string, restaurantId?: string): Prom
 
 async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
   try {
-    const res = await fetch(AR_API.model(itemId, rid), {
+    const res = await fetch(await AR_API.model(itemId, rid), {
       headers: { 'x-tenant-id': rid }
     })
     if (!res.ok) return null
@@ -247,7 +243,7 @@ async function fetchARModel(itemId: string, rid: string): Promise<any | null> {
 export async function fetchAddOns(itemId: string, restaurantId?: string): Promise<ApiAddOn[]> {
   const rid = restaurantId?.trim() || RESTAURANT_ID
   try {
-    const data = await menuFetch<any>(ADDON_API.list(itemId, rid))
+    const data = await menuFetch<any>(ADDON_API.list(itemId, rid), { headers: await tenantHeaders(rid) });
     const raw: any[] = Array.isArray(data) ? data : (data?.items ?? [])
 
     console.log('🧩 Raw add-on data:', raw)
@@ -281,12 +277,7 @@ export async function fetchRestaurants(restaurantId?: string): Promise<Restauran
   try {
     console.log('🏪 Fetching restaurants with rid:', rid);
 
-    const response = await fetch(`/api/menu/restaurants?rid=${rid}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-tenant-id': rid,
-      },
-    });
+       const response = await fetch(RESTAURANT_API.list());
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -315,9 +306,7 @@ export async function fetchRestaurantById(
 
     if (!rid) return null;
 
-    const data = await menuFetch<RestaurantData>(
-      `/api/menu/restaurants/${rid}`
-    );
+    const data = await menuFetch<RestaurantData>(RESTAURANT_API.get(rid));
 
     console.log('🏪 Restaurant by ID:', data);
 
@@ -380,43 +369,8 @@ export async function fetchCompanyName(tenantId: string): Promise<string | null>
   }
 }
 
-// ── Create menu item ──────────────────────────────────────────────────────────
-export async function createMenuItem(payload: Partial<ApiMenuItem>): Promise<ApiMenuItem> {
-  const { price, status, ...rest } = payload as any
-  const apiPayload = {
-    ...rest,
-    priceMinorUnits: Math.round((price ?? 0) * 100),
-    ...(status != null && { isActive: status === 'active' }),
-  }
-  return menuFetch<ApiMenuItem>(MENU_API.items(ADMIN_RESTAURANT_ID), {
-    method: 'POST',
-    body: JSON.stringify(apiPayload),
-  })
-}
 
-// ── Update menu item ──────────────────────────────────────────────────────────
-export async function updateMenuItem(
-  itemId: string,
-  payload: Partial<ApiMenuItem>,
-  version?: number,
-): Promise<ApiMenuItem> {
-  const { price, status, ...rest } = payload as any
-  const apiPayload = {
-    ...rest,
-    priceMinorUnits: Math.round((price ?? 0) * 100),
-    ...(status != null && { isActive: status === 'active' }),
-    ...(version != null && { version }),
-  }
-  return menuFetch<ApiMenuItem>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), {
-    method: 'PUT',
-    body: JSON.stringify(apiPayload),
-  })
-}
 
-// ── Delete menu item ──────────────────────────────────────────────────────────
-export async function deleteMenuItem(itemId: string): Promise<void> {
-  await menuFetch<void>(MENU_API.item(itemId, ADMIN_RESTAURANT_ID), { method: 'DELETE' })
-}
 
 // ── Normalise raw API response ────────────────────────────────────────────────
 export function normaliseItem(raw: any): ApiMenuItem {
@@ -528,9 +482,7 @@ interface ApiCategoriesResponse {
 export async function fetchCategories(
   restaurantId: string
 ): Promise<ApiCategory[]> {
-  const res = await menuFetch<ApiCategory[] | ApiCategoriesResponse>(
-    `/api/menu/restaurants/${restaurantId}/categories`
-  );
+  const res = await menuFetch<ApiCategory[] | ApiCategoriesResponse>(MENU_API.categories(restaurantId), { headers: await tenantHeaders(restaurantId) });
 
   const categories = Array.isArray(res)
     ? res
@@ -650,14 +602,7 @@ async function createMenuItemWithFiles(
     'x-tenant-id': restaurantId,
   };
 
-  const res = await fetch(
-    `/api/menu/restaurants/${restaurantId}/items`,
-    {
-      method: 'POST',
-      headers,
-      body: fd,
-    }
-  );
+  const res = await fetch(await withTenant(`${MENU_API_BASE}/menus/restaurants/${restaurantId}/items`, restaurantId), { method: 'POST', headers, body: fd });
 
   if (!res.ok) {
     const txt = await res.text().catch(() => res.statusText);

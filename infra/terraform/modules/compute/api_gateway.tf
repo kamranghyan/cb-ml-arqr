@@ -85,7 +85,7 @@ resource "aws_api_gateway_integration_response" "root_options" {
   http_method = aws_api_gateway_method.root_options[each.key].http_method
   status_code = aws_api_gateway_method_response.root_options[each.key].status_code
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Tenant-Id'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
     "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
@@ -149,7 +149,7 @@ resource "aws_api_gateway_integration_response" "proxy_options" {
   http_method = aws_api_gateway_method.proxy_options[each.key].http_method
   status_code = aws_api_gateway_method_response.proxy_options[each.key].status_code
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Tenant-Id'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
     "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
@@ -176,6 +176,8 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_integration.root_any[each.key].id,
       aws_api_gateway_method.proxy_any[each.key].id,
       aws_api_gateway_integration.proxy_any[each.key].id,
+      aws_api_gateway_integration_response.root_options[each.key].id,
+      aws_api_gateway_integration_response.proxy_options[each.key].id,
     ]))
   }
 

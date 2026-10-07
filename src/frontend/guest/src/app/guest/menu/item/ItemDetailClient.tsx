@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Heart, Star, Plus, Minus, Check, Box } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,9 +17,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { getGuestScope } from '@/lib/guest-scope';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import BottomNav from '@/components/guest/BottomNav';
+import { RESTAURANT_API } from '@/lib/api-config';
 
 const BRAND = '#ff5723';
 const AUTO_SLIDE_INTERVAL = 3000; // 3 seconds
+
 
 // ── Types ──
 interface AddOn {
@@ -38,9 +40,10 @@ interface SizeOption {
   mult: number;
 }
 
-export default function ItemDetailPage() {
+export default function ItemDetailClient() {
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id') ?? '';
   const { isDark } = useTheme();
 
   const [item, setItem] = useState<ApiMenuItem | null>(null);
@@ -71,9 +74,7 @@ export default function ItemDetailPage() {
         const rid = getGuestScope().restaurantId;
         if (!rid) return;
 
-        const res = await fetch(`/api/menu/restaurants/${rid}`, {
-          cache: 'no-store',
-        });
+        const res = await fetch(RESTAURANT_API.get(rid), { cache: 'no-store' });
 
         if (res.ok) {
           const data = await res.json();

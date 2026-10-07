@@ -13,6 +13,7 @@ import {
     MoreHorizontal,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ORDERS_API } from '@/lib/api-config';
 
 interface OrderFeedbackShareModalProps {
     open: boolean;
@@ -144,7 +145,7 @@ export default function OrderFeedbackShareModal({
         setSubmitError('');
 
         try {
-            const res = await fetch(`/api/orders/${orderId}/feedback?rid=${restaurantId ?? ''}`, {
+            const res = await fetch(await ORDERS_API.feedback(orderId, restaurantId ?? ''), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
