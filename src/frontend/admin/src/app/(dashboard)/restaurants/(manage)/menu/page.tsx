@@ -1,7 +1,7 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-
+import { useSearchParams  } from 'next/navigation';
+import { Suspense } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, RefreshCw, Bell, Plus, Edit2, Trash2,
@@ -24,10 +24,11 @@ import {
   deleteAddon,
   updateMenuItemWithFiles,
 } from '@/lib/menu-api';
-import { TENANT_ID } from '@/lib/api-config';
+import { TENANT_ID, API_BASE } from '@/lib/api-config';
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 import Image from 'next/image';
 import { getTheme } from '@/lib/theme';
+import { loadUser } from '@/lib/cognito';
 
 // ── Brand Color ──
 const BRAND = '#ff5723';
@@ -74,7 +75,7 @@ type ModalState = { open: boolean; item?: ApiMenuItem };
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
 type GlbStatus = 'idle' | 'uploading' | 'approved' | 'error';
 
-// ✅ Updated createMenuItemWithFiles with slides support
+
 async function createMenuItemWithFiles(
   restaurantId: string,
   payload: {
@@ -152,20 +153,19 @@ async function createMenuItemWithFiles(
     console.log('📎 Slide image attached:', file.name, file.size);
   });
 
-  const { getValidIdToken } = await import('@/lib/cognito');
-  const token = await getValidIdToken();
+const { getValidIdToken, loadUser } = await import('@/lib/cognito');
+const token = await getValidIdToken();
 
-  if (!token) {
-    throw new Error('Authentication token missing.');
-  }
+if (!token) {
+  throw new Error('Authentication token missing.');
+}
 
-  const headers: Record<string, string> = {
-    Authorization: token,
-    'x-tenant-id': TENANT_ID,
-  };
-
+const headers: Record<string, string> = {
+  Authorization: `Bearer ${token}`,
+  'x-tenant-id': loadUser()?.tenantId || TENANT_ID,
+};
   const res = await fetch(
-    `/api/menu/restaurants/${restaurantId}/items`,
+    `${API_BASE}/restaurants/${restaurantId}/items`,
     {
       method: 'POST',
       headers,
@@ -209,8 +209,8 @@ function FieldLabel({ children, extra }: { children: React.ReactNode; extra?: Re
   );
 }
 
-export default function BranchMenuPage() {
-  const restaurantId = String(useParams().restaurantId ?? '');
+function BranchMenuPage() {
+  const restaurantId = useSearchParams().get('restaurantId') ?? '';
   const [isDark, setIsDark] = useState(false);
   const [items, setItems] = useState<ApiMenuItem[]>([]);
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
@@ -2822,5 +2822,13 @@ export default function BranchMenuPage() {
         onConfirm={handleDelete}
       />
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <BranchMenuPage />
+    </Suspense>
   );
 }

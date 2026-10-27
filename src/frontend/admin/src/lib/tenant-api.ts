@@ -9,12 +9,12 @@
  * always work on one company's behalf.
  */
 
-import { getValidIdToken } from './cognito'
+import { getValidIdToken, loadUser } from './cognito'
 import {
   derivedStatus, isLive, orderTypeOf,
   type SupportOrder, type OrderStatus, type OrderType,
 } from './support-api'
-
+import { API_BASE, ORDERS_API_BASE } from './api-config'
 export type { SupportOrder, OrderStatus, OrderType }
 export { derivedStatus, isLive, orderTypeOf }
 export interface TenantOrderEvent {
@@ -85,12 +85,14 @@ export async function connectTenantWebSocket(): Promise<WebSocket> {
 
 async function tenantFetch<T>(path: string): Promise<T> {
   const token = await getValidIdToken()
+  const tenantId = loadUser()?.tenantId
 
   const res = await fetch(path, {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tenantId && path.startsWith(API_BASE) ? { 'X-Tenant-Id': tenantId } : {}),
     },
   })
 
@@ -112,7 +114,7 @@ async function tenantFetch<T>(path: string): Promise<T> {
 // ── Branches ──────────────────────────────────────────────────────────
 
 export async function fetchMyBranches(): Promise<Branch[]> {
-  const data = await tenantFetch<{ items: Branch[] }>('/api/menu/restaurants')
+  const data = await tenantFetch<{ items: Branch[] }>(`${API_BASE}/restaurants`)
   return data.items ?? []
 }
 
@@ -124,7 +126,7 @@ async function ordersForBranch(
 ): Promise<BranchOrder[]> {
   try {
     const data = await tenantFetch<{ orders: SupportOrder[] }>(
-      `/api/orders?restaurantId=${branch.restaurantId}&hours=${hours}`,
+      `${ORDERS_API_BASE}/orders?restaurantId=${branch.restaurantId}&hours=${hours}`,
     )
     return (data.orders ?? []).map(o => ({
       ...o,

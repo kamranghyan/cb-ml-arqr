@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Tags, AlertCircle, CloudUpload } from 'lucide-react';
 import {
   fetchCategories,
@@ -44,8 +45,8 @@ const getColors = (isDark: boolean) => ({
   modalOverlay: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)',
 });
 
-export default function CategoriesPage() {
-  const restaurantId = String(useParams().restaurantId ?? '');
+function CategoriesContent() {
+  const restaurantId = useSearchParams().get('restaurantId') ?? '';
   const [isDark, setIsDark] = useState(false);
   const [rows, setRows] = useState<ApiCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -628,6 +629,14 @@ export default function CategoriesPage() {
         onConfirm={confirmDelete}
       />
     </div>
+  );
+}
+
+export default function CategoriesPage() {
+  return (
+    <Suspense fallback={null}>
+      <CategoriesContent />
+    </Suspense>
   );
 }
 

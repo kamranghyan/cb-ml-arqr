@@ -1,6 +1,5 @@
-import { RESTAURANT_ID } from './api-config'
-import { getValidIdToken } from './cognito'
-
+import { API_BASE, RESTAURANT_ID } from './api-config'
+import { getValidIdToken, loadUser } from './cognito'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ApiAddress {
@@ -99,7 +98,12 @@ async function adminFetch<T = any>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`/api/menu${path}`, {
+  const tenantId = loadUser()?.tenantId
+  if (tenantId) {
+    headers['X-Tenant-Id'] = tenantId
+  }
+  
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
   })

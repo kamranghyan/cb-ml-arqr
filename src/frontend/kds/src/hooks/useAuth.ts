@@ -137,12 +137,12 @@ export function useAuth() {
   }, [])
 
   // ── Sign out ─────────────────────────────────────────────────────────────
-  const logout = useCallback(async () => {
-    await cognitoSignOut()
-    deleteCookie('menulay_token_kds')
-    setState({ user: null, loading: false, error: null })
-    window.location.href = '/'
-  }, [])
+const logout = useCallback(async () => {
+  try { await cognitoSignOut() } catch {}
+  deleteCookie('menulay_token_kds')
+  setState({ user: null, loading: false, error: null })
+  window.location.replace('/login/kds/')
+}, [])
 
   // ── Forgot password ──────────────────────────────────────────────────────
   const sendResetCode = useCallback(async (email: string) => {

@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Volume2, VolumeX, RefreshCw, Wifi, WifiOff, Radio, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { formatTimer, timerColorClass, timerBarColor, playNewOrderBeep } from '@/lib/utils';
-import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL, connectWebSocket, authHeaders } from '@/lib/orders-api';
+import { patchOrderStatus, normaliseOrder, toKdsStatus, WS_URL, connectWebSocket, authHeaders, ORDERS_URLS } from '@/lib/orders-api';
 import type { KdsOrder, KdsStatus } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from 'sonner';
+import { headers } from 'next/dist/client/components/headers';
 
 type Filter = 'all' | 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 type WsState = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -24,7 +25,6 @@ const STRIP_COLOR: Record<KdsStatus, string> = {
   new: '#ff5723', preparing: '#3b82f6', ready: '#22c55e', delivered: '#a855f7', cancelled: '#ef4444',
 };
 const BRAND = '#ff5723';
-
 export default function KitchenDisplayPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -95,7 +95,7 @@ export default function KitchenDisplayPage() {
   const addWsLog = (msg: string) => { const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); setWsLog(prev => [`[${time}] ${msg}`, ...prev.slice(0, 9)]); };
   const notifyOrderCancelled = useCallback(async (orderId: string, displayId: string) => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch((ORDERS_URLS.patch(orderId)), {
         cache: 'no-store',
         headers: await authHeaders(),
       });
@@ -333,11 +333,15 @@ export default function KitchenDisplayPage() {
           return;
         }
 
-        const res = await fetch('/api/orders', {
-          cache: 'no-store',
-          headers: await authHeaders(),
-          signal: controller.signal,
-        });
+        const res = await fetch(
+          `${ORDERS_URLS.list()}?restaurantId=${encodeURIComponent(user.restaurantId)}&hours=24`,
+          {
+            cache: 'no-store',
+            headers: await authHeaders(),
+            signal: controller.signal,
+          }
+        );
+
 
         if (!res.ok) {
           throw new Error(`API ${res.status}`);
@@ -654,7 +658,7 @@ export default function KitchenDisplayPage() {
       }}>
         {/* Left - Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <img src='./Images/logo.png' alt="Menulay Logo" style={{ width: 120, height: 32, objectFit: 'contain' }} />
+          <img src='/Images/logo.png' alt="Menulay Logo" style={{ width: 120, height: 32, objectFit: 'contain' }} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <p style={{
               color: '#fff',

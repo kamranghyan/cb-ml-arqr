@@ -10,7 +10,7 @@
  */
 
 import { getValidIdToken } from './cognito'
-
+import { AUTH_API_BASE } from './api-config'
 // ── Types ─────────────────────────────────────────────────────────────
 
 export type PlanTier = 'starter' | 'professional' | 'enterprise'
@@ -96,7 +96,7 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`/api/auth-svc${path}`, { ...options, headers })
+  const res = await fetch(`${AUTH_API_BASE}${path}`, { ...options, headers })
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')

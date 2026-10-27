@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Plus, Edit2, Trash2, X, Loader2, RefreshCw, Grid3x3, AlertCircle, MapPin, Check } from 'lucide-react';
 import {
   fetchTables, createTable, updateTable, deleteTable, type ApiTable,
@@ -32,8 +32,8 @@ const getColors = (isDark: boolean) => ({
   modalOverlay: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)',
 });
 
-export default function TablesPage() {
-  const restaurantId = String(useParams().restaurantId ?? '');
+function TablesPage() {
+  const restaurantId = String(useSearchParams().get('restaurantId') ?? '');
   const [isDark, setIsDark] = useState(false);
   const [rows, setRows] = useState<ApiTable[]>([]);
   const [zones, setZones] = useState<ApiZone[]>([]);
@@ -412,6 +412,14 @@ export default function TablesPage() {
       )}
 
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <TablesPage />
+    </Suspense>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { PAYMENT_API_BASE } from '@/lib/api-config';
 import {
     CreditCard,
     CheckCircle,
@@ -104,7 +105,7 @@ export default function TenantPayment() {
                 status: 'PENDING',
             });
         } else {
-            router.push('/tenant/subscription');
+            router.push('/subscription');
         }
     }, [searchParams, router]);
 
@@ -339,7 +340,7 @@ export default function TenantPayment() {
             // ─────────────────────────────────────
 
             const paymentRes = await fetch(
-                '/api/payment-svc/payment/initiate',
+                `${PAYMENT_API_BASE}/payment/initiate`,
                 {
                     method: 'POST',
 

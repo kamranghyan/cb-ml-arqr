@@ -315,12 +315,12 @@ function TenantLoginContent() {
   const displayError = error || localError
 
   const stepMeta: Record<Step, { icon: React.ReactNode; title: string; sub: string }> = {
-    login: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'MenuLay Console', sub: 'Sign in to your workspace' },
-    new_password: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Set New Password', sub: 'First login — permanent password' },
-    forgot: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Reset Password', sub: 'Enter email to receive a code' },
-    reset_confirm: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Enter Reset Code', sub: 'Check your email for the code' },
-    register: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Register Restaurant', sub: 'Create your account' },
-    verify: { icon: <img src='./Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Verify Email', sub: `Code sent to ${email}` },
+    login: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'MenuLay Console', sub: 'Sign in to your workspace' },
+    new_password: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Set New Password', sub: 'First login — permanent password' },
+    forgot: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Reset Password', sub: 'Enter email to receive a code' },
+    reset_confirm: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Enter Reset Code', sub: 'Check your email for the code' },
+    register: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Register Restaurant', sub: 'Create your account' },
+    verify: { icon: <img src='/Images/white-logo.png' alt="MenuLay" style={{ width: 48, height: 48 }} />, title: 'Verify Email', sub: `Code sent to ${email}` },
   }
   const meta = stepMeta[step]
 

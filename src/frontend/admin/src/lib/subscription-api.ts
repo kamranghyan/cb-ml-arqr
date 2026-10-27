@@ -1,5 +1,5 @@
 import { getValidIdToken } from './cognito';
-
+import { AUTH_API_BASE } from './api-config';
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ async function subscriptionFetch<T>(
     }
 
     const res = await fetch(
-        `/api/auth-svc${path}`,
+        `${AUTH_API_BASE}${path}`,
         {
             ...options,
             headers,

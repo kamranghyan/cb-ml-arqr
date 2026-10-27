@@ -9,7 +9,7 @@
  */
 
 import { getValidIdToken } from './cognito'
-
+import { API_BASE, ORDERS_API_BASE } from './api-config'
 // ── Types ─────────────────────────────────────────────────────────────
 
 export interface SupportRestaurant {
@@ -110,7 +110,7 @@ export async function fetchRestaurantsForTenant(
   tenantId: string,
 ): Promise<SupportRestaurant[]> {
   const data = await scopedFetch<{ items: SupportRestaurant[] }>(
-    '/api/menu/restaurants',
+    `${API_BASE}/restaurants`,
     tenantId,
   )
   const all = data.items ?? []
@@ -131,7 +131,7 @@ export async function fetchOrdersForRestaurant(
   hours = 4,
 ): Promise<SupportOrder[]> {
   const data = await scopedFetch<{ orders: SupportOrder[] }>(
-    `/api/orders?restaurantId=${restaurantId}&hours=${hours}`,
+    `${ORDERS_API_BASE}/orders?restaurantId=${restaurantId}&hours=${hours}`,
     tenantId,
   )
   return data.orders ?? []

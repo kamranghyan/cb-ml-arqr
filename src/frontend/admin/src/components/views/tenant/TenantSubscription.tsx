@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import {
+import { SUBS_API } from '@/lib/api-config';import {
     CreditCard,
     CheckCircle,
     AlertCircle,
@@ -218,7 +218,7 @@ export default function TenantSubscription() {
             };
 
             const [plansRes, subRes] = await Promise.all([
-                fetch('/api/auth-svc/plans', {
+                fetch(`${SUBS_API}/plans`, {
                     headers,
                 }).then(async (res) => {
                     if (!res.ok) {
@@ -231,7 +231,7 @@ export default function TenantSubscription() {
                 }),
 
                 fetch(
-                    `/api/auth-svc/subscriptions/status/${tenantData.tenantId}`,
+                    `${SUBS_API}/subscriptions/status/${tenantData.tenantId}`,
                     {
                         headers,
                     }
@@ -248,7 +248,7 @@ export default function TenantSubscription() {
 
                             if (newToken) {
                                 const retry = await fetch(
-                                    `/api/auth-svc/subscriptions/status/${tenantData.tenantId}`,
+                                    `${SUBS_API}/subscriptions/status/${tenantData.tenantId}`,
                                     {
                                         headers: {
                                             'Content-Type':
@@ -331,8 +331,7 @@ export default function TenantSubscription() {
              * jab tenant actual "Pay Now" press karta hai.
              */
 
-            const res = await fetch(
-                '/api/auth-svc/subscriptions/subscribe',
+            const res = await fetch(`${SUBS_API}/subscriptions/subscribe`,
                 {
                     method: 'POST',
                     headers: {

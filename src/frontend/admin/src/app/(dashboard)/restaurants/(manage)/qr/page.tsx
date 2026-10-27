@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { fetchTables, type ApiTable } from '@/lib/admin-api';
+import QRCode from 'qrcode';
 import {
   Download, Printer, Eye, X,
   Copy, CheckCheck, QrCode, MapPin,
@@ -94,8 +95,8 @@ function tableToRecord(t: ApiTable): QrRecord {
   };
 }
 
-export default function BranchQrPage() {
-  const restaurantId = String(useParams().restaurantId ?? '');
+function BranchQrPage() {
+const restaurantId = useSearchParams().get('restaurantId') ?? '';
   const [isDark, setIsDark] = useState(false);
   const [records, setRecords] = useState<QrRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,26 +159,17 @@ export default function BranchQrPage() {
   }, [loadTables]);
 
   const generateQR = useCallback(async (record: QrRecord): Promise<string | null> => {
-    try {
-      const res = await fetch('/api/qr/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          restaurantId: record.restaurantId,
-          tableId: record.tableId,
-          tableNumber: record.tableNumber,
-          zone: record.zone,
-          outlet: record.outlet
-        })
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
-      return data.pngDataUrl ?? null;
-    } catch (err: any) {
-      console.error('QR gen error:', err);
-      return null;
-    }
-  }, []);
+  try {
+    return await QRCode.toDataURL(record.encodedUrl, {
+      width: 600,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    });
+  } catch (err) {
+    console.error('QR gen error:', err);
+    return null;
+  }
+}, []);
 
   const openPreview = async (record: QrRecord) => {
     setPreview(record);
@@ -1210,5 +1202,13 @@ export default function BranchQrPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <BranchQrPage />
+    </Suspense>
   );
 }

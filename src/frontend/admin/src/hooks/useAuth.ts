@@ -22,28 +22,28 @@ import {
 } from '@/lib/cognito'
 
 type AuthState = {
-  user:        AuthUser | null
-  loading:     boolean
-  error:       string | null
+  user: AuthUser | null
+  loading: boolean
+  error: string | null
 }
 
 type LoginResult = {
-  success:   boolean
+  success: boolean
   challenge?: 'NEW_PASSWORD_REQUIRED'
-  session?:  string
+  session?: string
   redirect?: string // where to go after login
 }
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
-    user:    null,
+    user: null,
     loading: true,
-    error:   null,
+    error: null,
   })
 
   // ── Load user on mount ───────────────────────────────────────────────────
   useEffect(() => {
-    const user   = loadUser()
+    const user = loadUser()
     const tokens = loadTokens()
     if (user && tokens && Date.now() < tokens.expiresAt) {
       setState({ user, loading: false, error: null })
@@ -125,10 +125,10 @@ export function useAuth() {
 
   // ── Sign out ─────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    await cognitoSignOut()
+    try { await cognitoSignOut() } catch { }
     deleteCookie('menulay_token_console')
     setState({ user: null, loading: false, error: null })
-    window.location.href = '/'
+    window.location.replace('/login/')
   }, [])
 
   // ── Forgot password ──────────────────────────────────────────────────────
@@ -191,14 +191,14 @@ export function useAuth() {
 
   return {
     // State
-    user:            state.user,
-    loading:         state.loading,
-    error:           state.error,
+    user: state.user,
+    loading: state.loading,
+    error: state.error,
     isAuthenticated: !!state.user,
     // Role checks
-    isAdmin:         isAdmin(state.user),
-    isTenant:        isTenant(state.user),
-    isKitchenStaff:  isKitchenStaff(state.user),
+    isAdmin: isAdmin(state.user),
+    isTenant: isTenant(state.user),
+    isKitchenStaff: isKitchenStaff(state.user),
     // Actions
     login,
     logout,

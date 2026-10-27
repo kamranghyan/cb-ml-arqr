@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { createPlan as createPlanApi } from '@/lib/subscription-api';
 import {
   Building2, Store, TrendingUp, Loader2, AlertCircle,
   RefreshCw, ChevronRight, Pause, Plus, CreditCard,
@@ -123,19 +124,10 @@ export default function AdminDashboard() {
     setPlanSuccess('');
 
     try {
-      const res = await fetch('/api/v1/plans/admin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-Id': '1c71a684-c20f-411b-9cd6-45ab2f24413b',
-        },
-        body: JSON.stringify(planData),
+      await createPlanApi({
+        ...planData,
+        whats_included: [],
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || data?.detail || 'Failed to create plan');
-      }
 
       toast.success(`Plan "${planData.plan_name}" created successfully.`);
       setShowPlanModal(false);

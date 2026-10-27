@@ -5,10 +5,12 @@
 
 import type { KdsOrder, KdsStatus } from './types';
 
-const PROXY = {
-  list: () => '/api/orders',
-  patch: (id: string) => `/api/orders/${id}`,
-  post: () => '/api/orders',
+const ORDERS_API = process.env.NEXT_PUBLIC_ORDERS_API_BASE;
+
+export const ORDERS_URLS = {
+  list:  () => `${ORDERS_API}/orders`,
+  patch: (id: string) => `${ORDERS_API}/orders/${id}`,
+  post:  () => `${ORDERS_API}/orders`,
 };
 
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -286,9 +288,14 @@ export function normaliseOrder(
  */
 export async function authHeaders(): Promise<Record<string, string>> {
   try {
-    const { getValidIdToken } = await import('@/lib/cognito');
+    const { getValidIdToken, loadUser } = await import('@/lib/cognito');
     const token = await getValidIdToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    const tenantId = loadUser()?.tenantId;
+
+    return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tenantId ? { 'X-Tenant-Id': tenantId } : {}),
+    };
   } catch {
     return {};
   }
@@ -301,7 +308,7 @@ export async function patchOrderStatus(apiOrderId: string, newStatus: KdsStatus)
   const payload = toFlagPayload(apiOrderId, newStatus);
 
   // PATCH requires a kitchen/admin token — the kitchen user is logged in.
-  const res = await fetch(PROXY.patch(apiOrderId), {
+  const res = await fetch(ORDERS_URLS.patch(apiOrderId), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify(payload),

@@ -9,6 +9,7 @@ import {
   AR_API,
   RESTAURANT_ID,
   TENANT_ID,
+  API_BASE,
 } from './api-config'
 import { getValidIdToken, loadUser } from './cognito'
 
@@ -407,12 +408,11 @@ export async function createMenuItemWithFiles(
     string,
     string
   > = {
-    Authorization: token,
+    Authorization: `Bearer ${token}`,
     'x-tenant-id': TENANT_ID,
   }
 
-  const res = await fetch(
-    `/api/menu/restaurants/${restaurantId}/items`,
+  const res = await fetch(`${API_BASE}/restaurants/${restaurantId}/items`,
     {
       method: 'POST',
       headers,
@@ -666,7 +666,7 @@ export async function updateMenuItem(
   )
 
   return menuFetch<ApiMenuItem>(
-    `/api/menu/restaurants/${restaurantId}/items/${itemId}`,
+    `${API_BASE}/restaurants/${restaurantId}/items/${itemId}`,
     {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -886,7 +886,7 @@ export async function updateMenuItemWithFiles(
   // ------------------------------------------------------------
 
   const res = await fetch(
-    `/api/menu/restaurants/${restaurantId}/items/${itemId}`,
+    `${API_BASE}/restaurants/${restaurantId}/items/${itemId}`,
     {
       method: 'PUT',
       headers,
@@ -975,8 +975,7 @@ export async function createAddon(
   itemId: string,
   payload: CreateAddonPayload
 ): Promise<ApiAddon> {
-  return menuFetch(
-    `/api/menu/restaurants/${restaurantId}/items/${itemId}/addons`,
+  return menuFetch(`${API_BASE}/restaurants/${restaurantId}/items/${itemId}/addons`,
     {
       method: 'POST',
       body: JSON.stringify({
@@ -1005,7 +1004,7 @@ export async function updateAddon(
   }
 ): Promise<ApiAddon> {
   return menuFetch(
-    `/api/menu/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
+    `${API_BASE}/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
     {
       method: 'PATCH',
       body: JSON.stringify({
@@ -1027,7 +1026,7 @@ export async function deleteAddon(
   addOnId: string
 ): Promise<void> {
   await menuFetch(
-    `/api/menu/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
+    `${API_BASE}/restaurants/${restaurantId}/items/${itemId}/addons/${addOnId}`,
     {
       method: 'DELETE',
     }

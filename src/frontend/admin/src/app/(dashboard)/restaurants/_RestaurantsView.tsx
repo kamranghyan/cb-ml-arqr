@@ -412,7 +412,7 @@ export default function RestaurantsView() {
                 {r.currencyCode} · {r.timezone}
               </div>
 
-              <Link href={`/restaurants/${r.restaurantId}/menu`} style={{
+              <Link href={`/restaurants/menu?restaurantId=${r.restaurantId}`} style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',

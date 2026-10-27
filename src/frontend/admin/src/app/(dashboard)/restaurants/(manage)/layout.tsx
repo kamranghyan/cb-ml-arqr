@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { ArrowLeft, UtensilsCrossed, Tags, Grid3x3, QrCode, Loader2 } from 'lucide-react';
 import { fetchRestaurant, type ApiRestaurant } from '@/lib/admin-api';
 import { getTheme } from '@/lib/theme';
@@ -33,10 +33,10 @@ const TABS = [
   { seg: 'qr', label: 'QR Codes', icon: QrCode },
 ];
 
-export default function BranchLayout({ children }: { children: React.ReactNode }) {
-  const params = useParams();
+function BranchLayoutInner({ children }: { children: React.ReactNode }) {
+  const searchParams = useSearchParams();
   const pathname = usePathname();
-  const restaurantId = String(params.restaurantId ?? '');
+  const restaurantId = searchParams.get('restaurantId') ?? '';
   const [isDark, setIsDark] = useState(false);
   const [restaurant, setRestaurant] = useState<ApiRestaurant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,7 +179,7 @@ export default function BranchLayout({ children }: { children: React.ReactNode }
             }
           `}</style>
           {TABS.map(({ seg, label, icon: Icon }) => {
-            const href = `/restaurants/${restaurantId}/${seg}`;
+            const href = `/restaurants/${seg}?restaurantId=${restaurantId}`;
             const active = pathname.endsWith(`/${seg}`);
             return (
               <Link
@@ -250,5 +250,13 @@ export default function BranchLayout({ children }: { children: React.ReactNode }
 
       {children}
     </div>
+  );
+}
+
+export default function BranchLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={null}>
+      <BranchLayoutInner>{children}</BranchLayoutInner>
+    </Suspense>
   );
 }

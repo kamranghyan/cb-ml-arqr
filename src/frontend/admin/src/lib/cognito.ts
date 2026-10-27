@@ -99,15 +99,79 @@ export function extractUser(idToken: string): AuthUser {
 }
 
 // ── Proxy call — goes through /api/auth (avoids CORS) ───────────────────────
-async function authProxy(action: string, payload: object) {
-  const res = await fetch('/api/auth', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ action, ...payload }),
+const REGION    = process.env.NEXT_PUBLIC_COGNITO_REGION!
+const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!
+
+async function cognito(target: string, body: object) {
+  const res = await fetch(`https://cognito-idp.${REGION}.amazonaws.com/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-amz-json-1.1',
+      'X-Amz-Target': `AWSCognitoIdentityProviderService.${target}`,
+    },
+    body: JSON.stringify(body),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.message ?? data.error ?? 'Auth error')
+  if (!res.ok) throw new Error(data.message ?? data.__type ?? 'Auth error')
   return data
+}
+
+function tokensFrom(r: any) {
+  const a = r.AuthenticationResult
+  return {
+    accessToken: a.AccessToken,
+    idToken: a.IdToken,
+    refreshToken: a.RefreshToken,
+    expiresIn: a.ExpiresIn,
+  }
+}
+
+async function authProxy(action: string, p: any) {
+  switch (action) {
+    case 'login': {
+      const r = await cognito('InitiateAuth', {
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: { USERNAME: p.email, PASSWORD: p.password },
+      })
+      if (r.ChallengeName === 'NEW_PASSWORD_REQUIRED')
+        return { challenge: 'NEW_PASSWORD_REQUIRED', session: r.Session }
+      return tokensFrom(r)
+    }
+    case 'setNewPassword':
+      return tokensFrom(await cognito('RespondToAuthChallenge', {
+        ChallengeName: 'NEW_PASSWORD_REQUIRED',
+        ClientId: CLIENT_ID,
+        Session: p.session,
+        ChallengeResponses: { USERNAME: p.email, NEW_PASSWORD: p.newPassword },
+      }))
+    case 'refresh':
+      return tokensFrom(await cognito('InitiateAuth', {
+        AuthFlow: 'REFRESH_TOKEN_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: { REFRESH_TOKEN: p.refreshToken },
+      }))
+    case 'forgotPassword':
+      return cognito('ForgotPassword', { ClientId: CLIENT_ID, Username: p.email })
+    case 'confirmForgotPassword':
+      return cognito('ConfirmForgotPassword', {
+        ClientId: CLIENT_ID, Username: p.email,
+        ConfirmationCode: p.code, Password: p.newPassword,
+      })
+    case 'confirmSignUp':
+      return cognito('ConfirmSignUp', {
+        ClientId: CLIENT_ID, Username: p.email, ConfirmationCode: p.code,
+      })
+    case 'signOut':
+      return cognito('GlobalSignOut', { AccessToken: p.accessToken })
+    case 'signUp':
+      return cognito('SignUp', {
+        ClientId: CLIENT_ID, Username: p.email, Password: p.password,
+        UserAttributes: [{ Name: 'email', Value: p.email }],
+      })
+    default:
+      throw new Error('Unknown action')
+  }
 }
 
 // ── Login ────────────────────────────────────────────────────────────────────

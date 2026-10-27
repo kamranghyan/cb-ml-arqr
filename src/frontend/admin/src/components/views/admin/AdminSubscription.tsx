@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { SUBS_API } from '@/lib/api-config';
+import { getValidIdToken } from '@/lib/cognito';
 import {
     CreditCard,
     Plus,
@@ -113,10 +115,10 @@ export default function AdminSubscription() {
         setSuccess('');
 
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = await getValidIdToken();
 
             const response = await fetch(
-                `/api/subscription-svc/subscriptions/${tenantToDelete.tenantId}`,
+                `${SUBS_API}/subscriptions/${tenantToDelete.tenantId}`,
                 {
                     method: 'DELETE',
                     headers: {
