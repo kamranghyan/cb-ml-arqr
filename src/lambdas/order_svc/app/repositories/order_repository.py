@@ -1,0 +1,373 @@
+"""
+app/repositories/order_repository.py
+================================================
+OrderRepository — all DynamoDB operations for orders.
+
+Encapsulates:
+  - write_order    (PUT with conditional)
+  - rollback_order (DELETE on SFN failure)
+  - get_order      (query by PK)
+  - update_status  (SET status + updatedAt)
+  - list_orders    (GSI query by restaurantId + placedAt range)
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any
+
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+
+from app.models.order import OrderRecord, clean_decimals, to_dynamo_types
+from shared.exceptions import ResourceNotFoundError, S3WriteError
+from shared.structured_logger import get_logger
+
+_log = get_logger("orders.repository")
+
+
+class DuplicateOrderError(Exception):
+    """Raised when an order with the same PK already exists."""
+    pass
+
+
+class OrderRepository:
+    """
+    DynamoDB repository for order records.
+
+    Parameters
+    ----------
+    dynamodb_resource : boto3 DynamoDB resource
+    dynamodb_client   : boto3 DynamoDB client (for batch_get_item)
+    table_name        : OrderTable name
+    """
+
+    def __init__(self, dynamodb_resource, dynamodb_client, table_name: str):
+        self._resource   = dynamodb_resource
+        self._client     = dynamodb_client
+        self._table_name = table_name
+
+    @property
+    def _table(self):
+        return self._resource.Table(self._table_name)
+
+    # ── Helper to ensure addOns fields exist ────────────────────────────────
+
+    def _ensure_addons_fields(self, order: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure addOns fields exist in the order"""
+        if "lineItems" in order:
+            for item in order["lineItems"]:
+                if "addOns" not in item:
+                    item["addOns"] = []
+                if "addOnsTotalMinorUnits" not in item:
+                    item["addOnsTotalMinorUnits"] = 0
+        return order
+
+    # ── Write ─────────────────────────────────────────────────────────────────
+
+    def write_order(self, record: OrderRecord) -> None:
+        """
+        Write a new order record to DynamoDB.
+
+        Raises
+        ------
+        DuplicateOrderError — PK already exists
+        ClientError         — any other DynamoDB error
+        """
+        item = to_dynamo_types(record.to_dynamo_item())
+        
+        # ✅ Ensure addOns fields are properly formatted
+        if "lineItems" in item:
+            for line_item in item["lineItems"]:
+                if "addOns" not in line_item:
+                    line_item["addOns"] = []
+                if "addOnsTotalMinorUnits" not in line_item:
+                    line_item["addOnsTotalMinorUnits"] = 0
+        
+        try:
+            self._table.put_item(
+                Item=item,
+                ConditionExpression="attribute_not_exists(PK)",
+            )
+            _log.info("order.written", order_id=record.orderId)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DuplicateOrderError(record.orderId) from exc
+            _log.error(
+                "order.write.failed",
+                order_id=record.orderId,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise
+
+    def rollback_order(self, record: OrderRecord) -> None:
+        """Delete an order record — used to rollback after SFN failure."""
+        try:
+            self._table.delete_item(Key={"PK": record.PK, "SK": record.SK})
+            _log.info("order.rollback.success", order_id=record.orderId)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("order.rollback.failed", order_id=record.orderId, exc_message=str(exc))
+
+    # ── Read ──────────────────────────────────────────────────────────────────
+
+    def get_order(self, order_id: str, tenant_id: str) -> Optional[dict]:
+        """
+        Fetch a single order by orderId + tenantId.
+
+        Returns the item dict or None if not found.
+        """
+        pk  = f"TENANT#{tenant_id}#ORDER#{order_id}"
+        res = self._table.query(
+            KeyConditionExpression=Key("PK").eq(pk),
+            Limit=1,
+        )
+        items = res.get("Items", [])
+        if not items:
+            return None
+        
+        # ✅ Ensure addOns fields exist in the returned order
+        return self._ensure_addons_fields(items[0])
+
+    def get_order_for_guest(
+        self,
+        order_id: str,
+        tenant_id: str,
+        guest_session_id: str,
+    ) -> Optional[dict]:
+        """
+        Fetch an order only if it belongs to the supplied guest session.
+
+        Guest access is scoped by:
+        - tenantId
+        - orderId
+        - guestSessionId
+        """
+        order = self.get_order(order_id, tenant_id)
+
+        if not order:
+            return None
+
+        if not guest_session_id:
+            return None
+
+        if order.get("guestSessionId") != guest_session_id:
+            return None
+
+        return order
+
+    def list_orders(
+        self,
+        restaurant_id: str,
+        tenant_id:     str,
+        hours:         Optional[int] = None,
+    ) -> list[dict]:
+        """
+        List recent orders for a restaurant via GSI-1 using camelCase parameters.
+        """
+        keyCondition = Key("restaurantId").eq(restaurant_id)
+
+        if hours is not None:
+            fromTime = (
+                datetime.now(timezone.utc) - timedelta(hours=hours)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            keyCondition = keyCondition & Key("placedAt").gte(fromTime)
+
+        res = self._table.query(
+            IndexName="GSI-1-restaurant-orders",
+            KeyConditionExpression=keyCondition,
+            ScanIndexForward=False,
+        )
+        
+        orders = [
+            o for o in res.get("Items", [])
+            if str(o.get("tenantId", "")).strip().lower() == str(tenant_id).strip().lower()
+        ]
+        
+        return [self._ensure_addons_fields(order) for order in orders]
+
+    # ── Update ────────────────────────────────────────────────────────────────
+
+    def update_status(
+        self,
+        order_id: str,
+        tenant_id: str,
+        status: str,
+        cancellation_reason: Optional[str] = None,
+    ) -> None:
+        """
+        Update the status and updatedAt fields for an order.
+
+        If cancellation_reason is given (non-empty), it is also persisted
+        on the order item as `cancellationReason` — this is how a guest's
+        reason for cancelling ends up in DynamoDB.
+
+        Raises
+        ------
+        ResourceNotFoundError — order does not exist
+        ClientError           — DynamoDB error
+        """
+        order = self.get_order(order_id, tenant_id)
+        if not order:
+            raise ResourceNotFoundError(resource="Order", identifier=order_id)
+
+        updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        update_expression = "SET #st = :s, updatedAt = :u"
+        expression_attr_names = {"#st": "status"}
+        expression_attr_values = {":s": status, ":u": updated_at}
+
+        if cancellation_reason:
+            update_expression += ", cancellationReason = :cr"
+            expression_attr_values[":cr"] = cancellation_reason
+
+        try:
+            self._table.update_item(
+                Key={"PK": order["PK"], "SK": order["SK"]},
+                UpdateExpression=update_expression,
+                ExpressionAttributeNames=expression_attr_names,
+                ExpressionAttributeValues=expression_attr_values,
+            )
+            _log.info(
+                "order.status.updated",
+                order_id=order_id,
+                status=status,
+                has_cancellation_reason=bool(cancellation_reason),
+            )
+        except ClientError as exc:
+            _log.error(
+                "order.status.update.failed",
+                order_id=order_id,
+                status=status,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise
+
+        # ── Feedback ──────────────────────────────────────────────────────────────
+
+    def find_active_order_for_guest(
+        self,
+        restaurant_id: str,
+        tenant_id: str,
+        guest_session_id: str,
+        hours: int = 24,
+    ) -> Optional[dict]:
+        """
+        Find this guest's most recent order that hasn't reached a terminal
+        status yet (RECEIVED/PREPARING/READY are all "still active").
+
+        Reuses the existing restaurant+time GSI rather than adding a new
+        guestSessionId index — order volume per restaurant in a day is
+        small, and this only runs at order-creation time, not on a hot
+        path, so filtering in Python here is simpler than a new GSI +
+        infra change for a check this infrequent.
+        """
+        if not guest_session_id:
+            return None
+
+        orders = self.list_orders(restaurant_id, tenant_id, hours=hours)
+
+        TERMINAL_STATUSES = {"DELIVERED", "CANCELLED", "TIMED_OUT", "COMPLETED"}
+
+        active = [
+            o for o in orders
+            if o.get("guestSessionId") == guest_session_id
+            and str(o.get("status", "")).upper() not in TERMINAL_STATUSES
+        ]
+
+        if not active:
+            return None
+
+        # Most recently placed, in case there's somehow more than one.
+        active.sort(key=lambda o: o.get("placedAt", ""), reverse=True)
+        return active[0]
+
+
+    def add_feedback(
+        self,
+        order_id: str,
+        tenant_id: str,
+        rating: int,
+        feedback_text: Optional[str] = None,
+    ) -> None:
+        """
+        Attach a guest's rating/feedback to their order record.
+
+        Stored directly on the order item (alongside its lineItems) so a
+        later pass can attribute the rating to each item in the order for
+        per-item rating aggregation on the restaurant dashboard.
+        """
+        order = self.get_order(order_id, tenant_id)
+        if not order:
+            raise ResourceNotFoundError(resource="Order", identifier=order_id)
+
+        submitted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        update_expression = "SET rating = :r, feedbackSubmittedAt = :fa"
+        expression_attr_values: Dict[str, Any] = {
+            ":r": rating,
+            ":fa": submitted_at,
+        }
+
+        if feedback_text:
+            update_expression += ", feedbackText = :ft"
+            expression_attr_values[":ft"] = feedback_text
+
+        try:
+            self._table.update_item(
+                Key={"PK": order["PK"], "SK": order["SK"]},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attr_values,
+            )
+            _log.info(
+                "order.feedback.added",
+                order_id=order_id,
+                rating=rating,
+                has_feedback_text=bool(feedback_text),
+            )
+        except ClientError as exc:
+            _log.error(
+                "order.feedback.add.failed",
+                order_id=order_id,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise
+
+
+    # ── Update order with addOns (if needed) ────────────────────────────────
+
+    def update_order_with_addons(self, order_id: str, tenant_id: str, line_items: List[Dict]) -> None:
+        """
+        Update order with new line items including addOns.
+        """
+        order = self.get_order(order_id, tenant_id)
+        if not order:
+            raise ResourceNotFoundError(resource="Order", identifier=order_id)
+
+        updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # ✅ Ensure each line item has addOns fields
+        for item in line_items:
+            if "addOns" not in item:
+                item["addOns"] = []
+            if "addOnsTotalMinorUnits" not in item:
+                item["addOnsTotalMinorUnits"] = 0
+
+        try:
+            self._table.update_item(
+                Key={"PK": order["PK"], "SK": order["SK"]},
+                UpdateExpression="SET lineItems = :li, updatedAt = :u",
+                ExpressionAttributeValues={
+                    ":li": line_items,
+                    ":u": updated_at
+                },
+            )
+            _log.info("order.addons.updated", order_id=order_id)
+        except ClientError as exc:
+            _log.error(
+                "order.addons.update.failed",
+                order_id=order_id,
+                error_code=exc.response["Error"]["Code"],
+            )
+            raise
+
+

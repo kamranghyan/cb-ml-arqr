@@ -1,0 +1,23 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "ar-assets-fastapi-dev"
+
+[default.build.parameters]
+cached   = true
+parallel = true
+
+[default.deploy.parameters]
+region            = "ap-south-1"
+confirm_changeset = true
+resolve_s3        = true
+capabilities      = "CAPABILITY_IAM"
+parameter_overrides = [
+  "Environment=dev",
+  "AssetBucketName=cb-ml-arqr-menu-assets-dev-990016797093",
+  "CognitoRegion=ap-south-1",
+  "CognitoUserPoolId=ap-south-1_RkmSFSjU4",
+  "CognitoClientId=5c5e7traqqso952olhnuoife01",
+  "CfDomain=cb-ml-arqr-menu-assets-dev-990016797093.s3.ap-south-1.amazonaws.com",
+  "LogLevel=INFO",
+]

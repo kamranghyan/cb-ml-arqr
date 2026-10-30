@@ -1,0 +1,63 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "ws-project"
+region     = "ap-south-1"
+
+[default.build.parameters]
+cached   = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project"
+disable_rollback    = false
+parameter_overrides = "Stage=\"dev\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\" OrdersTableStreamArn=\"arn:aws:dynamodb:ap-south-1:990016797093:table/OrderTable-dev/stream/2026-08-30T00:36:03.063\""
+image_repositories  = []
+
+[dev.global.parameters]
+stack_name = "ws-project-dev"
+region     = "ap-south-1"
+
+[dev.build.parameters]
+cached   = true
+parallel = true
+
+[dev.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-dev"
+disable_rollback    = false
+parameter_overrides = "Stage=\"dev\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
+image_repositories  = []
+
+[staging.global.parameters]
+stack_name = "ws-project-staging"
+region     = "ap-south-1"
+
+[staging.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-staging"
+parameter_overrides = "Stage=\"staging\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
+image_repositories  = []
+
+[prod.global.parameters]
+stack_name = "ws-project-prod"
+region     = "ap-south-1"
+
+[prod.deploy.parameters]
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+region              = "ap-south-1"
+confirm_changeset   = true
+resolve_s3          = true
+s3_prefix           = "ws-project-prod"
+parameter_overrides = "Stage=\"prod\" UserPoolId=\"ap-south-1_RkmSFSjU4\" ClientId=\"5c5e7traqqso952olhnuoife01\""
+image_repositories  = []

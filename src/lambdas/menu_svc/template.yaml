@@ -1,0 +1,291 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: MenuLay — menu_svc Lambda (FastAPI + Mangum, shared Lambda Layer)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  TenantTable:
+    Type: String
+    Default: TenantTable-dev
+  AssetBucketName:
+    Type: String
+    Default: cb-ml-arqr-menu-assets-dev-990016797093
+  CognitoRegion:
+    Type: String
+    Default: ap-south-1
+  CognitoUserPoolId:
+    Type: String
+    Default: ap-south-1_SCyQ50etN
+  CognitoClientId:
+    Type: String
+    Default: 7903hkujl9qeq67toemi5qrhes
+    NoEcho: true
+  RedisHost:
+    Type: String
+    Default: localhost
+  RedisPort:
+    Type: String
+    Default: "6379"
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+
+Globals:
+  Function:
+    Runtime:       python3.12
+    Architectures: [arm64]
+    MemorySize:    512
+    Timeout:       30
+    Environment:
+      Variables:
+        ENVIRONMENT:             !Ref Environment
+        LOG_LEVEL:               !Ref LogLevel
+        RESTAURANT_TABLE:        !Sub "RestaurantTable-${Environment}"
+        CATEGORY_TABLE:          !Sub "CategoryTable-${Environment}"
+        ITEM_TABLE:              !Sub "ItemTable-${Environment}"
+        ADDON_TABLE:             !Sub "AddOnTable-${Environment}"
+        DINING_TABLE:            !Sub "DiningTable-${Environment}"
+        ORDER_TABLE:             !Sub "OrderTable-${Environment}"
+        TENANT_TABLE:            !Sub "TenantTable-${Environment}"
+        S3_BUCKET:               !Ref AssetBucketName
+        ASSET_BUCKET_NAME:       !Ref AssetBucketName
+        REDIS_HOST:              !Ref RedisHost
+        REDIS_PORT:              !Ref RedisPort
+        MAX_IMAGE_MB:            "5"
+        MAX_AR_MB:               "50"
+        COGNITO_REGION:          !Ref CognitoRegion
+        COGNITO_USER_POOL_ID:    !Ref CognitoUserPoolId
+        COGNITO_CLIENT_ID:       !Ref CognitoClientId
+
+Resources:
+
+  # ── Shared Lambda Layer ─────────────────────────────────────────────────────
+  # Common code (auth, exceptions, logging, aws clients) shared by all
+  # MenuLay services. Source: ../../layers/shared_layer
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "menulay-shared-${Environment}"
+      Description: MenuLay shared layer (cognito auth, exceptions, structured logging)
+      ContentUri: ../layers/shared_layer
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - arm64
+      RetentionPolicy: Delete
+
+  MenuApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name:      !Sub "menu-svc-api-${Environment}"
+      StageName: !Ref Environment
+      BinaryMediaTypes:
+        - "multipart/form-data"
+        - "image/jpeg"
+        - "image/png"
+        - "image/webp"
+        - "model/gltf-binary"
+
+  MenuFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "menu-svc-${Environment}"
+      Description:  Menu CRUD — restaurants, categories, items, tables (FastAPI + Mangum)
+      CodeUri:      ./
+      Handler:      handler.lambda_handler
+      Layers:
+        - !Ref SharedLayer
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchGetItem
+              Resource:
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/RestaurantTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/RestaurantTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/CategoryTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/CategoryTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/ItemTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/AddOnTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/AddOnTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/DiningTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/DiningTable-${Environment}/index/*"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/TenantTable-${Environment}/index/*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/OrderTable-${Environment}"
+                - !Sub "arn:aws:dynamodb:ap-south-1:${AWS::AccountId}:table/OrderTable-${Environment}/index/*"
+            - Effect: Allow
+              Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+              Resource: !Sub "arn:aws:s3:::${AssetBucketName}/*"
+
+      Events:
+        Health:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MenuApi
+            Path:      /health
+            Method:    GET
+        MenusRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MenuApi
+            Path:      /menus
+            Method:    ANY
+        MenusProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MenuApi
+            Path:      /menus/{proxy+}
+            Method:    ANY
+
+  MenuLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:    !Sub "/aws/lambda/menu-svc-${Environment}"
+      RetentionInDays: 30
+
+  AddOnTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "AddOnTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: addOnId
+          AttributeType: S
+        - AttributeName: menuItemId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: addOnId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: menuItemId-index
+          KeySchema:
+            - AttributeName: menuItemId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  RestaurantTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "RestaurantTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: tenantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: restaurantId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: tenantId-index
+          KeySchema:
+            - AttributeName: tenantId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  CategoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "CategoryTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: categoryId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: displayOrder
+          AttributeType: N
+      KeySchema:
+        - AttributeName: categoryId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
+              KeyType: HASH
+            - AttributeName: displayOrder
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  ItemTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "ItemTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: itemId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+        - AttributeName: categoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: itemId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: categoryId-index
+          KeySchema:
+            - AttributeName: categoryId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  DiningTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "DiningTable-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tableId
+          AttributeType: S
+        - AttributeName: restaurantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tableId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: restaurantId-index
+          KeySchema:
+            - AttributeName: restaurantId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+
+Outputs:
+  ApiEndpoint:
+    Description: Menu API endpoint
+    Value: !Sub "https://${MenuApi}.execute-api.ap-south-1.amazonaws.com/${Environment}"
+  FunctionArn:
+    Value: !GetAtt MenuFunction.Arn
+  SharedLayerArn:
+    Description: Shared layer ARN (reuse in other MenuLay services)
+    Value: !Ref SharedLayer

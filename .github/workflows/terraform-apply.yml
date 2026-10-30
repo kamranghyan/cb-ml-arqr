@@ -1,0 +1,244 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  TF_VERSION:  "1.10.0"
+  TENV_VALIDATION: "sha" # <-- Add this line right here
+  WORKING_DIR: "infra/terraform/environments/dev"
+
+jobs:
+  # ===========================================================================
+  # JOB 1 — Detect which paths changed
+  # ===========================================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra:       ${{ steps.filter.outputs.infra }}
+      lambdas:     ${{ steps.filter.outputs.lambdas }}
+      frontend_guest: ${{ steps.filter.outputs.frontend_guest }}
+      frontend_kds:   ${{ steps.filter.outputs.frontend_kds }}
+      frontend_admin: ${{ steps.filter.outputs.frontend_admin }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'infra/terraform/**'
+              - '.github/workflows/**'
+            lambdas:
+              - 'src/lambdas/**'
+            frontend_guest:
+              - 'src/frontend/guest/**'
+            frontend_kds:
+              - 'src/frontend/kds/**'
+            frontend_admin:
+              - 'src/frontend/admin/**'
+
+  # ===========================================================================
+  # JOB 2 — Terraform Apply
+  # ===========================================================================
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
+
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Terraform Init
+        run: terraform init -reconfigure
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_LOG: "ERROR"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_api_key: ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_prefix: "cb-ml"
+          TF_VAR_environment: "dev"
+          TF_VAR_owner: "cb-ml-team"
+          TF_VAR_allowed_origins: "*"
+
+
+  # ===========================================================================
+  # JOB 3 — Deploy Lambdas
+  # ===========================================================================
+  deploy-lambdas:
+    name: Deploy Lambdas
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lambdas == 'true'
+
+    strategy:
+      matrix:
+        lambda:
+          - menu-service
+          - order-service
+          - tenant-service
+          - auth-service
+          - websocket_service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Zip and Deploy — ${{ matrix.lambda }}
+        run: |
+          cd src/lambdas/${{ matrix.lambda }}
+          zip -r ${{ matrix.lambda }}.zip .
+          aws lambda update-function-code \
+            --function-name cb-ml-dev-${{ matrix.lambda }} \
+            --zip-file fileb://${{ matrix.lambda }}.zip \
+            --region ap-south-1
+          echo "✅ Deployed cb-ml-dev-${{ matrix.lambda }}"
+
+  # ===========================================================================
+  # JOB 4 — Deploy Guest UI → cb-ml-dev-guest-ui + /guest/*
+  # ===========================================================================
+  deploy-guest-ui:
+    name: Deploy Guest UI
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend_guest == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync src/frontend/guest/ \
+            s3://cb-ml-dev-guest-ui/guest/ \
+            --delete \
+            --region ap-south-1
+          echo "✅ Guest UI uploaded"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/guest/*"
+          echo "✅ Guest UI cache invalidated"
+
+  # ===========================================================================
+  # JOB 5 — Deploy KDS UI → cb-ml-dev-kds-ui + /kds/*
+  # ===========================================================================
+  deploy-kds-ui:
+    name: Deploy KDS UI
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend_kds == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync src/frontend/kds/ \
+            s3://cb-ml-dev-kds-ui/kds/ \
+            --delete \
+            --region ap-south-1
+          echo "✅ KDS UI uploaded"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/kds/*"
+          echo "✅ KDS UI cache invalidated"
+
+  # ===========================================================================
+  # JOB 6 — Deploy Admin UI → cb-ml-dev-admin-ui + /admin/*
+  # ===========================================================================
+  deploy-admin-ui:
+    name: Deploy Admin UI
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend_admin == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync src/frontend/admin/ \
+            s3://cb-ml-dev-admin-ui/admin/ \
+            --delete \
+            --region ap-south-1
+          echo "✅ Admin UI uploaded"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/admin/*"
+          echo "✅ Admin UI cache invalidated"

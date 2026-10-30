@@ -1,0 +1,18 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "auth-fastapi-dev"
+region = "ap-south-1"
+
+[default.build.parameters]
+cached   = true
+parallel = true
+
+[default.deploy.parameters]
+confirm_changeset = true
+resolve_s3        = true
+capabilities      = "CAPABILITY_IAM"
+disable_rollback  = true
+parameter_overrides = "Environment=\"dev\" LogLevel=\"INFO\""
+s3_prefix = "auth-fastapi-dev"
+image_repositories = []
