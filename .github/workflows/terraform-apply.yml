@@ -76,10 +76,10 @@ jobs:
 
       - name: Create build placeholders
         run: |
-          mkdir -p infra/terraform/modules/compute/build/shared_layer
-          mkdir -p infra/terraform/modules/compute/build/ws_layer
-          for s in ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
-            mkdir -p infra/terraform/modules/compute/build/$s
+          B=infra/terraform/modules/compute/build
+          for d in shared_layer ws_layer ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
+            mkdir -p $B/$d
+            touch $B/$d/.placeholder
           done
 
       - name: Configure AWS Credentials
