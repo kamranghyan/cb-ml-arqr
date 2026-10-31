@@ -341,7 +341,7 @@ export default function KitchenDisplayPage() {
             signal: controller.signal,
           }
         );
-
+///
 
         if (!res.ok) {
           throw new Error(`API ${res.status}`);

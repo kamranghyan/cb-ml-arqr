@@ -302,7 +302,7 @@ export async function authHeaders(): Promise<Record<string, string>> {
 }
 
 
-
+///
 // ── PATCH — public, tenantId auto-included ────────────────────────────────────
 export async function patchOrderStatus(apiOrderId: string, newStatus: KdsStatus): Promise<void> {
   const payload = toFlagPayload(apiOrderId, newStatus);
