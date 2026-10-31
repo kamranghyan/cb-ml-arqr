@@ -231,7 +231,7 @@ jobs:
       - name: Upload to S3
         run: |
           aws s3 sync src/frontend/admin/ \
-            s3://cb-ml-dev-admin-ui/admin/ \
+            s3://cb-ml-dev-ml-admin-ui/admin/ \
             --delete \
             --region ap-south-1
           echo "✅ Admin UI uploaded"
