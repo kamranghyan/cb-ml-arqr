@@ -41,11 +41,11 @@ resource "aws_iam_role_policy" "order_state_machine" {
 locals {
   # Every Notify* task shares this shape — only status/message differ.
   order_notify_fields = {
-    "orderId.$"          = "$.orderId"
-    "tenantId.$"         = "$.tenantId"
-    "restaurantId.$"     = "$.restaurantId"
+    "orderId.$"           = "$.orderId"
+    "tenantId.$"          = "$.tenantId"
+    "restaurantId.$"      = "$.restaurantId"
     "guestConnectionId.$" = "$.guestConnectionId"
-    "guestSessionId.$"   = "$.guestSessionId"
+    "guestSessionId.$"    = "$.guestSessionId"
   }
 
   order_notify_states = {
@@ -83,7 +83,7 @@ resource "aws_sfn_state_machine" "order_workflow" {
           Type     = "Task"
           Resource = "arn:aws:states:::sqs:sendMessage"
           Parameters = {
-            QueueUrl    = aws_sqs_queue.notifications.url
+            QueueUrl = aws_sqs_queue.notifications.url
             MessageBody = merge(local.order_notify_fields, {
               status  = s.status
               message = s.message
@@ -155,10 +155,10 @@ resource "aws_lambda_function" "ws_order_created" {
 }
 
 resource "aws_lambda_event_source_mapping" "ws_order_created_stream" {
-  event_source_arn  = var.order_table_stream_arn
-  function_name     = aws_lambda_function.ws_order_created.arn
-  starting_position = "LATEST"
-  batch_size        = 10
+  event_source_arn                   = var.order_table_stream_arn
+  function_name                      = aws_lambda_function.ws_order_created.arn
+  starting_position                  = "LATEST"
+  batch_size                         = 10
   maximum_batching_window_in_seconds = 1
 
   filter_criteria {

@@ -69,6 +69,19 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+            - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create build placeholders
+        run: |
+          mkdir -p infra/terraform/modules/compute/build/shared_layer
+          mkdir -p infra/terraform/modules/compute/build/ws_layer
+          for s in ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
+            mkdir -p infra/terraform/modules/compute/build/$s
+          done
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

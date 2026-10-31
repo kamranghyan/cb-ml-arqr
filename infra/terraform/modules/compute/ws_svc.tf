@@ -10,10 +10,10 @@
 # =============================================================================
 
 resource "aws_sqs_queue" "order_dlq" {
-  name                      = "${local.name_prefix}-order-dlq.fifo"
-  fifo_queue                = true
+  name                        = "${local.name_prefix}-order-dlq.fifo"
+  fifo_queue                  = true
   content_based_deduplication = true
-  message_retention_seconds = 1209600 # 14 days, matches template default
+  message_retention_seconds   = 1209600 # 14 days, matches template default
 
   tags = local.common_tags
 }
@@ -27,7 +27,7 @@ resource "null_resource" "ws_layer_build" {
 
   provisioner "local-exec" {
     interpreter = var.shell_interpreter
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       rm -rf "${path.module}/build/ws_layer"
       mkdir -p "${path.module}/build/ws_layer/python"
@@ -52,11 +52,11 @@ data "archive_file" "ws_layer" {
 
 resource "aws_lambda_layer_version" "ws_dependencies" {
   layer_name               = "${local.name_prefix}-ws-dependencies"
-  description               = "ws_svc layer — redis, PyJWT, boto3"
-  filename                  = data.archive_file.ws_layer.output_path
-  source_code_hash          = data.archive_file.ws_layer.output_base64sha256
-  compatible_runtimes       = ["python3.12"]
-  compatible_architectures  = ["arm64"]
+  description              = "ws_svc layer — redis, PyJWT, boto3"
+  filename                 = data.archive_file.ws_layer.output_path
+  source_code_hash         = data.archive_file.ws_layer.output_base64sha256
+  compatible_runtimes      = ["python3.12"]
+  compatible_architectures = ["arm64"]
 }
 
 # --- Per-function packaging (no pip deps of their own — layer covers it) ---
@@ -166,10 +166,10 @@ resource "aws_lambda_function" "ws_connect" {
 
   environment {
     variables = {
-      REDIS_URL     = "redis://localhost:6379" # no ElastiCache in MVP
-      TABLE_CONN    = var.connection_table_name
-      USER_POOL_ID  = var.cognito_user_pool_id
-      CLIENT_ID     = var.cognito_admin_client_id # staff/KDS connections carry a token; guests connect via guestSessionId with no token at all
+      REDIS_URL    = "redis://localhost:6379" # no ElastiCache in MVP
+      TABLE_CONN   = var.connection_table_name
+      USER_POOL_ID = var.cognito_user_pool_id
+      CLIENT_ID    = var.cognito_admin_client_id # staff/KDS connections carry a token; guests connect via guestSessionId with no token at all
     }
   }
 
@@ -239,9 +239,9 @@ resource "aws_apigatewayv2_api" "ws" {
 }
 
 resource "aws_apigatewayv2_integration" "connect" {
-  api_id             = aws_apigatewayv2_api.ws.id
-  integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.ws_connect.invoke_arn
+  api_id           = aws_apigatewayv2_api.ws.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.ws_connect.invoke_arn
 }
 resource "aws_apigatewayv2_route" "connect" {
   api_id    = aws_apigatewayv2_api.ws.id

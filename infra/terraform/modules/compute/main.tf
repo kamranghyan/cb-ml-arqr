@@ -218,7 +218,7 @@ resource "null_resource" "shared_layer_build" {
     ]))
   }
 
-    provisioner "local-exec" {
+  provisioner "local-exec" {
     interpreter = var.shell_interpreter
     command     = length(regexall("windows", lower(pathexpand("~")))) > 0 ? "Remove-Item -Recurse -Force '${path.module}/build/shared_layer' -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force '${path.module}/build/shared_layer/python'; Copy-Item -Recurse -Force '${var.lambdas_src_path}/layers/shared_layer/python/*' '${path.module}/build/shared_layer/python/'; python -m pip install -r '${var.lambdas_src_path}/layers/shared_layer/requirements.txt' -t '${path.module}/build/shared_layer/python' --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade" : "set -e; rm -rf '${path.module}/build/shared_layer'; mkdir -p '${path.module}/build/shared_layer/python'; cp -r '${var.lambdas_src_path}/layers/shared_layer/python/.' '${path.module}/build/shared_layer/python/'; python -m pip install -r '${var.lambdas_src_path}/layers/shared_layer/requirements.txt' -t '${path.module}/build/shared_layer/python' --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade"
   }
@@ -255,7 +255,7 @@ resource "null_resource" "build" {
     ]))
   }
 
-    provisioner "local-exec" {
+  provisioner "local-exec" {
     interpreter = var.shell_interpreter
     command     = <<-EOT
       set -e

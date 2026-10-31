@@ -43,10 +43,10 @@ resource "aws_lambda_function" "subs_payment_event_handler" {
 
   environment {
     variables = {
-      ENVIRONMENT          = var.environment
-      LOG_LEVEL            = "INFO"
-      TENANT_TABLE         = "${local.name_prefix}-tenant"
-      SUBSCRIPTION_TABLE   = "${local.name_prefix}-tenant-subscription"
+      ENVIRONMENT        = var.environment
+      LOG_LEVEL          = "INFO"
+      TENANT_TABLE       = "${local.name_prefix}-tenant"
+      SUBSCRIPTION_TABLE = "${local.name_prefix}-tenant-subscription"
     }
   }
 

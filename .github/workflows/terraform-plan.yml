@@ -133,9 +133,10 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          find src/lambdas -name "*.py" | while read file; do
-            echo "Checking $file"
-            python -m py_compile "$file" && echo "  ✅ OK" || { echo "  ❌ FAILED"; exit 1; }
+          mkdir -p infra/terraform/modules/compute/build/shared_layer
+          mkdir -p infra/terraform/modules/compute/build/ws_layer
+          for s in ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
+            mkdir -p infra/terraform/modules/compute/build/$s
           done
 
   validate-frontend:

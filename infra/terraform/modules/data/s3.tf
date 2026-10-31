@@ -36,8 +36,8 @@ resource "aws_s3_bucket_public_access_block" "this" {
   for_each = local.buckets
   bucket   = aws_s3_bucket.this[each.key].id
 
-  block_public_acls  = true
-  ignore_public_acls = true
+  block_public_acls       = true
+  ignore_public_acls      = true
   block_public_policy     = contains(local.ui_buckets, each.key) && var.enable_direct_s3_hosting ? false : true
   restrict_public_buckets = contains(local.ui_buckets, each.key) && var.enable_direct_s3_hosting ? false : true
 }

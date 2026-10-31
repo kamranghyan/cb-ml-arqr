@@ -18,12 +18,12 @@ resource "aws_sqs_queue" "notifications_dlq" {
 
 resource "aws_sqs_queue" "notifications" {
   name                       = "${local.name_prefix}-notifications-queue"
-  visibility_timeout_seconds = 70 # must exceed the Lambda's 60s timeout
+  visibility_timeout_seconds = 70    # must exceed the Lambda's 60s timeout
   message_retention_seconds  = 86400 # 1 day
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.notifications_dlq.arn
-    maxReceiveCount      = 3
+    maxReceiveCount     = 3
   })
 
   tags = local.common_tags
@@ -71,16 +71,16 @@ resource "aws_iam_role_policy" "notif_svc" {
       {
         # order_svc's real table — still the wrong schema until the Data
         # Layer step, so reads here will fail until then, same as elsewhere.
-        Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem"]
+        Effect = "Allow"
+        Action = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem"]
         Resource = [
           "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.name_prefix}-order",
           "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.name_prefix}-order/index/*",
         ]
       },
       {
-        Effect   = "Allow"
-        Action   = ["dynamodb:Query", "dynamodb:Scan", "dynamodb:DeleteItem"]
+        Effect = "Allow"
+        Action = ["dynamodb:Query", "dynamodb:Scan", "dynamodb:DeleteItem"]
         Resource = [
           var.connection_table_arn,
           "${var.connection_table_arn}/index/*",
@@ -129,7 +129,7 @@ resource "aws_lambda_function" "notif_svc" {
     variables = {
       STAGE                = var.environment
       SNS_TOPIC            = aws_sns_topic.order_notifications.arn
-      WS_ENDPOINT           = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
+      WS_ENDPOINT          = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
       WS_CONNECTIONS_TABLE = var.connection_table_name
       TABLE_ORDER          = "${local.name_prefix}-order"
       PINPOINT_APP_ID      = ""
@@ -142,9 +142,9 @@ resource "aws_lambda_function" "notif_svc" {
 }
 
 resource "aws_lambda_event_source_mapping" "notif_svc_sqs" {
-  event_source_arn = aws_sqs_queue.notifications.arn
-  function_name    = aws_lambda_function.notif_svc.arn
-  batch_size       = 10
+  event_source_arn        = aws_sqs_queue.notifications.arn
+  function_name           = aws_lambda_function.notif_svc.arn
+  batch_size              = 10
   function_response_types = ["ReportBatchItemFailures"]
 }
 

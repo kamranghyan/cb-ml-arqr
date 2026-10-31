@@ -102,5 +102,5 @@ output "ws_order_subscriptions_table_arn" {
 }
 
 output "order_table_stream_arn" {
-    value = aws_dynamodb_table.order.stream_arn
-  }
+  value = aws_dynamodb_table.order.stream_arn
+}
