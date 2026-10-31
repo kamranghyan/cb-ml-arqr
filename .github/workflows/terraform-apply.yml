@@ -81,11 +81,25 @@ jobs:
           cd infra/terraform/modules/compute
           L=../../../../src/lambdas
           B=build
+
+          # layers
           mkdir -p $B/shared_layer/python
           cp -r $L/layers/shared_layer/python/. $B/shared_layer/python/
           python -m pip install -r $L/layers/shared_layer/requirements.txt -t $B/shared_layer/python --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade
           mkdir -p $B/ws_layer/python
           python -m pip install -r $L/ws_svc/layer/requirements.txt -t $B/ws_layer/python --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade
+
+          # function zips (service:python-version)
+          for pair in menu_svc:3.12 order_svc:3.12 ar_svc:3.13 pay_svc:3.12 subs_svc:3.12 auth_svc:3.13 invoice_svc:3.12; do
+            s=${pair%%:*}; v=${pair##*:}
+            mkdir -p $B/$s
+            cp -r $L/$s/. $B/$s/
+            rm -rf $B/$s/tests $B/$s/.aws-sam $B/$s/.venv $B/$s/node_modules
+            find $B/$s -name "__pycache__" -type d -exec rm -rf {} + || true
+            python -m pip install -r $L/$s/requirements.txt -t $B/$s --platform manylinux2014_aarch64 --python-version $v --implementation cp --only-binary=:all: --upgrade
+          done
+
+
 
       # - name: Create build placeholders
       #   run: |
