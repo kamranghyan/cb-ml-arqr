@@ -218,14 +218,15 @@ resource "null_resource" "shared_layer_build" {
     ]))
   }
 
-  provisioner "local-exec" {
-    command = <<-EOT
+    provisioner "local-exec" {
+    interpreter = ["C:/Users/user/AppData/Local/Programs/Git/bin/bash.exe", "-c"]
+    command     = <<-EOT
       set -e
       rm -rf "${path.module}/build/shared_layer"
       mkdir -p "${path.module}/build/shared_layer/python"
       cp -r "${var.lambdas_src_path}/layers/shared_layer/python/." "${path.module}/build/shared_layer/python/"
       find "${path.module}/build/shared_layer/python" -name "__pycache__" -type d -exec rm -rf {} + || true
-      python3 -m pip install \
+      python -m pip install \
         -r "${var.lambdas_src_path}/layers/shared_layer/requirements.txt" \
         -t "${path.module}/build/shared_layer/python" \
         --platform manylinux2014_aarch64 \
@@ -268,15 +269,18 @@ resource "null_resource" "build" {
     ]))
   }
 
-  provisioner "local-exec" {
-    command = <<-EOT
+    provisioner "local-exec" {
+    interpreter = ["C:/Users/user/AppData/Local/Programs/Git/bin/bash.exe", "-c"]
+    command     = <<-EOT
       set -e
       rm -rf "${path.module}/build/${each.key}"
       mkdir -p "${path.module}/build/${each.key}"
       cp -r "${var.lambdas_src_path}/${each.value.dir}/." "${path.module}/build/${each.key}/"
       rm -rf "${path.module}/build/${each.key}/tests"
+      rm -rf "${path.module}/build/${each.key}/.aws-sam" "${path.module}/build/${each.key}/.venv" "${path.module}/build/${each.key}/node_modules"
       find "${path.module}/build/${each.key}" -name "__pycache__" -type d -exec rm -rf {} + || true
-      python3 -m pip install \
+      find "${path.module}/build/${each.key}" -name "__pycache__" -type d -exec rm -rf {} + || true
+      python -m pip install \
         -r "${var.lambdas_src_path}/${each.value.dir}/requirements.txt" \
         -t "${path.module}/build/${each.key}" \
         --platform manylinux2014_${each.value.architecture == "arm64" ? "aarch64" : "x86_64"} \

@@ -54,11 +54,11 @@ provider "aws" {
 # Step 5 — DATA MODULE
 # -----------------------------------------------------------------------------
 module "data" {
-  source      = "../../modules/data"
-  prefix      = var.prefix
-  environment = var.environment
-  owner       = var.owner
-  enable_direct_s3_hosting = var.enable_direct_s3_hosting   # add this line
+  source                   = "../../modules/data"
+  prefix                   = var.prefix
+  environment              = var.environment
+  owner                    = var.owner
+  enable_direct_s3_hosting = var.enable_direct_s3_hosting # add this line
 
 
   providers = {

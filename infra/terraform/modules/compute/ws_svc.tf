@@ -26,11 +26,12 @@ resource "null_resource" "ws_layer_build" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["C:/Users/user/AppData/Local/Programs/Git/bin/bash.exe", "-c"]
     command = <<-EOT
       set -e
       rm -rf "${path.module}/build/ws_layer"
       mkdir -p "${path.module}/build/ws_layer/python"
-      python3 -m pip install \
+      python -m pip install \
         -r "${var.lambdas_src_path}/ws_svc/layer/requirements.txt" \
         -t "${path.module}/build/ws_layer/python" \
         --platform manylinux2014_aarch64 \
