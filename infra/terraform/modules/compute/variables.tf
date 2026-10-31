@@ -60,3 +60,9 @@ variable "cognito_user_pool_arn" {
 variable "order_table_stream_arn" {
   type = string
 }
+
+variable "shell_interpreter" {
+  description = "Shell used for local-exec build scripts"
+  type        = list(string)
+  default     = ["/bin/bash", "-c"]
+}

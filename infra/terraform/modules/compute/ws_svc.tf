@@ -26,7 +26,7 @@ resource "null_resource" "ws_layer_build" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["C:/Users/user/AppData/Local/Programs/Git/bin/bash.exe", "-c"]
+    interpreter = var.shell_interpreter
     command = <<-EOT
       set -e
       rm -rf "${path.module}/build/ws_layer"
