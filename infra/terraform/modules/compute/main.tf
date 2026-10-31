@@ -219,22 +219,8 @@ resource "null_resource" "shared_layer_build" {
   }
 
     provisioner "local-exec" {
-    interpreter = ["C:/Users/user/AppData/Local/Programs/Git/bin/bash.exe", "-c"]
-    command     = <<-EOT
-      set -e
-      rm -rf "${path.module}/build/shared_layer"
-      mkdir -p "${path.module}/build/shared_layer/python"
-      cp -r "${var.lambdas_src_path}/layers/shared_layer/python/." "${path.module}/build/shared_layer/python/"
-      find "${path.module}/build/shared_layer/python" -name "__pycache__" -type d -exec rm -rf {} + || true
-      python -m pip install \
-        -r "${var.lambdas_src_path}/layers/shared_layer/requirements.txt" \
-        -t "${path.module}/build/shared_layer/python" \
-        --platform manylinux2014_aarch64 \
-        --python-version 3.12 \
-        --implementation cp \
-        --only-binary=:all: \
-        --upgrade
-    EOT
+    interpreter = length(regexall("windows", lower(pathexpand("~")))) > 0 ? ["powershell", "-Command"] : ["/bin/bash", "-c"]
+    command     = length(regexall("windows", lower(pathexpand("~")))) > 0 ? "Remove-Item -Recurse -Force '${path.module}/build/shared_layer' -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force '${path.module}/build/shared_layer/python'; Copy-Item -Recurse -Force '${var.lambdas_src_path}/layers/shared_layer/python/*' '${path.module}/build/shared_layer/python/'; python -m pip install -r '${var.lambdas_src_path}/layers/shared_layer/requirements.txt' -t '${path.module}/build/shared_layer/python' --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade" : "set -e; rm -rf '${path.module}/build/shared_layer'; mkdir -p '${path.module}/build/shared_layer/python'; cp -r '${var.lambdas_src_path}/layers/shared_layer/python/.' '${path.module}/build/shared_layer/python/'; python -m pip install -r '${var.lambdas_src_path}/layers/shared_layer/requirements.txt' -t '${path.module}/build/shared_layer/python' --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade"
   }
 }
 
