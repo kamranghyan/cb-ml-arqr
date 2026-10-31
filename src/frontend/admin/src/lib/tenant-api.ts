@@ -10,6 +10,7 @@
  */
 
 import { getValidIdToken, loadUser } from './cognito'
+
 import {
   derivedStatus, isLive, orderTypeOf,
   type SupportOrder, type OrderStatus, type OrderType,
@@ -92,7 +93,7 @@ async function tenantFetch<T>(path: string): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(tenantId && path.startsWith(API_BASE) ? { 'X-Tenant-Id': tenantId } : {}),
+      ...(tenantId ? { 'X-Tenant-Id': tenantId } : {}),
     },
   })
 
