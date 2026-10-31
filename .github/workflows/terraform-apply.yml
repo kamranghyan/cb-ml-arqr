@@ -73,14 +73,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Create build placeholders
+      
+      
+      - name: Pre-build lambda packages
         run: |
-          B=infra/terraform/modules/compute/build
-          for d in shared_layer ws_layer ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
-            mkdir -p $B/$d
-            touch $B/$d/.placeholder
-          done
+          set -e
+          cd infra/terraform/modules/compute
+          L=../../../../src/lambdas
+          B=build
+          mkdir -p $B/shared_layer/python
+          cp -r $L/layers/shared_layer/python/. $B/shared_layer/python/
+          python -m pip install -r $L/layers/shared_layer/requirements.txt -t $B/shared_layer/python --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade
+          mkdir -p $B/ws_layer/python
+          python -m pip install -r $L/ws_svc/layer/requirements.txt -t $B/ws_layer/python --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --only-binary=:all: --upgrade
+
+      # - name: Create build placeholders
+      #   run: |
+      #     mkdir -p infra/terraform/modules/compute/build/shared_layer
+      #     mkdir -p infra/terraform/modules/compute/build/ws_layer
+      #     for s in ar_svc auth_svc invoice_svc menu_svc order_svc pay_svc subs_svc; do
+      #       mkdir -p infra/terraform/modules/compute/build/$s
+      #     done
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
