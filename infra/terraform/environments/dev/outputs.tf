@@ -52,7 +52,7 @@ output "identity_pool_id" {
 }
 
 # --- CDN Module --------------------------------------------------------------
-/*
+
 output "cloudfront_url" {
   description = "Your app URL — use this in frontend API calls"
   value       = module.cdn.cloudfront_url
@@ -66,7 +66,7 @@ output "cloudfront_distribution_id" {
 output "waf_web_acl_arn" {
   value = module.cdn.waf_web_acl_arn
 } 
-*/
+
 
 # --- SSM Paths (for Lambda config reference) ---------------------------------
 
