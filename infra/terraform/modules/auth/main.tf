@@ -57,6 +57,24 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   tags = local.common_tags
+
+  schema {
+    name                = "tenant_id"
+    attribute_data_type = "String"
+    mutable             = true
+  }
+
+  schema {
+    name                = "restaurant_id"
+    attribute_data_type = "String"
+    mutable             = true
+  }
+
+  schema {
+    name                = "display_name"
+    attribute_data_type = "String"
+    mutable             = true
+  }
 }
 
 # -----------------------------------------------------------------------------
