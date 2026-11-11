@@ -39,11 +39,7 @@ function GuestContent() {
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const qrRid = params.get('rid') || '';
   const tid = params.get('tid') || '';
-
-  // ✅ State for table number
   const [tableNumber, setTableNumber] = useState<string>('');
-
-  // ✅ State with static fallback values
   const [restaurantImage, setRestaurantImage] = useState('');
   const [restName, setRestName] = useState(STATIC_RESTAURANT_NAME);
   const [tagline, setTagline] = useState(STATIC_TAGLINE);
