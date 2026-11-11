@@ -2,7 +2,7 @@
   "name": "MenuLay — AR Menu",
   "short_name": "MenuLay",
   "description": "Fine dining digital menu experience",
-  "start_url": "/guest",
+  "start_url": "/guest/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
