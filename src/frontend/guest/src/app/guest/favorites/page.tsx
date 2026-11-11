@@ -8,6 +8,7 @@ import { useCartStore } from '@/lib/store';
 import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
 import GuestTopBar from '@/components/guest/GuestTopBar';
+import { getGuestScope } from '@/lib/guest-scope';
 
 const BRAND = '#ff5723';
 
@@ -17,6 +18,11 @@ export default function FavoritesPage() {
 
   const { items, removeFavorite } = useFavoritesStore();
   const { addItem } = useCartStore();
+
+  const openItem = (id: string) => {
+  const rid = getGuestScope().restaurantId;
+  router.push(`/guest/menu/item/?id=${id}&rid=${rid}`);
+};;
 
   // Prevent Zustand persist hydration mismatch
   const [hydrated, setHydrated] = useState(false);
@@ -251,7 +257,7 @@ export default function FavoritesPage() {
                 {/* ── Image ── */}
                 <button
                   type="button"
-                  onClick={() => router.push(`/guest/menu/${item.id}`)}
+                  onClick={() => openItem(item.id)}
                   style={{
                     width: 84,
                     height: 84,
@@ -305,7 +311,7 @@ export default function FavoritesPage() {
                 {/* ── Details ── */}
                 <button
                   type="button"
-                  onClick={() => router.push(`/guest/menu/${item.id}`)}
+                  onClick={() => openItem(item.id)}
                   style={{
                     flex: 1,
                     minWidth: 0,

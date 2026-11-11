@@ -12,8 +12,8 @@ export const RESTAURANT_ID = process.env.NEXT_PUBLIC_RESTAURANT_ID ?? ''
 
 
 export const MENU_API_BASE = process.env.NEXT_PUBLIC_API_BASE!
-export const ORDER_API_BASE = process.env.NEXT_PUBLIC_API_ORDER!
-export const AR_API_BASE = process.env.NEXT_PUBLIC_API_AR!
+export const ORDER_API_BASE = process.env.NEXT_PUBLIC_ORDERS_API_BASE!
+export const AR_API_BASE = process.env.NEXT_PUBLIC_AR_API_BASE!
 
 if (typeof window !== 'undefined') {
   if (!MENU_API_BASE) console.error('[API] NEXT_PUBLIC_API_BASE is not set — API calls will be broken')
@@ -36,6 +36,11 @@ export const RESTAURANT_API = {
   get: (rid: string) => `${MENU_API_BASE}/menus/restaurants/${rid}`,
   list: () => `${MENU_API_BASE}/menus/restaurants`,
 }
+
+export const TABLES_API = {
+  list: (rid: string) => `${MENU_API_BASE}/menus/restaurants/${rid}/tables`,
+}
+
 
 // ── Menu ──────────────────────────────────────────────────────────────────
 export const MENU_API = {
@@ -68,7 +73,7 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
 
 // ── Orders — confirmed: order_svc's get_tenant_id accepts ?tenantId=, query param is correct ──
 export const ORDERS_API = {
-  list: (rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders`, rid),
+  list: (rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders?restaurantId=${rid}`, rid),
   get: (orderId: string, rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders/${orderId}/guest`, rid),
   create: (rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders`, rid),
   cancel: (orderId: string, rid = RESTAURANT_ID) => withTenant(`${ORDER_API_BASE}/orders/${orderId}/guest`, rid),

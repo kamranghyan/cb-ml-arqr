@@ -128,14 +128,14 @@ async function createMenuItemWithFiles(
   }
 
   // ✅ Slides as JSON string (positions will be set by backend)
-  if (payload.slides?.length) {
-    const slidesPayload = payload.slides.map((slide, index) => ({
-      position: slide.position || index + 1,
-      imageKey: slide.imageKey || '',
-    }));
-    fd.append('slides', JSON.stringify(slidesPayload));
-    console.log('📤 Slides payload:', JSON.stringify(slidesPayload));
-  }
+  // if (payload.slides?.length) {
+  //   const slidesPayload = payload.slides.map((slide, index) => ({
+  //     position: slide.position || index + 1,
+  //     imageKey: slide.imageKey || '',
+  //   }));
+  //   fd.append('slides', JSON.stringify(slidesPayload));
+  //   console.log('📤 Slides payload:', JSON.stringify(slidesPayload));
+  // }
 
   // Main image
   if (imageFile) {

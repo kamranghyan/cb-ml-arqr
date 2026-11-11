@@ -179,7 +179,7 @@ function BranchLayoutInner({ children }: { children: React.ReactNode }) {
             }
           `}</style>
           {TABS.map(({ seg, label, icon: Icon }) => {
-            const href = `/restaurants/${seg}?restaurantId=${restaurantId}`;
+            const href = `/restaurants/${seg}/?restaurantId=${restaurantId}`;
             const active = pathname.endsWith(`/${seg}`);
             return (
               <Link

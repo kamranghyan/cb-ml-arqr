@@ -20,6 +20,7 @@ import { useCartStore } from '@/lib/store';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
+import { TABLES_API, MENU_API, tenantHeaders } from '@/lib/api-config';
 
 const BRAND = '#ff5723';
 
@@ -52,7 +53,7 @@ function GuestContent() {
   const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const { addItem } = useCartStore();
   const [search, setSearch] = useState('');
-
+  sessionStorage.getItem('lm_rid') 
 
   useEffect(() => {
     // ── 🔥 FORCE: Pehle se stored table number clear karein ──
@@ -77,7 +78,7 @@ function GuestContent() {
           console.log('🔍 Fetching all tables for restaurant:', rid);
 
           // ✅ CORRECT ENDPOINT
-          const res = await fetch(`/api/menu/restaurants/${rid}/tables`);
+          const res = await fetch(TABLES_API.list(rid), { headers: await tenantHeaders(rid) });
           console.log('📡 Response status:', res.status);
 
           if (res.ok) {
@@ -635,7 +636,7 @@ function GuestContent() {
                     color: BRAND,
                     flexShrink: 0,
                     fontFamily: "'Poppins', sans-serif",
-                  }}>Rs. {(item.price?? 0).toLocaleString()}</span>
+                  }}>Rs. {(item.price ?? 0).toLocaleString()}</span>
                 </Link>
               ))}
               {filteredSearch.length === 0 && (
@@ -926,7 +927,7 @@ function GuestContent() {
                         }}
                       />
                     ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${ isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)' }` }}>
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)'}` }}>
                         🍽️
                       </div>
                     )}
@@ -945,7 +946,7 @@ function GuestContent() {
                       fontWeight: 700,
                       color: BRAND,
                       margin: '0 0 6px'
-                    }}>Rs. {(item.price?? 0).toLocaleString()}</p>
+                    }}>Rs. {(item.price ?? 0).toLocaleString()}</p>
                     <p style={{
                       fontSize: 13,
                       color: D.text,

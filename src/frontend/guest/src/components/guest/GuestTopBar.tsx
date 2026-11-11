@@ -760,14 +760,10 @@ export default function GuestTopBar() {
           '[Guest Notifications] Fetching notification history...'
         );
 
-        const response =
-          await fetch(
-            '/api/guest/notifications',
-            {
-              method: 'GET',
-              cache: 'no-store',
-            }
-          );
+        const response = new Response(
+          JSON.stringify({ notifications: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
 
         if (!response.ok) {
 
@@ -883,7 +879,7 @@ export default function GuestTopBar() {
       }
 
     }, []);
-      // ========================================================================
+  // ========================================================================
   // FETCH HISTORY (once per mount) + shared WS updates
   // ========================================================================
 

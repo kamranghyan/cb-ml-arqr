@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
-import { ORDERS_API } from '@/lib/api-config';
+import { ORDERS_API, RESTAURANT_API } from '@/lib/api-config';
 
 const BRAND = '#ff5723';
 
@@ -51,7 +51,7 @@ export default function CartPage() {
       try {
         const rid = getGuestScope().restaurantId;
         if (!rid) return;
-        const res = await fetch(`/api/menu/restaurants/${rid}`, { cache: 'no-store' });
+        const res = await fetch(RESTAURANT_API.get(rid), { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setRestaurantLogo(data?.logoUrl || data?.imageUrl || null);

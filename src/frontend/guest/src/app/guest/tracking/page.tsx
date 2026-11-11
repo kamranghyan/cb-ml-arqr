@@ -161,9 +161,6 @@ export default function TrackingPage() {
 
       const res = await fetch(url.toString(), {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
       });
 
       if (!res.ok) throw new Error(`API ${res.status}`);
@@ -331,7 +328,7 @@ export default function TrackingPage() {
 
       toast.success('Order cancelled successfully');
 
-            setShowCancel(false);
+      setShowCancel(false);
       setCancelReason('');
       setCancelError('');
       setStaffConfirmed(false);
@@ -611,7 +608,7 @@ export default function TrackingPage() {
                   outline: 'none',
                 }}
               >
-                
+
                 Keep Order
               </button>
               <button

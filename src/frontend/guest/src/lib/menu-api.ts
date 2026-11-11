@@ -176,6 +176,8 @@ async function menuFetch<T>(
 // ── Fetch all menu items ───────────────────────────────────────────────────────
 export async function fetchMenuItems(restaurantId?: string): Promise<ApiMenuItem[]> {
   const rid = restaurantId?.trim() || RESTAURANT_ID;
+  if (!rid) return [];   // rid nahi to API call mat karo
+
   const token = await getValidIdToken();
   const headers: Record<string, string> = { ...(await tenantHeaders(rid)) };
   if (token) headers['Authorization'] = token;

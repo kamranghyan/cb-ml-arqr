@@ -15,7 +15,7 @@ export function buildQrUrl(
   restaurantId: string,
   tableId: string,
 ): string {
-  const url = new URL('/guest', baseUrl);
+  const url = new URL('/guest/', baseUrl);
   url.searchParams.set('rid', restaurantId);
   url.searchParams.set('tid', tableId);
   return url.toString();

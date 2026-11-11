@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, User, MapPin, Sun, Moon, FileText, Heart, Qr
 import { useTheme } from '@/hooks/useTheme';
 import { useGuestProfileStore } from '@/lib/guest-profile-store';
 import { clearGuestScope } from '@/lib/guest-scope';
+import { TABLES_API, tenantHeaders } from '@/lib/api-config';
 import BottomNav from '@/components/guest/BottomNav';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import { toast } from 'sonner';
@@ -182,7 +183,7 @@ export default function ProfilePage() {
   ): Promise<string> => {
     try {
       const res = await fetch(
-        `/api/menu/restaurants/${restaurantId}/tables`,
+        TABLES_API.list(restaurantId),
         { cache: 'no-store' }
       );
 

@@ -62,7 +62,7 @@ const GUEST_BASE = process.env.NEXT_PUBLIC_GUEST_APP_URL ?? 'http://localhost:30
 type GenState = 'idle' | 'generating' | 'done' | 'error';
 
 function buildQrUrl(baseUrl: string, restaurantId: string, tableId: string) {
-  const url = new URL('/guest', baseUrl);
+  const url = new URL('/guest/', baseUrl);
   url.searchParams.set('rid', restaurantId);
   url.searchParams.set('tid', tableId);
   return url.toString();
@@ -209,11 +209,45 @@ const restaurantId = useSearchParams().get('restaurantId') ?? '';
     setTimeout(() => window.print(), 300);
   };
 
-  const copyUrl = (record: QrRecord) => {
-    navigator.clipboard.writeText(record.encodedUrl);
+  
+const copyUrl = async (record: QrRecord) => {
+  try {
+    const text = record.encodedUrl;
+
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // Fallback for browsers without Clipboard API
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      if (!successful) {
+        throw new Error('Copy command failed');
+      }
+    }
+
     setCopiedId(record.id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+
+    setTimeout(() => {
+      setCopiedId(null);
+    }, 2000);
+
+  } catch (error) {
+    console.error('QR URL copy failed:', error);
+    alert('Unable to copy URL. Please copy it manually.');
+  }
+};
+
 
   const zones = Array.from(
     new Set(

@@ -11,7 +11,7 @@ import BottomNav from '@/components/guest/BottomNav';
 import Image from 'next/image';
 import GuestTopBar from '@/components/guest/GuestTopBar';
 import { toast } from 'sonner';
-import { ORDERS_API } from '@/lib/api-config';
+import { MENU_API, ORDERS_API, tenantHeaders } from '@/lib/api-config';
 const BRAND = '#ff5723';
 
 const ORDER_TYPES = ['dine_in', 'pickup', 'delivery'];
@@ -351,7 +351,7 @@ export default function CheckoutPage() {
       console.log('═══════════════════════════════════════════════');
 
       // ── 7. Call guest orders API ──
-      const res = await fetch(await ORDERS_API.create(), {
+      const res = await fetch(await ORDERS_API.create(scope.restaurantId), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -360,56 +360,46 @@ export default function CheckoutPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         let errorMsg =
           data?.error ||
-          data?.message ||
-          `Unable to place order. Please try again.`;
+          data?.message;
 
-        // Backend/proxy may return the actual error as a JSON string
         if (typeof errorMsg === 'string') {
           try {
             const parsed = JSON.parse(errorMsg);
-
             errorMsg =
               parsed?.error?.message ??
               parsed?.message ??
               errorMsg;
           } catch {
-            // Already a normal string
+            // Keep original message
           }
         }
 
-        console.log(`❌ Order failed: ${errorMsg}`);
+        const backendMessage = String(errorMsg);
 
-        const normalizedError = String(errorMsg).toLowerCase();
+        console.log('BE Error:', data);
 
-        // Previous active order exists
+        const normalizedError = backendMessage.toLowerCase();
+
         if (
           normalizedError.includes('already have an order') ||
           normalizedError.includes('active order') ||
           normalizedError.includes('existing order')
         ) {
-          toast.error(
-            'You already have an active order. Please complete or cancel it before placing a new order.',
-            {
-              action: {
-                label: 'Track Order',
-                onClick: () => router.push('/guest/tracking'),
-              },
-            }
-          );
+          toast.error(backendMessage, {
+            action: {
+              label: 'Track Order',
+              onClick: () => router.push('/guest/tracking'),
+            },
+          });
 
-          // IMPORTANT:
-          // Do not throw this as a new Error because catch()
-          // would show the same backend error again.
           setPlacing(false);
           return;
         }
 
-        // Other API errors
-        toast.error('Unable to place your order. Please try again.');
+        setOrderError(backendMessage);
         setPlacing(false);
         return;
       }
@@ -425,8 +415,8 @@ export default function CheckoutPage() {
         prepTimeValue = data.estimatedTime;
       } else {
         try {
-          const menuRes = await fetch(`/api/menu/restaurants/${scope.restaurantId}/items`, {
-            headers: { 'x-tenant-id': scope.restaurantId }
+          const menuRes = await fetch(MENU_API.items(scope.restaurantId), {
+            headers: await tenantHeaders(scope.restaurantId),
           });
           if (menuRes.ok) {
             const menuData = await menuRes.json();

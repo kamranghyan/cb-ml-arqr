@@ -643,10 +643,11 @@ async def update_item(
                         restaurantId,
                         itemId,
                         asset_updates,
-                        merge_slides=False,
+                        merge_slides=True,
                     )
 
                 # -------------------------------------------------------------
+                
                 # Inject presigned URLs
                 # -------------------------------------------------------------
 

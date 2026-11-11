@@ -320,31 +320,31 @@ export async function createMenuItemWithFiles(
 
   // ── Slides ────────────────────────────────────────────────────────────────
 
-  if (payload.slides?.length) {
-    const slidesPayload =
-      payload.slides.map(
-        (slide, index) => ({
-          position:
-            slide.position ||
-            index + 1,
-          imageKey:
-            slide.imageKey ||
-            `temp-${Date.now()}-${index}`,
-        })
-      )
+  // if (payload.slides?.length) {
+  //   const slidesPayload =
+  //     payload.slides.map(
+  //       (slide, index) => ({
+  //         position:
+  //           slide.position ||
+  //           index + 1,
+  //         imageKey:
+  //           slide.imageKey ||
+  //           `temp-${Date.now()}-${index}`,
+  //       })
+  //     )
 
-    fd.append(
-      'slides',
-      JSON.stringify(
-        slidesPayload
-      )
-    )
+  //   fd.append(
+  //     'slides',
+  //     JSON.stringify(
+  //       slidesPayload
+  //     )
+  //   )
 
-    console.log(
-      '📤 Slides payload being sent:',
-      JSON.stringify(slidesPayload)
-    )
-  }
+  //   console.log(
+  //     '📤 Slides payload being sent:',
+  //     JSON.stringify(slidesPayload)
+  //   )
+  // }
 
   // Main image
 
