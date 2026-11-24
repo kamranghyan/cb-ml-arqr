@@ -55,7 +55,7 @@ class RegisterBody(BaseModel):
 
     # role=tenant
     companyName: Optional[str] = None
-
+    planTier:    Optional[str] = None
     # role=staff
     tenantId:     Optional[str] = None
     restaurantId: Optional[str] = None

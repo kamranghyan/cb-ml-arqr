@@ -172,7 +172,7 @@ async def register(
         tenant = tenants.create(
             company_name=body.companyName,
             email=body.email,
-            plan_tier=body.planTier or "starter",
+            
         )
         tenant_id = tenant["tenantId"]
         restaurant_id = ""
